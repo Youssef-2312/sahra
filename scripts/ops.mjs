@@ -16,6 +16,7 @@
 //   node scripts/ops.mjs create-party
 //   node scripts/ops.mjs checkpoint
 //   node scripts/ops.mjs verify-ledger          (read-only, staging)
+//   node scripts/ops.mjs measure-cpu            (staging)
 
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
@@ -184,6 +185,11 @@ const steps = {
     const ok = missing.length === 0 && orphan.length === 0 && admitted.length === records.length && !pending;
     console.log(ok ? "\nRESULT: OK. Every admitted ticket has its ledger record (same ticket id and rev)."
       : "\nRESULT: MISMATCH. Stop and send this output to Claude.");
+  },
+
+  // Live CPU per endpoint, cold vs warm, on staging (wrangler tail + Checkpoint A traffic).
+  async "measure-cpu"() {
+    await new Promise((ok) => spawn(process.execPath, ["scripts/measure-cpu.mjs"], { stdio: "inherit" }).on("close", ok));
   },
 
   async checkpoint() {

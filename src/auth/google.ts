@@ -62,10 +62,15 @@ export async function exchangeCode(
 // --------------------------------------------------------------------- JWKS
 
 interface JwksState {
-  keys: Map<string, CryptoKey>;
+  /** Google's published keys by key id (raw JWK, cheap to keep). */
+  jwks: Map<string, JsonWebKey>;
   expiresAt: number;
   lastFetchAt: number;
   inflight: Promise<void> | null;
+}
+
+function sameKey(a: JsonWebKey | undefined, b: JsonWebKey): boolean {
+  return !!a && a.n === b.n && a.e === b.e;
 }
 
 /**
@@ -73,9 +78,14 @@ interface JwksState {
  * cache has expired (Cache-Control max-age) or when a token names an unknown key
  * id, but never more often than once per `minRefreshMs`, so a flood of tokens
  * with made-up key ids cannot make us hammer Google.
+ *
+ * CPU: a key is imported (RSA import is the costly step) only when a token
+ * actually names it, once per isolate, and the imported key survives a refresh
+ * as long as Google still publishes the same key under that id.
  */
 export class JwksCache {
-  private s: JwksState = { keys: new Map(), expiresAt: 0, lastFetchAt: -Infinity, inflight: null };
+  private s: JwksState = { jwks: new Map(), expiresAt: 0, lastFetchAt: -Infinity, inflight: null };
+  private imported = new Map<string, { jwk: JsonWebKey; key: Promise<CryptoKey> }>();
   /** Set to "miss" whenever a request had to fetch keys (for measurement logs). */
   lastLookup: "hit" | "miss" | "none" = "none";
 
@@ -92,23 +102,19 @@ export class JwksCache {
         const res = await this.fetcher(GOOGLE_JWKS_URL);
         if (!res.ok) throw new AuthError("jwks_fetch_failed");
         const json = (await res.json()) as { keys?: JsonWebKey[] };
-        const keys = new Map<string, CryptoKey>();
+        const jwks = new Map<string, JsonWebKey>();
         for (const jwk of json.keys ?? []) {
           const kid = (jwk as JsonWebKey & { kid?: string }).kid;
           if (jwk.kty !== "RSA" || typeof kid !== "string") continue;
           if (jwk.alg !== undefined && jwk.alg !== "RS256") continue;
-          const key = await crypto.subtle.importKey(
-            "jwk",
-            { kty: "RSA", n: jwk.n, e: jwk.e, alg: "RS256", ext: true },
-            { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
-            false,
-            ["verify"],
-          );
-          keys.set(kid, key);
+          if (typeof jwk.n !== "string" || typeof jwk.e !== "string") continue;
+          jwks.set(kid, jwk);
         }
+        // Forget imported keys Google no longer publishes (or changed).
+        for (const [kid, entry] of this.imported) if (!sameKey(jwks.get(kid), entry.jwk)) this.imported.delete(kid);
         const m = /max-age=(\d+)/.exec(res.headers.get("cache-control") ?? "");
         const maxAge = Math.min(Math.max(m ? Number(m[1]) : 3600, 300), 86_400);
-        this.s.keys = keys;
+        this.s.jwks = jwks;
         this.s.expiresAt = now + maxAge * 1000;
       } finally {
         this.s.inflight = null;
@@ -117,12 +123,32 @@ export class JwksCache {
     return this.s.inflight;
   }
 
+  private importFor(kid: string, jwk: JsonWebKey): Promise<CryptoKey> {
+    const have = this.imported.get(kid);
+    if (have && sameKey(have.jwk, jwk)) return have.key;
+    const key = crypto.subtle.importKey(
+      "jwk",
+      { kty: "RSA", n: jwk.n, e: jwk.e, alg: "RS256", ext: true },
+      { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+      false,
+      ["verify"],
+    );
+    key.catch(() => this.imported.delete(kid));
+    this.imported.set(kid, { jwk, key });
+    return key;
+  }
+
+  /** Number of RSA keys imported in this isolate (for tests and measurement). */
+  get importedCount(): number {
+    return this.imported.size;
+  }
+
   async getKey(kid: string, now: number): Promise<CryptoKey> {
     const fresh = now < this.s.expiresAt;
-    const cached = this.s.keys.get(kid);
-    if (fresh && cached) {
+    const known = this.s.jwks.get(kid);
+    if (fresh && known) {
       if (this.lastLookup === "none") this.lastLookup = "hit";
-      return cached;
+      return this.importFor(kid, known);
     }
     // Expired cache: refetch (after a failed fetch, wait a few seconds first).
     // Unknown key id with a fresh cache: refetch at most once per minRefreshMs.
@@ -132,9 +158,9 @@ export class JwksCache {
       this.lastLookup = "miss";
       await this.refresh(now);
     }
-    const k = this.s.keys.get(kid);
-    if (!k || now >= this.s.expiresAt) throw new AuthError("unknown_key_id");
-    return k;
+    const jwk = this.s.jwks.get(kid);
+    if (!jwk || now >= this.s.expiresAt) throw new AuthError("unknown_key_id");
+    return this.importFor(kid, jwk);
   }
 }
 

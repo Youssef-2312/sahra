@@ -1,4 +1,4 @@
-import { Hono } from "hono";
+import { Hono } from "hono/tiny";
 import { AuthError } from "./auth/google";
 import { LogPendingError } from "./changelog";
 import { json, requireAuth, type AppEnv, type Deps } from "./context";
@@ -14,11 +14,20 @@ import { protoRoutes } from "./routes/proto";
 
 export type { Deps } from "./context";
 
+// Per-isolate request counter: request 1 of an isolate is "cold" (first use of
+// code paths, caches empty); later ones are "warm". Logged with every request so
+// CPU time can be reported separately for cold and warm requests.
+let isolateRequests = 0;
+let isolateStartedAt = 0;
+
 export function createApp(deps: Deps) {
   const app = new Hono<AppEnv>();
 
   app.use("*", async (c, next) => {
     const started = Date.now();
+    isolateRequests++;
+    if (isolateStartedAt === 0) isolateStartedAt = started;
+    const isoReq = isolateRequests;
     const mainDriver = new D1Driver(c.env.DB);
     const driver = deps.driver ? deps.driver(mainDriver, "main") : mainDriver;
     c.set("db", new Db(driver));
@@ -43,6 +52,9 @@ export function createApp(deps: Deps) {
         rows_written: driver.usage.rows_written,
         ledger_rows_written: ledgerDriver.usage.rows_written,
         jwks: deps.jwks.lastLookup,
+        iso_req: isoReq,
+        cold: isoReq === 1,
+        iso_age_ms: started - isolateStartedAt,
         wall_ms: Date.now() - started,
       }),
     );
