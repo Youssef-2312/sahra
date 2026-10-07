@@ -5,6 +5,7 @@ declare global {
   namespace Cloudflare {
     interface Env extends AppEnv {
       TEST_MIGRATIONS: D1Migration[];
+      TEST_ASSET_HEADERS: string;
       TEST_LEDGER_MIGRATIONS: D1Migration[];
       TEST_STAGING_MAIN: D1Migration[];
       TEST_STAGING_LEDGER: D1Migration[];

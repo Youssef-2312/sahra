@@ -1,4 +1,5 @@
 import { cloudflareTest, readD1Migrations } from "@cloudflare/vitest-pool-workers";
+import { readFileSync } from "node:fs";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig(async () => {
@@ -15,6 +16,7 @@ export default defineConfig(async () => {
         miniflare: {
           bindings: {
             TEST_MIGRATIONS: migrations,
+            TEST_ASSET_HEADERS: readFileSync("./public/_headers", "utf8"),
             TEST_LEDGER_MIGRATIONS: ledgerMigrations,
             TEST_STAGING_MAIN: stagingMain,
             TEST_STAGING_LEDGER: stagingLedger,
