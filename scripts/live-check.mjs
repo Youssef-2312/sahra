@@ -39,11 +39,24 @@ const PHONES = 8;
 const csrfFor = (s) => createHash("sha256").update(Buffer.concat([Buffer.from("sahra-csrf-v2|"), Buffer.from(s, "base64url")])).digest("base64url");
 const headersFor = (s) => ({ origin: base, "content-type": "application/json", cookie: `__Host-sahra_s=${s}`, "x-sahra-csrf": csrfFor(s) });
 const lat = {};
+// Network errors (your connection, not the server's answer) are retried with the
+// SAME request body, like a real scanner: same scan id, same join value.
+let networkRetries = 0;
 async function call(method, path, body, headers, label) {
-  const t0 = performance.now();
-  const r = await fetch(base + path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
-  (lat[label ?? path] ??= []).push(performance.now() - t0);
-  return { status: r.status, body: await r.json().catch(() => ({})) };
+  const delays = [1, 2, 4, 8, 16];
+  for (let attempt = 0; ; attempt++) {
+    const t0 = performance.now();
+    try {
+      const r = await fetch(base + path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(20000) });
+      (lat[label ?? path] ??= []).push(performance.now() - t0);
+      return { status: r.status, body: await r.json().catch(() => ({})) };
+    } catch (e) {
+      if (attempt >= delays.length) throw e;
+      networkRetries++;
+      console.log(`  network error on ${path} (${e.cause?.code ?? e.name}); retrying in ${delays[attempt]} s with the same request`);
+      await new Promise((ok) => setTimeout(ok, delays[attempt] * 1000));
+    }
+  }
 }
 
 let failures = 0;
@@ -125,5 +138,6 @@ check(`scan race: ${PHONES} phones scan one ticket at the same moment, exactly o
 const pct = (xs, p) => { const s = [...xs].sort((a, b) => a - b); return s[Math.min(s.length - 1, Math.ceil(p * s.length) - 1)].toFixed(0); };
 console.log("\nclient round trip (includes your network):");
 for (const [k, xs] of Object.entries(lat)) console.log(`  ${k.padEnd(12)} n=${String(xs.length).padStart(4)}  p50=${pct(xs, 0.5)} ms  p95=${pct(xs, 0.95)} ms  p99=${pct(xs, 0.99)} ms`);
+if (networkRetries) console.log(`\nNetwork retries (client side): ${networkRetries}`);
 console.log(`\n${failures === 0 ? "All checks passed." : failures + " check(s) FAILED."} Then run setup.bat step 11 (ledger check). Revoke the invitation on the dashboard.`);
 process.exit(failures === 0 ? 0 : 1);

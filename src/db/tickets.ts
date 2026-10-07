@@ -151,6 +151,20 @@ export class TicketDb {
     return rs[0]!.meta.changes === 1;
   }
 
+  /** Several approved, released test tickets in ONE batch (staging test endpoint). */
+  async createTestTickets(sess: SessionRef, partyId: string, tickets: { id: string; guestName: string }[], people: number,
+    now: number, actor: string, op: string): Promise<boolean> {
+    const guard = sessionValid(sess, SCAN_ROLES, now);
+    const rs = await this.driver.batch([
+      ...tickets.map((t) => sql`INSERT INTO tickets (id, party_id, status, people, guest_name, created_at, approved_at, approved_by,
+            released_at, released_by, last_op, last_action)
+        SELECT ${t.id}, ${partyId}, 'approved', ${people}, ${t.guestName}, ${now}, ${now}, ${actor}, ${now}, ${actor}, ${op}, 'ticket_created'
+        WHERE ${guard}`),
+      audit(now, actor, "ticket_created", "ticket", sql`SELECT party_id, id, rev FROM tickets WHERE last_op = ${op} AND party_id = ${partyId} AND created_at = ${now}`, "test"),
+    ]);
+    return rs.slice(0, tickets.length).every((r) => r.meta.changes === 1);
+  }
+
   /**
    * One guarded ticket change. `set` and `where` are fixed SQL fragments chosen by
    * the caller (code, not input); every change bumps rev, records last_op and

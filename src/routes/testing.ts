@@ -27,16 +27,15 @@ testingRoutes.post("/tickets", requireAuth(["owner", "admin", "door"]), async (c
   const a = c.var.auth;
   const tdb = new TicketDb(c.var.db.driver);
   const now = c.var.deps.now();
-  const out: { id: string; qr: string }[] = [];
-  for (let i = 0; i < count; i++) {
+  const list = Array.from({ length: count }, () => {
     const id = base32(randomBytes(10), 16);
-    const ok = await tdb.createTicket({ hash: a.hash, partyId: a.info.party_id }, {
-      id, partyId: a.info.party_id, people, guestName: `Test guest ${id.slice(0, 4)}`, status: "approved", release: true,
-      now, actor: a.info.staff_id, op: newId(),
-    });
-    if (!ok) return json(c, 401, { error: "not_signed_in" });
-    out.push({ id, qr: await signQr(c.env as unknown as Record<string, unknown>, { partyId: a.info.party_id, ticketId: id, version: 1 }) });
+    return { id, guestName: `Test guest ${id.slice(0, 4)}` };
+  });
+  if (!(await tdb.createTestTickets({ hash: a.hash, partyId: a.info.party_id }, a.info.party_id, list, people, now, a.info.staff_id, newId()))) {
+    return json(c, 401, { error: "not_signed_in" });
   }
+  const out: { id: string; qr: string }[] = [];
+  for (const t of list) out.push({ id: t.id, qr: await signQr(c.env as unknown as Record<string, unknown>, { partyId: a.info.party_id, ticketId: t.id, version: 1 }) });
   await flushChangeLog(c.var.db, c.var.ledger, now, out.map((t) => t.id));
   return json(c, 200, { tickets: out });
 });
