@@ -21,8 +21,9 @@ import { createInterface } from "node:readline/promises";
 import { stdin, stdout } from "node:process";
 
 const WIN = process.platform === "win32";
+// --auto: no prompts (cloud sessions); --invite <link> supplies the traffic link.
 const args = Object.fromEntries(process.argv.slice(2).reduce((acc, a, i, all) => {
-  if (a.startsWith("--")) acc.push([a.slice(2), all[i + 1]]);
+  if (a.startsWith("--")) acc.push([a.slice(2), all[i + 1] && !all[i + 1].startsWith("--") ? all[i + 1] : "true"]);
   return acc;
 }, []));
 
@@ -146,9 +147,11 @@ if (tail.exitCode !== null) {
   console.error("wrangler tail stopped:\n" + tail.errText());
   process.exit(1);
 }
-await ask(`\n1) Now, on STAGING in a private window: sign in and out ${args.signins ?? "5"} times, and create
+if (args.auto !== "true") {
+  await ask(`\n1) Now, on STAGING in a private window: sign in and out ${args.signins ?? "5"} times, and create
    ${args.invites ?? "3"} door invitations on the dashboard (revoke them afterwards).
    Press Enter here when done. `);
+}
 const link = args.invite ?? (await ask("\n2) For scan traffic too: create a NEW door invitation (1 hour) and paste its link here.\n   Or just press Enter to measure only what you did in step 1: "));
 if (link) {
   await new Promise((ok) => spawn(process.execPath, ["scripts/live-check.mjs", "--invite", link], { stdio: "inherit" }).on("close", ok));
