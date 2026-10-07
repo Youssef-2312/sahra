@@ -5,7 +5,7 @@ import { defineConfig } from "vitest/config";
 export default defineConfig(async () => {
   const migrations = await readD1Migrations("./migrations");
   const ledgerMigrations = await readD1Migrations("./migrations-ledger");
-  // Tests also cover the staging-only prototype, so they load its tables too.
+  // Staging-only SQL is applied too (it must be harmless on any database).
   const stagingMain = await readD1Migrations("./migrations-staging/main");
   const stagingLedger = await readD1Migrations("./migrations-staging/ledger");
   return {
@@ -28,7 +28,7 @@ export default defineConfig(async () => {
             COOKIE_MASTER_K1: "dGVzdC1vbmx5LWNvb2tpZS1tYXN0ZXItc2VjcmV0LTMyYg",
             // A second key id, to test that old-key cookies stop working once removed.
             COOKIE_MASTER_K2: "dGVzdC1vbmx5LWNvb2tpZS1tYXN0ZXItc2VjcmV0LWsyLTMyYg",
-            ENABLE_PROTO: "1",
+            ENABLE_TEST_TICKETS: "1",
           },
           // Generous limits for the functional tests; RL_TEST checks limiting itself.
           ratelimits: {

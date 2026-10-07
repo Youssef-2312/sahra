@@ -48,11 +48,11 @@ export function sessionValid(sess: SessionRef, roles: readonly Role[], now: numb
       AND a.disabled_at IS NULL AND a.role = s.role AND s.role IN (${inList(roles)}))`;
 }
 
-function audit(
+export function audit(
   now: number,
   actor: string | null,
   action: string,
-  entityType: "staff" | "invite" | "party" | "session",
+  entityType: "staff" | "invite" | "party" | "session" | "ticket",
   from: Sql,
   detail: string | null = null,
 ): Sql {
@@ -61,7 +61,7 @@ function audit(
     SELECT party_id, ${now}, ${actor}, ${action}, ${entityType}, id, rev, ${detail} FROM (${from})`;
 }
 
-export type LogEntity = "party" | "staff" | "invite";
+export type LogEntity = "party" | "staff" | "invite" | "ticket";
 export interface UnloggedRow {
   entity: LogEntity;
   id: string;
@@ -261,6 +261,52 @@ export class Db {
     return "rejected" as const;
   }
 
+  /**
+   * STAGING ONLY (src/routes/testing.ts): a new door staff member plus invitation,
+   * created by any staff session of the party (not only owners).
+   */
+  async createTestDoorInvite(sess: SessionRef, actor: string, a: {
+    staffId: string; inviteId: string; name: string; tokenHash: string; now: number; expiresAt: number; op: string;
+  }) {
+    const ok = sessionValid(sess, ["owner", "admin", "door"], a.now);
+    const p = sess.partyId;
+    const rs = await this.driver.batch([
+      sql`INSERT INTO staff (id, party_id, name, role, created_at, created_by, last_op, last_action)
+        SELECT ${a.staffId}, ${p}, ${a.name}, 'door', ${a.now}, ${actor}, ${a.op}, 'staff_added' WHERE ${ok}`,
+      sql`INSERT INTO invites (id, kind, token_hash, party_id, staff_id, role, created_by, created_at, expires_at, last_op, last_action)
+        SELECT ${a.inviteId}, 'door', ${a.tokenHash}, ${p}, ${a.staffId}, 'door', ${actor}, ${a.now}, ${a.expiresAt}, ${a.op}, 'invite_created'
+        WHERE EXISTS (SELECT 1 FROM staff WHERE id = ${a.staffId} AND last_op = ${a.op})`,
+      audit(a.now, actor, "staff_added", "staff", sql`SELECT party_id, id, rev FROM staff WHERE id = ${a.staffId} AND last_op = ${a.op}`, "test"),
+      audit(a.now, actor, "invite_created", "invite", sql`SELECT party_id, id, rev FROM invites WHERE id = ${a.inviteId} AND last_op = ${a.op}`, "test"),
+    ]);
+    return rs[1]!.meta.changes === 1;
+  }
+
+  /**
+   * STAGING ONLY (src/routes/testing.ts): revokes every door invitation of the
+   * session's party and ends every door session except the caller's, in one
+   * batch with audit rows. The caller's own session is ended separately, last
+   * (revokeOwnDoorSession), after the change log has been written.
+   */
+  async revokeAllDoorAccess(sess: SessionRef, actor: string, now: number, op: string) {
+    const ok = sessionValid(sess, ["owner", "admin", "door"], now);
+    const p = sess.partyId;
+    const rs = await this.driver.batch([
+      sql`UPDATE invites SET revoked_at = ${now}, revoked_by = ${actor}, rev = rev + 1, last_op = ${op}, last_action = 'invite_revoked'
+        WHERE party_id = ${p} AND kind = 'door' AND revoked_at IS NULL AND ${ok}`,
+      audit(now, actor, "invite_revoked", "invite", sql`SELECT party_id, id, rev FROM invites WHERE party_id = ${p} AND last_op = ${op}`, "test cleanup"),
+      sql`UPDATE sessions SET revoked_at = ${now}
+        WHERE party_id = ${p} AND kind = 'door' AND revoked_at IS NULL AND id_hash != ${sess.hash} AND ${ok}`,
+    ]);
+    return { invites: rs[0]!.meta.changes, sessions: rs[2]!.meta.changes };
+  }
+
+  async revokeOwnDoorSession(sess: SessionRef, now: number): Promise<number> {
+    const r = await this.driver.all(sql`UPDATE sessions SET revoked_at = ${now}
+      WHERE id_hash = ${sess.hash} AND party_id = ${sess.partyId} AND kind = 'door' AND revoked_at IS NULL`);
+    return r.meta.changes;
+  }
+
   /** Revokes an invitation and the session created from it. Idempotent. */
   async revokeInvite(sess: SessionRef, actor: string, inviteId: string, now: number, op: string) {
     const ok = sessionValid(sess, ["owner"], now);
@@ -337,12 +383,20 @@ export class Db {
 
   // -------------------------------------------------------------- change log
 
-  /** Rows whose latest rev is not yet confirmed in the change log (ledger). */
-  async unlogged(limit = 50): Promise<UnloggedRow[]> {
+  /**
+   * Rows whose latest rev is not yet confirmed in the change log (ledger): all
+   * parties, staff and invites (small tables), plus the given tickets. Tickets are
+   * never scanned as a whole: there can be thousands, and admissions write their
+   * own ledger record on the scan path without updating `logged_rev`.
+   */
+  async unlogged(limit = 50, ticketIds: string[] = []): Promise<UnloggedRow[]> {
     const rs = await this.driver.batch([
       sql`SELECT * FROM parties WHERE rev > logged_rev LIMIT ${limit}`,
       sql`SELECT * FROM staff WHERE rev > logged_rev LIMIT ${limit}`,
       sql`SELECT * FROM invites WHERE rev > logged_rev LIMIT ${limit}`,
+      ticketIds.length
+        ? sql`SELECT * FROM tickets WHERE id IN (${inList(ticketIds)}) AND rev > logged_rev LIMIT ${limit}`
+        : sql`SELECT 1 WHERE 0`,
     ]);
     const out: UnloggedRow[] = [];
     const add = (entity: LogEntity, rows: Record<string, unknown>[]) => {
@@ -360,12 +414,13 @@ export class Db {
     add("party", rs[0]!.results);
     add("staff", rs[1]!.results);
     add("invite", rs[2]!.results);
+    add("ticket", rs[3]!.results);
     return out;
   }
 
   async markLogged(rows: { entity: LogEntity; id: string; rev: number }[]): Promise<void> {
     if (rows.length === 0) return;
-    const table = { party: "parties", staff: "staff", invite: "invites" } as const;
+    const table = { party: "parties", staff: "staff", invite: "invites", ticket: "tickets" } as const;
     await this.driver.batch(
       rows.map((r) => {
         const t = table[r.entity];

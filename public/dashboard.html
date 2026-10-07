@@ -22,10 +22,17 @@
 <select name="action"><option value="disable">disable staff</option><option value="role:admin">role admin</option><option value="role:owner">role owner</option><option value="revoke">revoke invite</option></select> <button>Apply</button></form>
 </section>
 
-<section id="proto" hidden>
-<h2>Checkpoint A scan prototype</h2>
-<button id="mkticket" type="button">Create test ticket</button>
-<form id="scan"><input name="qr" placeholder="QR text" size="70" required> <button>Scan</button></form>
+<section id="door">
+<h2>Admission</h2>
+<pre id="admission"></pre>
+<span id="admission-buttons" hidden><button id="open" type="button">Open admission</button> <button id="pause" type="button">Pause admission</button></span>
+<h2>Scan (test page)</h2>
+<p>NO GREEN, NO ENTRY.</p>
+<form id="scan"><input name="qr" placeholder="QR text" size="80" required> <button>Scan</button></form>
+<pre id="verdict" role="status"></pre>
+<h3>Test tickets (staging only)</h3>
+<form id="mktickets"><input name="count" type="number" min="1" max="20" value="1"> tickets of <input name="people" type="number" min="1" max="10" value="1"> people <button>Create</button></form>
+<pre id="tickets"></pre>
 </section>
 <pre id="out" role="status"></pre>
 </main>

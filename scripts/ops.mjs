@@ -17,9 +17,13 @@
 //   node scripts/ops.mjs checkpoint
 //   node scripts/ops.mjs verify-ledger          (read-only, staging)
 //   node scripts/ops.mjs measure-cpu            (staging)
+//   node scripts/ops.mjs revoke-door-staging    (staging)
 
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
+import { mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { stdin, stdout } from "node:process";
 
@@ -99,8 +103,12 @@ const steps = {
     await wrangler(["d1", "migrations", "apply", "DB", "--remote", ...e]);
     await wrangler(["d1", "migrations", "apply", "LEDGER", "--remote", ...e]);
     if (name === "staging") {
-      await wrangler(["d1", "execute", "DB", "--remote", ...e, "--file", "migrations-staging/main/0001_proto.sql"]);
-      await wrangler(["d1", "execute", "LEDGER", "--remote", ...e, "--file", "migrations-staging/ledger/0001_proto.sql"]);
+      // Every staging-only SQL file, in name order; each is safe to run again.
+      for (const [db, dir] of [["DB", "migrations-staging/main"], ["LEDGER", "migrations-staging/ledger"]]) {
+        for (const f of readdirSync(dir).filter((n) => n.endsWith(".sql")).sort()) {
+          await wrangler(["d1", "execute", db, "--remote", ...e, "--file", `${dir}/${f}`]);
+        }
+      }
     }
     await steps.status(name);
   },
@@ -151,9 +159,11 @@ const steps = {
     await new Promise((ok, fail) => spawn(process.execPath, args, { stdio: "inherit" }).on("close", (c) => (c === 0 ? ok() : fail(new Error("create-party failed")))));
   },
 
-  // Read-only: compares admitted prototype tickets (sahra-staging) with admission
-  // records (sahra-ledger-staging), by ticket id AND rev. Every ticket admitted in
-  // the main database must have its ledger record (green-screen rule).
+  // Read-only: every admission in the main database (scan rows with outcome
+  // "admitted": ticket id + the ticket's rev at admission) must have its ledger
+  // record (change_log event "ticket:<id>:<rev>"). A missing record means a scan
+  // whose green-screen step never finished: it never showed green, and recovery
+  // must resolve that ticket (section 8.3).
   async "verify-ledger"() {
     const party = ((await ask("Party id [checkpoint-a]: ")) || "checkpoint-a").replace(/[^a-z0-9-]/g, "");
     const query = async (db, sql) => {
@@ -161,41 +171,109 @@ const steps = {
       // The JSON result starts on its own line ("[" alone); anything before it is wrangler chatter.
       const start = r.stdout.search(/^\[\s*$/m);
       if (start < 0) throw new Error("could not read the query result");
-      const json = JSON.parse(r.stdout.slice(start));
-      return json[0].results;
+      return JSON.parse(r.stdout.slice(start))[0].results;
     };
-    const admitted = await query("DB", `SELECT id, rev, used_scan_id FROM proto_tickets WHERE party_id = '${party}' AND used_scan_id IS NOT NULL`);
-    const scans = await query("DB", `SELECT outcome, COUNT(*) AS n FROM proto_scans WHERE party_id = '${party}' GROUP BY outcome`);
-    const tickets = await query("DB", `SELECT COUNT(*) AS n FROM proto_tickets WHERE party_id = '${party}'`);
-    const records = await query("LEDGER", `SELECT key FROM proto_admissions WHERE key LIKE '${party}/%'`);
-    const recordKeys = new Set(records.map((r) => r.key));
-    const admittedKeys = new Set(admitted.map((t) => `${party}/${t.id}/${t.rev}`));
-    const missing = admitted.filter((t) => !recordKeys.has(`${party}/${t.id}/${t.rev}`));
-    const orphan = records.filter((r) => !admittedKeys.has(r.key));
+    const admitted = await query("DB", `SELECT ticket_id, ticket_rev FROM scans WHERE party_id = '${party}' AND outcome = 'admitted'`);
+    const outcomes = await query("DB", `SELECT outcome, COUNT(*) AS n FROM scans WHERE party_id = '${party}' GROUP BY outcome`);
+    const used = await query("DB", `SELECT COUNT(*) AS n FROM tickets WHERE party_id = '${party}' AND used_scan_id IS NOT NULL`);
+    const records = await query("LEDGER", `SELECT entity_id, rev FROM change_log WHERE party_id = '${party}' AND entity = 'ticket' AND action = 'admitted'`);
+    const recordKeys = new Set(records.map((r) => `${r.entity_id}:${r.rev}`));
+    const admittedKeys = new Set(admitted.map((a) => `${a.ticket_id}:${a.ticket_rev}`));
+    const missing = admitted.filter((a) => !recordKeys.has(`${a.ticket_id}:${a.ticket_rev}`));
+    const orphan = records.filter((r) => !admittedKeys.has(`${r.entity_id}:${r.rev}`));
     console.log(`\nParty ${party} (staging)`);
-    console.log(`  prototype tickets created:              ${tickets[0]?.n ?? 0}`);
-    console.log(`  scan outcomes:                          ${scans.map((s) => `${s.outcome}=${s.n}`).join(", ") || "none"}`);
-    console.log(`  admitted tickets (main database):       ${admitted.length}`);
+    console.log(`  scan outcomes:                          ${outcomes.map((s) => `${s.outcome}=${s.n}`).join(", ") || "none"}`);
+    console.log(`  tickets marked used (main database):    ${used[0]?.n ?? 0}`);
+    console.log(`  admissions (main database scan rows):   ${admitted.length}`);
     console.log(`  admission records (ledger database):    ${records.length}`);
-    console.log(`  admitted WITHOUT a ledger record:       ${missing.length}`);
-    for (const t of missing) console.log(`    MISSING  ticket ${t.id} rev ${t.rev}`);
-    console.log(`  ledger records with no admitted ticket: ${orphan.length}`);
-    for (const r of orphan) console.log(`    ORPHAN   ${r.key}`);
-    const pending = scans.find((s) => s.outcome === "pending");
-    const ok = missing.length === 0 && orphan.length === 0 && admitted.length === records.length && !pending;
-    console.log(ok ? "\nRESULT: OK. Every admitted ticket has its ledger record (same ticket id and rev)."
+    console.log(`  admissions WITHOUT a ledger record:     ${missing.length}`);
+    for (const m of missing) console.log(`    MISSING  ticket ${m.ticket_id} rev ${m.ticket_rev}`);
+    console.log(`  ledger records with no admission row:   ${orphan.length}`);
+    for (const o of orphan) console.log(`    ORPHAN   ticket ${o.entity_id} rev ${o.rev}`);
+    const ok = missing.length === 0 && orphan.length === 0 && admitted.length === records.length;
+    console.log(ok ? "\nRESULT: OK. Every admission has its ledger record (same ticket id and rev)."
       : "\nRESULT: MISMATCH. Stop and send this output to Claude.");
   },
 
-  // Live CPU per endpoint, cold vs warm, on staging (wrangler tail + Checkpoint A traffic).
+  // STAGING ONLY: revoke every door invitation of a party and end every door
+  // session in one main-database batch (with audit rows), then write each changed
+  // invitation's full state to the ledger (change log, entity + rev) and mark it
+  // logged, as the dashboard's "revoke invite" does. Every run first finishes any
+  // revocation that is not yet in the ledger, so it is safe to run again.
+  //
+  // Reads use --command (remote --file returns only a summary, not rows); writes
+  // use a temporary --file (one transaction; a failure changes nothing).
+  async "revoke-door-staging"() {
+    const party = ((await ask("Party id [checkpoint-a]: ")) || "checkpoint-a").replace(/[^a-z0-9-]/g, "");
+    const sq = (v) => (v === null || v === undefined ? "NULL" : typeof v === "number" ? String(v) : `'${String(v).replace(/'/g, "''")}'`);
+    const select = async (db, sql) => {
+      const r = await wrangler(["d1", "execute", db, "--remote", "--env", "staging", "--json", "--command", sql], { quiet: true });
+      const start = r.stdout.search(/^\[\s*$/m);
+      if (start < 0) throw new Error("could not read the query result");
+      return JSON.parse(r.stdout.slice(start))[0].results;
+    };
+    const write = async (db, statements) => {
+      const dir = mkdtempSync(join(tmpdir(), "sahra-"));
+      const file = join(dir, "q.sql");
+      writeFileSync(file, statements.join("\n"));
+      try {
+        await wrangler(["d1", "execute", db, "--remote", "--env", "staging", "--file", file], { quiet: true });
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    };
+    // Revoked invitations whose latest rev is not yet confirmed in the ledger.
+    const pendingRows = () => select("DB", `SELECT * FROM invites WHERE party_id = '${party}' AND kind = 'door' AND revoked_at IS NOT NULL AND rev > logged_rev`);
+    const finishLedger = async () => {
+      const rows = await pendingRows();
+      if (rows.length === 0) return 0;
+      for (const r of rows) {
+        if (typeof r.id !== "string" || !Number.isInteger(r.rev)) throw new Error("unexpected row shape; nothing written to the ledger");
+      }
+      const now = Date.now();
+      await write("LEDGER", rows.map((r) => {
+        const { logged_rev: _ignored, ...state } = r;
+        return `INSERT INTO change_log (event_id, party_id, entity, entity_id, rev, action, logged_at, state) VALUES (${sq(`invite:${r.id}:${r.rev}`)}, ${sq(r.party_id)}, 'invite', ${sq(r.id)}, ${r.rev}, ${sq(r.last_action ?? "invite_revoked")}, ${now}, ${sq(JSON.stringify(state))}) ON CONFLICT (event_id) DO NOTHING;`;
+      }));
+      // Confirm every record is in the ledger before marking anything logged.
+      const ids = rows.map((r) => sq(`invite:${r.id}:${r.rev}`)).join(", ");
+      const found = new Set((await select("LEDGER", `SELECT event_id FROM change_log WHERE event_id IN (${ids})`)).map((x) => x.event_id));
+      const confirmed = rows.filter((r) => found.has(`invite:${r.id}:${r.rev}`));
+      if (confirmed.length) {
+        await write("DB", confirmed.map((r) => `UPDATE invites SET logged_rev = ${r.rev} WHERE id = ${sq(r.id)} AND logged_rev < ${r.rev};`));
+      }
+      if (confirmed.length !== rows.length) throw new Error(`${rows.length - confirmed.length} ledger record(s) not confirmed; run step 13 again`);
+      return confirmed.length;
+    };
+
+    const finished = await finishLedger();
+    if (finished) console.log(`Recorded ${finished} earlier revocation(s) in the ledger.`);
+
+    const open = (await select("DB", `SELECT COUNT(*) AS n FROM invites WHERE party_id = '${party}' AND kind = 'door' AND revoked_at IS NULL`))[0]?.n ?? 0;
+    const sessions = (await select("DB", `SELECT COUNT(*) AS n FROM sessions WHERE party_id = '${party}' AND kind = 'door' AND revoked_at IS NULL`))[0]?.n ?? 0;
+    console.log(`\nStaging party ${party}: ${open} door invitation(s) not yet revoked, ${sessions} door session(s) active.`);
+    if (open === 0 && sessions === 0) { console.log("Nothing left to revoke."); return; }
+    if ((await ask("Type YES to revoke all of them: ")) !== "YES") throw new Error("cancelled");
+    const now = Date.now();
+    const op = `ops-revoke-${now}`;
+    await write("DB", [
+      `UPDATE invites SET revoked_at = ${now}, revoked_by = 'operator', rev = rev + 1, last_op = '${op}', last_action = 'invite_revoked' WHERE party_id = '${party}' AND kind = 'door' AND revoked_at IS NULL;`,
+      `UPDATE sessions SET revoked_at = ${now} WHERE party_id = '${party}' AND kind = 'door' AND revoked_at IS NULL;`,
+      `INSERT INTO audit (party_id, at, actor_staff_id, action, entity_type, entity_id, entity_rev, detail) SELECT party_id, ${now}, NULL, 'invite_revoked', 'invite', id, rev, 'operator script (staging)' FROM invites WHERE last_op = '${op}';`,
+    ]);
+    const logged = await finishLedger();
+    const left = (await select("DB", `SELECT COUNT(*) AS n FROM sessions WHERE party_id = '${party}' AND kind = 'door' AND revoked_at IS NULL`))[0]?.n ?? 0;
+    console.log(`\nRevoked and recorded ${logged} invitation(s) in the ledger. Door sessions still active: ${left}.`);
+  },
+
+  // Live CPU per endpoint, cold vs warm, on staging (wrangler tail + live-check traffic).
   async "measure-cpu"() {
     await new Promise((ok) => spawn(process.execPath, ["scripts/measure-cpu.mjs"], { stdio: "inherit" }).on("close", ok));
   },
 
   async checkpoint() {
     const link = await ask("Door invitation link from STAGING: ");
-    const phones = (await ask("Simultaneous phones [8]: ")) || "8";
-    await new Promise((ok) => spawn(process.execPath, ["scripts/checkpoint-a.mjs", "--invite", link, "--scans", "50", "--phones", phones], { stdio: "inherit" }).on("close", ok));
+    await new Promise((ok) => spawn(process.execPath, ["scripts/live-check.mjs", "--invite", link], { stdio: "inherit" }).on("close", ok));
   },
 };
 

@@ -234,3 +234,24 @@ invitation link.
   protection still applies. The door is not protected from this.
 - **sahra-ledger is not a backup**: it shares the account and its quotas. The Google
   Drive copy (Phase 4) is the only copy outside Cloudflare.
+
+---
+
+## D. Phase 2 live run (staging) and merge
+
+Pull request "Phase 2" adds tables (`migrations/0002_tickets.sql`,
+`migrations-ledger/0002_control.sql`) and removes the Phase 1 prototype tables on
+staging only (`migrations-staging/*/0002_drop_proto.sql`).
+
+1. `git pull` (branch `claude/eager-fermi-4hp8lg`), then setup.bat **step 2**
+   (staging migrations and staging-only SQL). Staging redeploys from `staging`.
+2. On the staging dashboard (signed in as owner): **Open admission**.
+3. **Invite door staff** (1 hour); copy the link without opening it.
+4. setup.bat **step 12**: when asked, do 3 sign-ins on staging, press Enter, paste
+   the link. It runs the live checks (`scripts/live-check.mjs`: join races, 100
+   sequential tickets, 30 eight-phone scan races; about 1,900 rows written, about 2% of
+   the daily limit) while measuring CPU per endpoint; then prints the table. Send it.
+5. setup.bat **step 11** (read-only): every admission must have its ledger record.
+6. Revoke the invitation. Camera test: `docs/qr-camera-test/README.md` (open it on
+   GitHub on one phone at low brightness, scan with another phone's camera).
+7. Then setup.bat **step 3** (production migrations), **step 4** (status), merge.

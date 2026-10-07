@@ -5,7 +5,6 @@
   var me = await Sahra.me();
   if (!me) { location.href = "/"; return; }
   document.getElementById("me").textContent = JSON.stringify(me, null, 2);
-  document.getElementById("proto").hidden = false;
 
   document.getElementById("logout").addEventListener("click", async function () {
     await Sahra.post("/api/auth/logout");
@@ -63,21 +62,43 @@
     });
   }
 
-  document.getElementById("mkticket").addEventListener("click", async function () {
-    var r = await Sahra.post("/api/proto/ticket");
-    show(r);
-    if (r.body.qr) document.querySelector("#scan input[name=qr]").value = r.body.qr;
+  async function loadAdmission() {
+    var r = await fetch("/api/admission", { credentials: "same-origin" });
+    document.getElementById("admission").textContent = JSON.stringify(await r.json(), null, 2);
+  }
+  loadAdmission();
+  if (me.staff.role !== "door") {
+    document.getElementById("admission-buttons").hidden = false;
+    document.getElementById("open").addEventListener("click", async function () { show(await act("/api/admission", { action: "open" })); loadAdmission(); });
+    document.getElementById("pause").addEventListener("click", async function () { show(await act("/api/admission", { action: "pause" })); loadAdmission(); });
+  }
+
+  document.getElementById("mktickets").addEventListener("submit", async function (e) {
+    e.preventDefault();
+    var f = new FormData(e.target);
+    var r = await Sahra.post("/api/test/tickets", { count: Number(f.get("count")), people: Number(f.get("people")) });
+    document.getElementById("tickets").textContent = r.status === 200 ? r.body.tickets.map(function (t) { return t.qr; }).join("\n") : JSON.stringify(r);
   });
+
+  // One scan id per physical scan; reused only when retrying that same scan
+  // (network error or "recording"). Anything but "admit" is not an entry.
   document.getElementById("scan").addEventListener("submit", async function (e) {
     e.preventDefault();
-    var qr = new FormData(e.target).get("qr");
-    // One scan id per physical scan; reused only when retrying that same scan.
+    var qr = String(new FormData(e.target).get("qr"));
     var scanId = crypto.randomUUID();
-    for (var i = 0; i < 5; i++) {
-      var r;
-      try { r = await Sahra.post("/api/proto/scan", { scan_id: scanId, qr: qr }); } catch (err) { continue; }
-      if (r.body.verdict !== "recording") break;
+    var out = document.getElementById("verdict");
+    var v = null;
+    for (var i = 0; i < 6; i++) {
+      try {
+        var r = await Sahra.post("/api/scan", { scan_id: scanId, qr: qr });
+        v = r.status === 200 ? r.body : { verdict: "cant_verify", http: r.status };
+      } catch (err) {
+        v = { verdict: "cant_verify", network: true };
+      }
+      if (v.verdict !== "recording" && !v.network) break;
+      out.textContent = "Recording entry... (retry " + (i + 1) + ")";
+      await new Promise(function (ok) { setTimeout(ok, 800); });
     }
-    show(r || { verdict: "cant_verify" });
+    out.textContent = (v.verdict === "admit" ? "GREEN: ADMIT\n" : "NOT GREEN: DO NOT ADMIT\n") + JSON.stringify(v, null, 2);
   });
 })();
