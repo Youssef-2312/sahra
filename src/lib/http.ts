@@ -66,7 +66,11 @@ export async function rateLimited(binding: RateLimit | undefined, key: string, o
 export const SECURITY_HEADERS: Record<string, string> = {
   "content-security-policy":
     "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; form-action 'self' https://accounts.google.com; frame-ancestors 'none'; base-uri 'none'",
-  "referrer-policy": "no-referrer",
+  // NOT "no-referrer": under that policy browsers send `Origin: null` on every POST,
+  // even same-origin (Fetch standard, "append a request Origin header"), which our
+  // Origin check rightly rejects. "same-origin" keeps the real Origin for our own
+  // requests and still sends no referrer to any other site.
+  "referrer-policy": "same-origin",
   "x-content-type-options": "nosniff",
   "cross-origin-opener-policy": "same-origin",
   "strict-transport-security": "max-age=31536000; includeSubDomains",
