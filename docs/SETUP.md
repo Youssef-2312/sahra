@@ -61,13 +61,13 @@ npx wrangler d1 migrations apply LEDGER --remote --env staging    # sahra-ledger
 npx wrangler d1 execute DB --remote --env staging --file migrations-staging/main/0001_proto.sql
 npx wrangler d1 execute LEDGER --remote --env staging --file migrations-staging/ledger/0001_proto.sql
 # then production
-npx wrangler d1 migrations apply DB --remote                      # sahra-prod
-npx wrangler d1 migrations apply LEDGER --remote                  # sahra-ledger-prod
+npx wrangler d1 migrations apply DB --remote --env=""                      # sahra-prod
+npx wrangler d1 migrations apply LEDGER --remote --env=""                  # sahra-ledger-prod
 # check: each must say "No migrations to apply"
 npx wrangler d1 migrations list DB --remote --env staging
 npx wrangler d1 migrations list LEDGER --remote --env staging
-npx wrangler d1 migrations list DB --remote
-npx wrangler d1 migrations list LEDGER --remote
+npx wrangler d1 migrations list DB --remote --env=""
+npx wrangler d1 migrations list LEDGER --remote --env=""
 ```
 
 The two `migrations-staging` files are staging-only (the Checkpoint A prototype);
@@ -96,7 +96,7 @@ twice:
 | Worker name | `sahra` | `sahra-staging` |
 | Production branch | `main` | `staging` |
 | Build command | (empty) | (empty) |
-| Deploy command | `npx wrangler deploy` | `npx wrangler deploy --env staging` |
+| Deploy command | `npx wrangler deploy --env=""` | `npx wrangler deploy --env staging` |
 | Enable Preview Builds | **off** | **off** |
 | API token | the one Workers Builds creates, unchanged | same |
 
@@ -106,6 +106,11 @@ resource provisioning when the id is present (checked in wrangler's source). The
 bindings are attached by id when the script is uploaded, which "Workers Scripts:
 Edit" covers. The first build confirms it; if it fails with a D1 authorization
 error, send Claude the build log.
+
+`--env=""` selects the top-level (production) configuration explicitly, which
+also silences wrangler's "multiple environments" warning. The deploy command lives
+in Cloudflare (Workers & Pages > sahra > Settings > Build > Deploy command), so
+changing it there is a dashboard step, not something a pull request can do.
 
 Claude pushes to `staging` (staging auto-deploys from it); `main` changes only
 through pull requests you merge.

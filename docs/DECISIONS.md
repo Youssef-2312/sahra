@@ -40,6 +40,18 @@ redemption per ticket", "reduces the risk", measured numbers only).
   2 minutes only yields another session for the same verified person, subject to
   the cap.
 
+## Rate limits
+
+- Scans: `RL_SCAN` is keyed per scanner session (never per IP; door phones on one
+  Wi-Fi share an IP). Production 120 requests per 60 s per phone, about 2 per
+  second sustained. A phone scanning one guest every 2 s with a retry on each
+  scan uses about 60. If the limiter service itself errors, scans continue (the
+  database still decides every admission); a missing binding blocks.
+- Sign-in start, callback and door join: `RL_AUTH`, 20 per 60 s per IP (these
+  happen once per person, not per guest).
+- The limiter counts per Cloudflare location and is eventually consistent: abuse
+  protection, not an exact counter.
+
 ## Accepted risks
 
 - **Request flooding.** The Workers Free plan allows 100,000 requests per day for the
