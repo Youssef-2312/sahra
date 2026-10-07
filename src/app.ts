@@ -19,6 +19,9 @@ export type { Deps } from "./context";
 // CPU time can be reported separately for cold and warm requests.
 let isolateRequests = 0;
 let isolateStartedAt = 0;
+// Per-isolate, per-endpoint counter: request 1 of an endpoint in a warm isolate is
+// that code path's first use (lazy compilation, first key import), reported apart.
+const routeRequests = new Map<string, number>();
 
 export function createApp(deps: Deps) {
   const app = new Hono<AppEnv>();
@@ -39,6 +42,9 @@ export function createApp(deps: Deps) {
     c.set("deps", deps);
     deps.jwks.lastLookup = "none";
     await next();
+    const routeKey = `${c.req.method} ${c.req.routePath}`;
+    const routeReq = (routeRequests.get(routeKey) ?? 0) + 1;
+    routeRequests.set(routeKey, routeReq);
     for (const [k, v] of Object.entries(SECURITY_HEADERS)) if (!c.res.headers.has(k)) c.res.headers.set(k, v);
     // One structured line per request, for Workers Logs (CPU time is on the invocation log).
     console.log(
@@ -54,6 +60,7 @@ export function createApp(deps: Deps) {
         jwks: deps.jwks.lastLookup,
         iso_req: isoReq,
         cold: isoReq === 1,
+        route_req: routeReq,
         iso_age_ms: started - isolateStartedAt,
         wall_ms: Date.now() - started,
       }),

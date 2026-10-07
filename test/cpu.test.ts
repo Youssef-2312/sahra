@@ -73,5 +73,7 @@ describe("cold/warm label", () => {
     expect(reqs[1].iso_req).toBe(reqs[0].iso_req + 1);
     expect(reqs[1].cold).toBe(false);
     expect(typeof reqs[0].iso_age_ms).toBe("number");
+    // Per-endpoint counter: the second /api/me in this isolate is not its first use.
+    expect(reqs[1].route_req).toBe(reqs[0].route_req + 1);
   });
 });

@@ -99,8 +99,11 @@ function report() {
     if (cpu !== null) withCpu++;
     if (ev.outcome === "exceededCpu") exceeded++;
     const log = ourLog(ev);
-    const kind = log ? (log.iso_req === 1 ? "cold" : "warm") : "unknown";
-    const key = `${ev.event?.request?.method ?? "?"} ${pathOf(ev)}|${kind}`;
+    // cold = the isolate's first request; first = this endpoint's first request in
+    // an already-warm isolate (first use of that code path); warm = everything else.
+    const kind = !log ? "unknown" : log.iso_req === 1 ? "cold" : log.route_req === 1 ? "first" : "warm";
+    const jw = log && log.jwks && log.jwks !== "none" ? ` [keys ${log.jwks}]` : "";
+    const key = `${ev.event?.request?.method ?? "?"} ${pathOf(ev)}${jw}|${kind}`;
     if (!rows.has(key)) rows.set(key, { cpu: [], wall: [], outcomes: {} });
     const r = rows.get(key);
     if (cpu !== null) r.cpu.push(cpu);
@@ -113,19 +116,21 @@ function report() {
     console.log("search by path; the expanded log line shows iso_req, where 1 = cold).");
   }
   const out = [];
-  console.log("\nCPU ms per request (staging)      kind   n     p50   p95   p99   max   outcomes");
+  console.log("\nkind: cold = isolate's first request; first = endpoint's first request in a warm isolate; warm = the rest");
+  console.log("CPU ms per request (staging)                  kind   n     p50   p95   p99   max   outcomes");
   for (const [key, r] of [...rows].sort()) {
     const [path, kind] = key.split("|");
     const n = r.cpu.length;
     const fmt = (v) => (v === undefined ? "  -  " : String(v).padStart(5));
-    const line = `${path.padEnd(34)} ${kind.padEnd(6)} ${String(n).padStart(4)} ${fmt(n ? pct(r.cpu, 0.5) : undefined)} ${fmt(n ? pct(r.cpu, 0.95) : undefined)} ${fmt(n ? pct(r.cpu, 0.99) : undefined)} ${fmt(n ? Math.max(...r.cpu) : undefined)}   ${JSON.stringify(r.outcomes)}`;
+    const line = `${path.padEnd(45)} ${kind.padEnd(6)} ${String(n).padStart(4)} ${fmt(n ? pct(r.cpu, 0.5) : undefined)} ${fmt(n ? pct(r.cpu, 0.95) : undefined)} ${fmt(n ? pct(r.cpu, 0.99) : undefined)} ${fmt(n ? Math.max(...r.cpu) : undefined)}   ${JSON.stringify(r.outcomes)}`;
     console.log(line);
     out.push({ path, kind, n, p50: n ? pct(r.cpu, 0.5) : null, p95: n ? pct(r.cpu, 0.95) : null, p99: n ? pct(r.cpu, 0.99) : null, max: n ? Math.max(...r.cpu) : null, wall_p95: r.wall.length ? pct(r.wall, 0.95) : null, outcomes: r.outcomes });
   }
   const file = `cpu-report-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
   writeFileSync(file, JSON.stringify({ captured: events.length, with_cpu: withCpu, exceeded_cpu: exceeded, rows: out }, null, 2));
   console.log(`\nSaved summary to ${file} (no cookies, links or secrets).`);
-  console.log("Target: warm p99 under 5 ms on every endpoint. Cold rows are reported separately.");
+  console.log("Target: warm p99 under 5 ms on every endpoint. Cold and first-use rows are reported separately;");
+  console.log("rows with few requests (n) are indicative only.");
 }
 
 const tail = startTail();
@@ -135,10 +140,14 @@ if (tail.exitCode !== null) {
   console.error("wrangler tail stopped:\n" + tail.errText());
   process.exit(1);
 }
-await ask("\n1) Now, in a private window, sign in on STAGING, sign out, and sign in again (3 times).\n   Press Enter here when done. ");
-const link = args.invite ?? (await ask("\n2) Create a NEW door invitation on the staging dashboard (1 hour) and paste its link here: "));
-const phones = args.phones ?? "8";
-await new Promise((ok) => spawn(process.execPath, ["scripts/checkpoint-a.mjs", "--invite", link, "--scans", args.scans ?? "50", "--phones", phones], { stdio: "inherit" }).on("close", ok));
+await ask(`\n1) Now, on STAGING in a private window: sign in and out ${args.signins ?? "5"} times, and create
+   ${args.invites ?? "3"} door invitations on the dashboard (revoke them afterwards).
+   Press Enter here when done. `);
+const link = args.invite ?? (await ask("\n2) For scan traffic too: create a NEW door invitation (1 hour) and paste its link here.\n   Or just press Enter to measure only what you did in step 1: "));
+if (link) {
+  const phones = args.phones ?? "8";
+  await new Promise((ok) => spawn(process.execPath, ["scripts/checkpoint-a.mjs", "--invite", link, "--scans", args.scans ?? "50", "--phones", phones], { stdio: "inherit" }).on("close", ok));
+}
 console.log("\nWaiting 20 s for the last events...");
 await new Promise((ok) => setTimeout(ok, 20000));
 stopTail(tail);
