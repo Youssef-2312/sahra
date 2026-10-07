@@ -65,6 +65,14 @@ redemption per ticket", "reduces the risk", measured numbers only).
   staging measurement shows the live effect.
 - Each request's log line carries `in_flight` (requests running in the isolate
   at once); step 12 lists the slowest warm requests with it.
+- **Measured on staging after pass 2, accepted by the owner** (498 requests,
+  none over the CPU limit): warm scan p50 2 / p95 4 / p99 5 / max 5 ms (n = 308);
+  warm join p99 4 ms (n = 144); cold scan max 6 ms (was 14), first scan in a warm
+  isolate max 6 ms (was 9), cold join max 5 ms (was 8). Warm scan p99 is exactly
+  5 ms (Cloudflare reports whole milliseconds); the slowest scans ran alone in
+  their isolate (in_flight = 1) and early in its life (request 2 to 54), i.e. V8
+  tiering up. The test cleanup endpoint now does at most 60 change-log rows per
+  request (one request measured 10 ms for 63).
 
 ## Rate limits
 
@@ -192,3 +200,71 @@ On staging, on a day with no ticket sales:
 
 Estimate rows first and stop if it would pass 50% of the daily limit. Report p95
 latency, errors, CPU and rows read/written (main + ledger).
+
+## Operating model after handover (owner decision)
+
+The owner builds the platform and then steps back: **organisers run their own
+parties, and the owner only intervenes when something goes wrong.** Everything
+must therefore run without the owner, fail closed, and tell the owner when it
+needs them.
+
+- **Organisers by invitation.** A platform admin invites organisers by email;
+  each organiser can then create and run their own parties (owner role for those
+  parties). Nobody else can create a party, so a stranger cannot set up a fake
+  party under the site's name.
+- **Small platform admin page** (the owner or someone they trust): invite or
+  remove organisers, disable a party, see usage against the free daily limits and
+  the health checks below. It shows nothing about guests' payments.
+- **Approvals belong to each party's owner/admins**: ticket approvals, the
+  "message all guests" email, reissues. Nothing is sent or approved in the
+  platform owner's name.
+- **Per-party limits**, so one party cannot use up the account-wide free
+  allowances that every party shares (requests, D1 rows read/written, storage).
+- **Unattended checks with alerts to the platform admin** (scheduled Worker; Cron
+  Triggers are on the free plan): backup succeeded, every admission has its ledger
+  record, nothing stuck "pending" in the change log, daily usage past about 50%,
+  database size past 70%. The owner hears about a problem before a party does.
+- **Still needs a person with Cloudflare access:** recovery after a database
+  problem, applying migrations for future code changes, merging pull requests,
+  rotating secrets. `docs/` will carry a short "who does what" list for these.
+
+## Phase 4 features chosen (owner decision)
+
+Party details, editable by the party's owner/admins at any time: name,
+description, start and end time with the party's time zone, venue, address, map
+link, rules, capacity, people per ticket, payment instructions. Every edit goes
+through the change log and ledger. Changing the time or place can queue a notice
+to every guest (outbox, approved by the party owner).
+
+Address modes (owner chooses per party; the server decides, a hidden address
+never reaches the browser early, times are stored as UTC instants plus the
+party's IANA time zone):
+
+- **Public:** shown on the party page.
+- **Sent with ticket:** on the ticket page and in the ticket email once released.
+- **Revealed at a time:** ticket holders only, from a set date and time, with a
+  countdown before.
+- **Manual reveal:** hidden until the party owner presses "Reveal now".
+
+Honest limit: once revealed, a guest can share the address.
+
+Chosen extras (numbers from the brainstorm):
+
+- **2 Approval queue:** screenshot zoom, approve or reject in bulk, rejection
+  reason shown to the guest.
+- **3 Close at capacity:** ticket requests close automatically when the party is
+  full (no sales-window times).
+- **6 Guest list export:** a spreadsheet (CSV) downloaded in the browser by the
+  party's owner/admins. Not written to anyone's Google Drive (party owners'
+  Google accounts are never used).
+- **7 Message all guests:** one message to every ticket holder through the email
+  outbox, sent only after the party owner approves it. No emojis.
+- **11 Map button and countdown:** countdown before the reveal; address and a
+  maps link after it.
+- **12 Resend my ticket link:** by email, rate-limited; the answer is the same
+  whether or not the address has a ticket (no way to probe who is going).
+- **13 Name transfer:** the party owner changes the name on a ticket; this
+  reissues it and the old QR stops working.
+- **14 Save QR to photos + brightness hint** (already a frontend requirement).
+- **15 Big result screens, distinct sounds and vibration** for admit, used and
+  stop (frontend).

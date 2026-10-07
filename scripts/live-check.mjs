@@ -155,10 +155,18 @@ if (lc.status === 200) {
 
 // 6. Cleanup (what setup.bat step 13 does): revoke every door invitation and session of the party.
 if (args.keep !== "true") {
-  let rv = await call("POST", "/api/test/revoke-door-access", {}, headersFor(main), "cleanup");
-  if (rv.status === 503) rv = await call("POST", "/api/test/revoke-door-access", {}, headersFor(main), "cleanup");
+  // The first call revokes everything; while it answers "pending", repeat it to finish the change log.
+  let rv, revokedInvites = 0, ended = 0, logged = 0;
+  for (let i = 0; i < 20; i++) {
+    rv = await call("POST", "/api/test/revoke-door-access", {}, headersFor(main), "cleanup");
+    const b = rv.body ?? {};
+    revokedInvites += b.invites_revoked ?? b.revoked?.invites ?? 0;
+    ended += b.sessions_ended ?? b.revoked?.sessions ?? 0;
+    logged += b.change_log_written ?? b.logged ?? 0;
+    if (rv.status !== 503) break;
+  }
   if (rv.status === 200) {
-    console.log(`\nCleanup: ${rv.body.invites_revoked} door invitation(s) revoked, ${rv.body.sessions_ended} door session(s) ended, ${rv.body.change_log_written} change-log record(s) written.`);
+    console.log(`\nCleanup: ${revokedInvites} door invitation(s) revoked, ${ended} door session(s) ended, ${logged} change-log record(s) written.`);
   } else {
     console.log(`\nCleanup not done (HTTP ${rv.status}): run setup.bat step 13.`);
   }

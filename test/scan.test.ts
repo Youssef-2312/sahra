@@ -408,6 +408,21 @@ describe("staging-only cleanup and ledger check (cloud runs without database acc
     expect(audits).toBe(3);
   });
 
+  it("more revocations than one request records: answers pending, and a repeat finishes them", async () => {
+    const { h, os } = await setup();
+    const a = await join(h, os);
+    for (let i = 0; i < 64; i++) expect((await h.req("/api/test/door-invite", api(os, {}))).status).toBe(200);
+    const first = await h.req("/api/test/revoke-door-access", api(a, {}));
+    expect(first.status).toBe(503);
+    expect(await first.json()).toMatchObject({ status: "pending", logged: 60 });
+    const second = await h.req("/api/test/revoke-door-access", api(a, {}));
+    expect(second.status).toBe(200);
+    expect(await second.json()).toMatchObject({ status: "done", invites_revoked: 0, change_log_written: 5 });
+    const unlogged = await env.DB.prepare("SELECT COUNT(*) AS n FROM invites WHERE rev > logged_rev").first("n");
+    expect(unlogged).toBe(0);
+    expect((await h.req("/api/me", { ...api(a), method: "GET" })).status).toBe(401);
+  });
+
   it("ledger unreachable: revocations stay pending, the caller keeps its session, and a retry finishes them", async () => {
     const { h, os } = await setup();
     const a = await join(h, os);

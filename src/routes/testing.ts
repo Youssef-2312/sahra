@@ -100,10 +100,12 @@ testingRoutes.post("/revoke-door-access", requireAuth(["owner", "admin", "door"]
   const sess = { hash: a.hash, partyId: a.info.party_id };
   const now = c.var.deps.now();
   const revoked = await c.var.db.revokeAllDoorAccess(sess, a.info.staff_id, now, newId());
-  // 20 change-log rows per round, 3 queries per round; stays under the per-request query limit.
+  // 20 change-log rows per round, 3 queries per round. At most 3 rounds per request
+  // (one live run measured 10 ms CPU for 63 rows in one request); the client
+  // repeats the call while it answers "pending".
   let logged = 0;
   let done = false;
-  for (let round = 0; round < 10 && !done; round++) {
+  for (let round = 0; round < 3 && !done; round++) {
     try {
       logged += await flushChangeLog(c.var.db, c.var.ledger, now);
       done = true;
