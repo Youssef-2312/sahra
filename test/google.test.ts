@@ -228,7 +228,7 @@ describe("Google sign-in", () => {
     expect((await env.DB.prepare("SELECT google_sub FROM staff WHERE id = ?").bind(exp.staffId).first())!.google_sub).toBeNull();
   });
 
-  it("lets an account that is staff at several parties pick one, with a sealed 5-minute cookie (no database write)", async () => {
+  it("lets an account that is staff at several parties pick one, with a sealed 2-minute cookie (no database write)", async () => {
     const h = await harness();
     const p1 = await seedParty();
     const p2 = await seedParty();
@@ -255,8 +255,8 @@ describe("Google sign-in", () => {
     expect(me).toMatchObject({ party: { id: p2 }, staff: { role: "admin" } });
 
     expect(setCookies(sel)["__Host-sahra_pick"]!.attrs).toMatch(/Max-Age=0/);
-    // Expired after 5 minutes.
-    h.clock.advance(5 * 60_000 + 1);
+    // Expired after 2 minutes.
+    h.clock.advance(2 * 60_000 + 1);
     const again = await h.req("/api/auth/select-party", {
       method: "POST", body: form, headers: { origin: ORIGIN }, cookies: { "__Host-sahra_pick": pick.value },
     });
@@ -337,6 +337,23 @@ describe("Google sign-in", () => {
     const expired = await googleLogin(h, () => { h.clock.advance(10 * 60_000 + 1); });
     expect(expired.res.status).toBe(400);
     expect(h.google.tokenRequests.length).toBe(0);
+  });
+});
+
+describe("per-staff session cap", () => {
+  it("refuses a new Google session above 10 per staff member per hour (read-only check)", async () => {
+    const party = await seedParty();
+    const o = await seedOwner(party, `g-cap-${newId()}`);
+    const h = await harness();
+    h.google.identity = { sub: o.sub, email: "cap@gmail.com" };
+    for (let i = 0; i < 10; i++) expect((await googleLogin(h)).res.status, `login ${i + 1}`).toBe(200);
+    const eleventh = await googleLogin(h);
+    expect(eleventh.res.status).toBe(429);
+    expect(eleventh.cookies["__Host-sahra_s"]).toBeUndefined();
+    expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM sessions WHERE staff_id = ?").bind(o.id).first("n")).toBe(10);
+    // The rolling hour passes: allowed again.
+    h.clock.advance(3600_000 + 1);
+    expect((await googleLogin(h)).res.status).toBe(200);
   });
 });
 

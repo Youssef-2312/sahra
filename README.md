@@ -16,10 +16,12 @@ invitations for door staff, sessions, change log for staff and invitation change
 | `src/auth/google.ts` | Google authorization-code flow (state, nonce, PKCE) and ID token verification. |
 | `src/changelog.ts` | Writes each changed row's full state to the ledger under entity + rev before a change is confirmed. |
 | `src/routes/` | HTTP endpoints. `proto.ts` is a temporary scan prototype for Checkpoint A. |
-| `migrations/`, `migrations-ledger/` | Schemas of the main and ledger databases (applied by the owner, never by deploys). |
+| `migrations/`, `migrations-ledger/` | Schemas of the main and ledger databases (applied by the owner before merging, never by deploys). |
 | `public/` | Static test pages (served as Workers static assets; they do not invoke the Worker). |
-| `scripts/` | Operator tools run on the owner's computer (create a party, generate a secret, Checkpoint A driver). |
-| `docs/SETUP.md` | Owner's setup steps, migrations rule and Checkpoint A. |
+| `scripts/` | Operator tools run on the owner's computer (`ops.mjs` behind `setup.bat`, create a party, generate a secret, Checkpoint A driver). |
+| `docs/SETUP.md` | Owner's setup steps, migrations rule and Checkpoint A (Windows: double-click `setup.bat`). |
+| `docs/DECISIONS.md` | Owner decisions and requirements for later phases, accepted risks. |
+| `migrations-staging/` | Staging-only tables (Checkpoint A prototype); never applied to production. |
 
 ## Develop
 

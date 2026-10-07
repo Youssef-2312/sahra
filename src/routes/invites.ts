@@ -38,6 +38,7 @@ inviteRoutes.post("/consume", async (c) => {
     if (row.revoked_at != null) return json(c, 410, { error: "invitation_revoked" });
     if (row.used_at != null) return json(c, 409, { error: "invitation_already_used" });
     if (row.expires_at <= now) return json(c, 410, { error: "invitation_expired" });
+    if (!row.under_cap) return json(c, 429, { error: "too_many_sessions" });
     return json(c, 403, { error: "invitation_not_usable" });
   }
   if (row.revoked_at != null || row.s_revoked_at != null) return json(c, 410, { error: "invitation_revoked" });

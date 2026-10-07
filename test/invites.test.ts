@@ -169,6 +169,16 @@ describe("door invitations", () => {
     expect(await listLog(`log/${party}/invite/${inv.inviteId}/`)).toHaveLength(2);
   });
 
+  it("door join is refused above 10 sessions per staff member per hour; the invitation stays unused", async () => {
+    const { h, party, os } = await setup();
+    const inv = await doorInvite(h, os);
+    for (let i = 0; i < 10; i++) await seedSession(party, inv.staffId, "door", h.clock);
+    const r = await join(h, inv.token, newToken());
+    expect(r.status).toBe(429);
+    expect(await r.json()).toEqual({ error: "too_many_sessions" });
+    expect(await env.DB.prepare("SELECT used_at FROM invites WHERE id = ?").bind(inv.inviteId).first("used_at")).toBeNull();
+  });
+
   it("an expired door session is rejected", async () => {
     const { h, os } = await setup();
     const inv = await doorInvite(h, os);

@@ -9,8 +9,11 @@
 // The owner then signs in with Google at the site; the first sign-in links the
 // account and records these rows in the change log.
 
-import { execFileSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 const args = Object.fromEntries(
   process.argv.slice(2).reduce((acc, a, i, all) => {
@@ -60,11 +63,30 @@ const sql = [
   `INSERT INTO audit (party_id, at, actor_staff_id, action, entity_type, entity_id, entity_rev, detail) VALUES (${q(id)}, ${now}, NULL, 'party_created', 'party', ${q(id)}, 1, 'operator script'), (${q(id)}, ${now}, NULL, 'staff_added', 'staff', ${q(staffId)}, 1, 'operator script'), (${q(id)}, ${now}, NULL, 'invite_created', 'invite', ${q(inviteId)}, 1, 'operator script')`,
 ].join(";\n") + ";";
 
-const wranglerArgs = ["wrangler", "d1", "execute", "DB", "--remote", "--command", sql];
-if (args.env === "staging") wranglerArgs.push("--env", "staging");
-else if (args.env && args.env !== "prod") fail("--env must be prod or staging");
 
+if (args.env && args.env !== "prod" && args.env !== "staging") fail("--env must be prod or staging");
 console.log(sql);
 if (args["dry-run"] === "true") process.exit(0);
-execFileSync("npx", wranglerArgs, { stdio: "inherit" });
+
+// The SQL goes in a temporary file (not on the command line), so quoting works the
+// same on Windows and elsewhere. One INSERT batch: it either all applies or none.
+const dir = mkdtempSync(join(tmpdir(), "sahra-"));
+const file = join(dir, "party.sql");
+writeFileSync(file, sql);
+const WIN = process.platform === "win32";
+const wranglerArgs = ["wrangler", "d1", "execute", "DB", "--remote", "--file", file, ...(args.env === "staging" ? ["--env", "staging"] : [])];
+let ok = false;
+for (const wait of [0, 2, 4, 8, 16]) {
+  if (wait) { console.log(`Retrying in ${wait} s...`); Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, wait * 1000); }
+  const r = WIN
+    ? spawnSync(["npx.cmd", ...wranglerArgs.map((a) => (/\s/.test(a) ? `"${a}"` : a))].join(" "), { shell: true, stdio: "pipe", encoding: "utf8" })
+    : spawnSync("npx", wranglerArgs, { stdio: "pipe", encoding: "utf8" });
+  process.stdout.write(r.stdout ?? "");
+  process.stderr.write(r.stderr ?? "");
+  if (r.status === 0) { ok = true; break; }
+  // A duplicate id or other SQL error will not improve by retrying.
+  if (/UNIQUE constraint|SQLITE_|not logged in|Authentication error/i.test(`${r.stdout}${r.stderr}`)) break;
+}
+rmSync(dir, { recursive: true, force: true });
+if (!ok) fail("Creating the party failed (see above). A UNIQUE constraint error after a retry can mean the first attempt did succeed: check with setup.bat (create party checks first) before trying again.");
 console.log(`\nParty "${id}" created. Owner ${email} can now sign in with Google (invitation valid 14 days).`);

@@ -30,8 +30,8 @@
   // Secrets (set by the owner, never committed):
   //   GOOGLE_CLIENT_SECRET, COOKIE_MASTER_K1, QR_MASTER_K1, LINK_MASTER_K1
   "d1_databases": [
-    { "binding": "DB", "database_name": "sahra-prod", "database_id": "REPLACE-WITH-sahra-prod-ID", "migrations_dir": "migrations" },
-    { "binding": "LEDGER", "database_name": "sahra-ledger-prod", "database_id": "REPLACE-WITH-sahra-ledger-prod-ID", "migrations_dir": "migrations-ledger" }
+    { "binding": "DB", "database_name": "sahra-prod", "database_id": "637368a6-14fe-4034-b945-d28918ae29f0", "migrations_dir": "migrations" },
+    { "binding": "LEDGER", "database_name": "sahra-ledger-prod", "database_id": "4a8f4f70-04d6-4798-8815-fde97f524a0d", "migrations_dir": "migrations-ledger" }
   ],
   "ratelimits": [
     { "name": "RL_AUTH", "namespace_id": "41001", "simple": { "limit": 20, "period": 60 } },
@@ -51,8 +51,8 @@
         "ENABLE_PROTO": "1"
       },
       "d1_databases": [
-        { "binding": "DB", "database_name": "sahra-staging", "database_id": "REPLACE-WITH-sahra-staging-ID", "migrations_dir": "migrations" },
-        { "binding": "LEDGER", "database_name": "sahra-ledger-staging", "database_id": "REPLACE-WITH-sahra-ledger-staging-ID", "migrations_dir": "migrations-ledger" }
+        { "binding": "DB", "database_name": "sahra-staging", "database_id": "edf71c74-5457-42f5-8374-b0a25868bd99", "migrations_dir": "migrations" },
+        { "binding": "LEDGER", "database_name": "sahra-ledger-staging", "database_id": "8715bbed-2b46-498c-9ea9-b7d967756c99", "migrations_dir": "migrations-ledger" }
       ],
       "ratelimits": [
         { "name": "RL_AUTH", "namespace_id": "42001", "simple": { "limit": 20, "period": 60 } },

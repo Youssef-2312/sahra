@@ -18,8 +18,10 @@ export interface Env {
 export const CONFIG = {
   /** Google sign-in attempt (state/nonce/PKCE + Lax binding cookie). */
   loginAttemptMs: 10 * 60_000,
-  /** Party picker grant after sign-in, for accounts at more than one party. */
-  loginGrantMs: 5 * 60_000,
+  /** Party picker cookie after sign-in, for accounts at more than one party. */
+  loginGrantMs: 2 * 60_000,
+  /** At most this many sessions created per staff member per rolling hour (read-only check). */
+  maxSessionsPerStaffPerHour: 10,
   /** Owner/admin session lifetime. */
   googleSessionMs: 12 * 3600_000,
   /** Door session lifetime, counted from joining. */

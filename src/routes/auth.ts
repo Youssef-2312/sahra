@@ -134,7 +134,8 @@ authRoutes.get("/google/callback", async (c) => {
       hash: await sha256hex(token), staffId: s.staff_id, partyId: s.party_id, sub: claims.sub, now,
       expiresAt: now + CONFIG.googleSessionMs,
     });
-    if (!ok) return htmlPage(c, 403, "No access", `<p>Access changed during sign-in. Try again.</p>${tryAgain}`, undefined, clear);
+    if (ok === "capped") return htmlPage(c, 429, "Too many sign-ins", `<p>Too many sign-ins for this account in the last hour. Try again later.</p>${tryAgain}`, undefined, clear);
+    if (ok !== "created") return htmlPage(c, 403, "No access", `<p>Access changed during sign-in. Try again.</p>${tryAgain}`, undefined, clear);
     // A small same-site page navigates on; a 302 straight to the dashboard could drop the Strict cookie.
     return htmlPage(c, 200, "Signed in", `<p>Signed in. <a href="/dashboard">Continue</a></p>`, "/dashboard", [
       ...clear,
@@ -142,7 +143,7 @@ authRoutes.get("/google/callback", async (c) => {
     ]);
   }
 
-  // Staff at several parties: a sealed, 5-minute, Strict cookie holds the verified
+  // Staff at several parties: a sealed, 2-minute, Strict cookie holds the verified
   // Google account id until a party is picked. No database write.
   const pick = await seal(envRecord(c), PICK_PURPOSE, { sub: claims.sub }, now + CONFIG.loginGrantMs);
   const forms = staff
@@ -173,7 +174,8 @@ authRoutes.post("/select-party", async (c) => {
   const ok = await c.var.db.createGoogleSession({
     hash: await sha256hex(token), staffId: s.staff_id, partyId, sub, now, expiresAt: now + CONFIG.googleSessionMs,
   });
-  if (!ok) return htmlPage(c, 403, "No access", `<p>Access changed during sign-in. Try again.</p>${tryAgain}`, undefined, clear);
+  if (ok === "capped") return htmlPage(c, 429, "Too many sign-ins", `<p>Too many sign-ins for this account in the last hour. Try again later.</p>${tryAgain}`, undefined, clear);
+  if (ok !== "created") return htmlPage(c, 403, "No access", `<p>Access changed during sign-in. Try again.</p>${tryAgain}`, undefined, clear);
   return htmlPage(c, 200, "Signed in", `<p>Signed in. <a href="/dashboard">Continue</a></p>`, "/dashboard", [
     ...clear,
     cookie(COOKIE_SESSION, token, { maxAgeS: CONFIG.googleSessionMs / 1000, sameSite: "Strict" }),

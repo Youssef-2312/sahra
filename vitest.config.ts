@@ -4,6 +4,9 @@ import { defineConfig } from "vitest/config";
 export default defineConfig(async () => {
   const migrations = await readD1Migrations("./migrations");
   const ledgerMigrations = await readD1Migrations("./migrations-ledger");
+  // Tests also cover the staging-only prototype, so they load its tables too.
+  const stagingMain = await readD1Migrations("./migrations-staging/main");
+  const stagingLedger = await readD1Migrations("./migrations-staging/ledger");
   return {
     plugins: [
       cloudflareTest({
@@ -13,6 +16,8 @@ export default defineConfig(async () => {
           bindings: {
             TEST_MIGRATIONS: migrations,
             TEST_LEDGER_MIGRATIONS: ledgerMigrations,
+            TEST_STAGING_MAIN: stagingMain,
+            TEST_STAGING_LEDGER: stagingLedger,
             PUBLIC_ORIGIN: "https://sahra.test",
             GOOGLE_CLIENT_ID: "test-client.apps.googleusercontent.com",
             GOOGLE_CLIENT_SECRET: "test-client-secret",

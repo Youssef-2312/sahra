@@ -6,6 +6,17 @@
 
 import type { SqlDriver } from "./driver";
 import { inList, sql, type Sql } from "./sql";
+import { CONFIG } from "../env";
+
+/**
+ * True while the staff member has created fewer than the hourly cap of sessions.
+ * Read-only: it counts existing session rows (indexed by staff_id); nothing is
+ * written to keep a counter.
+ */
+function underSessionCap(staffId: Sql | string, now: number): Sql {
+  const id = typeof staffId === "string" ? sql`${staffId}` : staffId;
+  return sql`(SELECT COUNT(*) FROM sessions cap WHERE cap.staff_id = ${id} AND cap.created_at > ${now - 3600_000}) < ${CONFIG.maxSessionsPerStaffPerHour}`;
+}
 
 export type Role = "owner" | "admin" | "door";
 export const ROLES: readonly Role[] = ["owner", "admin", "door"];
@@ -125,16 +136,22 @@ export class Db {
   }
 
   /** Creates a session only if the staff row is still linked to this Google account and active. */
+  /**
+   * Creates a session only if the staff row is still linked to this Google account
+   * and active, and the person is under the hourly session cap.
+   */
   async createGoogleSession(a: { hash: string; staffId: string; partyId: string; sub: string; now: number; expiresAt: number }) {
     const rs = await this.driver.batch([
       sql`INSERT INTO sessions (id_hash, kind, party_id, staff_id, role, created_at, expires_at)
         SELECT ${a.hash}, 'google', party_id, id, role, ${a.now}, ${a.expiresAt} FROM staff
         WHERE id = ${a.staffId} AND party_id = ${a.partyId} AND google_sub = ${a.sub} AND disabled_at IS NULL
-          AND role IN ('owner', 'admin')`,
+          AND role IN ('owner', 'admin') AND ${underSessionCap(a.staffId, a.now)}`,
       sql`INSERT INTO audit (party_id, at, actor_staff_id, action, entity_type, entity_id, entity_rev, detail)
         SELECT party_id, ${a.now}, staff_id, 'login_google', 'staff', staff_id, NULL, NULL FROM sessions WHERE id_hash = ${a.hash}`,
+      sql`SELECT ${underSessionCap(a.staffId, a.now)} AS under_cap`,
     ]);
-    return rs[0]!.meta.changes === 1;
+    if (rs[0]!.meta.changes === 1) return "created" as const;
+    return (rs[2]!.results[0] as { under_cap: number } | undefined)?.under_cap ? ("rejected" as const) : ("capped" as const);
   }
 
   // -------------------------------------------------------- door invitations
@@ -151,7 +168,8 @@ export class Db {
         WHERE token_hash = ${a.tokenHash} AND kind = 'door' AND used_at IS NULL AND revoked_at IS NULL
           AND expires_at > ${a.now}
           AND EXISTS (SELECT 1 FROM staff st WHERE st.id = invites.staff_id AND st.party_id = invites.party_id
-                      AND st.disabled_at IS NULL AND st.role = invites.role)`,
+                      AND st.disabled_at IS NULL AND st.role = invites.role)
+          AND ${underSessionCap(sql`invites.staff_id`, a.now)}`,
       sql`INSERT INTO sessions (id_hash, kind, party_id, staff_id, role, created_at, expires_at, invite_id)
         SELECT ${a.sessionHash}, 'door', party_id, staff_id, role, ${a.now}, ${a.expiresAt}, id FROM invites
         WHERE token_hash = ${a.tokenHash} AND last_op = ${a.op}`,
@@ -159,7 +177,8 @@ export class Db {
         sql`SELECT party_id, id, rev FROM invites WHERE token_hash = ${a.tokenHash} AND last_op = ${a.op}`),
       sql`SELECT i.id, i.party_id, i.staff_id, i.used_at, i.revoked_at, i.expires_at, i.session_hash, i.last_op,
           s.id_hash AS s_hash, s.revoked_at AS s_revoked_at, s.expires_at AS s_expires_at,
-          st.disabled_at AS staff_disabled_at, st.name AS staff_name
+          st.disabled_at AS staff_disabled_at, st.name AS staff_name,
+          ${underSessionCap(sql`i.staff_id`, a.now)} AS under_cap
         FROM invites i LEFT JOIN sessions s ON s.invite_id = i.id LEFT JOIN staff st ON st.id = i.staff_id
         WHERE i.token_hash = ${a.tokenHash} AND i.kind = 'door'`,
     ]);
@@ -177,6 +196,7 @@ export class Db {
       s_expires_at: number | null;
       staff_disabled_at: number | null;
       staff_name: string;
+      under_cap: number;
     };
   }
 
