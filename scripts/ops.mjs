@@ -196,53 +196,74 @@ const steps = {
   },
 
   // STAGING ONLY: revoke every door invitation of a party and end every door
-  // session, in one main-database batch, then write each changed invitation's full
-  // state to the ledger (change log, entity + rev) and mark it logged, the same
-  // record the dashboard's "revoke invite" leaves. Safe to run again.
+  // session in one main-database batch (with audit rows), then write each changed
+  // invitation's full state to the ledger (change log, entity + rev) and mark it
+  // logged, as the dashboard's "revoke invite" does. Every run first finishes any
+  // revocation that is not yet in the ledger, so it is safe to run again.
+  //
+  // Reads use --command (remote --file returns only a summary, not rows); writes
+  // use a temporary --file (one transaction; a failure changes nothing).
   async "revoke-door-staging"() {
     const party = ((await ask("Party id [checkpoint-a]: ")) || "checkpoint-a").replace(/[^a-z0-9-]/g, "");
     const sq = (v) => (v === null || v === undefined ? "NULL" : typeof v === "number" ? String(v) : `'${String(v).replace(/'/g, "''")}'`);
-    const run = async (db, sql) => {
+    const select = async (db, sql) => {
+      const r = await wrangler(["d1", "execute", db, "--remote", "--env", "staging", "--json", "--command", sql], { quiet: true });
+      const start = r.stdout.search(/^\[\s*$/m);
+      if (start < 0) throw new Error("could not read the query result");
+      return JSON.parse(r.stdout.slice(start))[0].results;
+    };
+    const write = async (db, statements) => {
       const dir = mkdtempSync(join(tmpdir(), "sahra-"));
       const file = join(dir, "q.sql");
-      writeFileSync(file, sql);
+      writeFileSync(file, statements.join("\n"));
       try {
-        const r = await wrangler(["d1", "execute", db, "--remote", "--env", "staging", "--json", "--file", file], { quiet: true });
-        const start = r.stdout.search(/^\[\s*$/m);
-        return start < 0 ? [] : JSON.parse(r.stdout.slice(start));
+        await wrangler(["d1", "execute", db, "--remote", "--env", "staging", "--file", file], { quiet: true });
       } finally {
         rmSync(dir, { recursive: true, force: true });
       }
     };
-    const count = async (sql) => {
-      const r = await wrangler(["d1", "execute", "DB", "--remote", "--env", "staging", "--json", "--command", sql], { quiet: true });
-      const start = r.stdout.search(/^\[\s*$/m);
-      return JSON.parse(r.stdout.slice(start))[0].results[0]?.n ?? 0;
+    // Revoked invitations whose latest rev is not yet confirmed in the ledger.
+    const pendingRows = () => select("DB", `SELECT * FROM invites WHERE party_id = '${party}' AND kind = 'door' AND revoked_at IS NOT NULL AND rev > logged_rev`);
+    const finishLedger = async () => {
+      const rows = await pendingRows();
+      if (rows.length === 0) return 0;
+      for (const r of rows) {
+        if (typeof r.id !== "string" || !Number.isInteger(r.rev)) throw new Error("unexpected row shape; nothing written to the ledger");
+      }
+      const now = Date.now();
+      await write("LEDGER", rows.map((r) => {
+        const { logged_rev: _ignored, ...state } = r;
+        return `INSERT INTO change_log (event_id, party_id, entity, entity_id, rev, action, logged_at, state) VALUES (${sq(`invite:${r.id}:${r.rev}`)}, ${sq(r.party_id)}, 'invite', ${sq(r.id)}, ${r.rev}, ${sq(r.last_action ?? "invite_revoked")}, ${now}, ${sq(JSON.stringify(state))}) ON CONFLICT (event_id) DO NOTHING;`;
+      }));
+      // Confirm every record is in the ledger before marking anything logged.
+      const ids = rows.map((r) => sq(`invite:${r.id}:${r.rev}`)).join(", ");
+      const found = new Set((await select("LEDGER", `SELECT event_id FROM change_log WHERE event_id IN (${ids})`)).map((x) => x.event_id));
+      const confirmed = rows.filter((r) => found.has(`invite:${r.id}:${r.rev}`));
+      if (confirmed.length) {
+        await write("DB", confirmed.map((r) => `UPDATE invites SET logged_rev = ${r.rev} WHERE id = ${sq(r.id)} AND logged_rev < ${r.rev};`));
+      }
+      if (confirmed.length !== rows.length) throw new Error(`${rows.length - confirmed.length} ledger record(s) not confirmed; run step 13 again`);
+      return confirmed.length;
     };
-    const open = await count(`SELECT COUNT(*) AS n FROM invites WHERE party_id = '${party}' AND kind = 'door' AND revoked_at IS NULL`);
-    const sessions = await count(`SELECT COUNT(*) AS n FROM sessions WHERE party_id = '${party}' AND kind = 'door' AND revoked_at IS NULL`);
+
+    const finished = await finishLedger();
+    if (finished) console.log(`Recorded ${finished} earlier revocation(s) in the ledger.`);
+
+    const open = (await select("DB", `SELECT COUNT(*) AS n FROM invites WHERE party_id = '${party}' AND kind = 'door' AND revoked_at IS NULL`))[0]?.n ?? 0;
+    const sessions = (await select("DB", `SELECT COUNT(*) AS n FROM sessions WHERE party_id = '${party}' AND kind = 'door' AND revoked_at IS NULL`))[0]?.n ?? 0;
     console.log(`\nStaging party ${party}: ${open} door invitation(s) not yet revoked, ${sessions} door session(s) active.`);
-    if (open === 0 && sessions === 0) { console.log("Nothing to do."); return; }
+    if (open === 0 && sessions === 0) { console.log("Nothing left to revoke."); return; }
     if ((await ask("Type YES to revoke all of them: ")) !== "YES") throw new Error("cancelled");
     const now = Date.now();
     const op = `ops-revoke-${now}`;
-    await run("DB", [
+    await write("DB", [
       `UPDATE invites SET revoked_at = ${now}, revoked_by = 'operator', rev = rev + 1, last_op = '${op}', last_action = 'invite_revoked' WHERE party_id = '${party}' AND kind = 'door' AND revoked_at IS NULL;`,
       `UPDATE sessions SET revoked_at = ${now} WHERE party_id = '${party}' AND kind = 'door' AND revoked_at IS NULL;`,
       `INSERT INTO audit (party_id, at, actor_staff_id, action, entity_type, entity_id, entity_rev, detail) SELECT party_id, ${now}, NULL, 'invite_revoked', 'invite', id, rev, 'operator script (staging)' FROM invites WHERE last_op = '${op}';`,
-    ].join("\n"));
-    const changed = (await run("DB", `SELECT * FROM invites WHERE last_op = '${op}';`))[0]?.results ?? [];
-    if (changed.length) {
-      // Ledger first, then mark logged (same order as the app).
-      const entries = changed.map((r) => {
-        const { logged_rev: _ignored, ...state } = r;
-        return `INSERT INTO change_log (event_id, party_id, entity, entity_id, rev, action, logged_at, state) VALUES (${sq(`invite:${r.id}:${r.rev}`)}, ${sq(r.party_id)}, 'invite', ${sq(r.id)}, ${r.rev}, 'invite_revoked', ${now}, ${sq(JSON.stringify(state))}) ON CONFLICT (event_id) DO NOTHING;`;
-      });
-      await run("LEDGER", entries.join("\n"));
-      await run("DB", changed.map((r) => `UPDATE invites SET logged_rev = ${r.rev} WHERE id = ${sq(r.id)} AND logged_rev < ${r.rev};`).join("\n"));
-    }
-    const left = await count(`SELECT COUNT(*) AS n FROM sessions WHERE party_id = '${party}' AND kind = 'door' AND revoked_at IS NULL`);
-    console.log(`\nRevoked ${changed.length} invitation(s) (recorded in the ledger). Door sessions still active: ${left}.`);
+    ]);
+    const logged = await finishLedger();
+    const left = (await select("DB", `SELECT COUNT(*) AS n FROM sessions WHERE party_id = '${party}' AND kind = 'door' AND revoked_at IS NULL`))[0]?.n ?? 0;
+    console.log(`\nRevoked and recorded ${logged} invitation(s) in the ledger. Door sessions still active: ${left}.`);
   },
 
   // Live CPU per endpoint, cold vs warm, on staging (wrangler tail + live-check traffic).

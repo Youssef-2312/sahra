@@ -109,6 +109,21 @@ redemption per ticket", "reduces the risk", measured numbers only).
   with a 130-bit truncated signature, per-party key from HKDF with a key id. Every
   code (up to 79 characters) is QR version 4 at level M in a single alphanumeric
   segment (33 x 33). Camera test: `docs/qr-camera-test/`.
+- **QR readability (simulated, `scripts/qr-robustness.mjs`):** real-format codes
+  rendered at phone size, degraded, and decoded by jsQR and ZXing. Read reliably:
+  clean, dim screen (90/150 brightness), blur 1.5, rotation 25 degrees, camera at
+  an angle, codes only 80 px wide. Error-correction level does not change the
+  dim-screen results (L, M and Q behave alike), so level M stays. Very low contrast
+  (110/150 and 125/150) fails as is but reads 10/10 after a per-frame contrast
+  stretch; dim + camera noise reads 5/10 after averaging 4 frames plus stretch;
+  everything combined at a small size still fails in software. Requirements for
+  the frontend stage:
+  - **Door scanner:** per-frame contrast stretch, average a few consecutive
+    frames, and use the browser's native BarcodeDetector where available.
+  - **Guest ticket page:** the QR large on a pure white background with a quiet
+    zone, keep the screen awake while it is shown, a "turn brightness up" hint,
+    and the saved image ("Save QR to photos") at full contrast.
+  - A real two-phone check is still worth doing once at the frontend stage.
 - **Admission control:** the control object lives in the ledger (`party_control`),
   changed only by a conditional write on its rev. Pause writes the control object
   first, then the main database; open writes the main database first, then the
