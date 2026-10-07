@@ -139,3 +139,28 @@ describe("rate limiting", () => {
     expect(results).toEqual([true, true, true, false, false]);
   });
 });
+
+describe("change intents (recovery, section 8.3)", () => {
+  it("role change and disable write their intent to the ledger first, under the op id the change log carries", async () => {
+    const { h, party, os } = await setup();
+    const admin = await seedOwner(party, `sub-${newId()}`, "admin");
+    expect((await h.req(`/api/staff/${admin.id}/role`, api(os, { role: "owner" }))).status).toBe(200);
+    expect((await h.req(`/api/staff/${admin.id}/disable`, api(os))).status).toBe(200);
+    const intents = (await env.LEDGER.prepare("SELECT op_id, action FROM intents WHERE entity = 'staff' AND entity_id = ? ORDER BY created_at").bind(admin.id).all()).results;
+    expect(intents.map((i) => String(i.action)).sort()).toEqual(["role_changed", "staff_disabled"]);
+    const entry = await env.LEDGER.prepare("SELECT state FROM change_log WHERE event_id = ?").bind(`staff:${admin.id}:2`).first<{ state: string }>();
+    expect(intents.map((i) => i.op_id)).toContain(JSON.parse(entry!.state).last_op);
+  });
+
+  it("intent not confirmed: the change is not made, the answer is pending", async () => {
+    const { h, party, os } = await setup();
+    const admin = await seedOwner(party, `sub-${newId()}`, "admin");
+    h.ledger.intentMode = "fail";
+    const r = await h.req(`/api/staff/${admin.id}/disable`, api(os));
+    expect(r.status).toBe(503);
+    expect(await r.json()).toMatchObject({ status: "pending", retry: true });
+    h.ledger.intentMode = "ok";
+    const row = await env.DB.prepare("SELECT disabled_at, rev FROM staff WHERE id = ?").bind(admin.id).first<{ disabled_at: number | null; rev: number }>();
+    expect(row).toEqual({ disabled_at: null, rev: 1 });
+  });
+});

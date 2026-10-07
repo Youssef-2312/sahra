@@ -42,7 +42,7 @@ describe("main database unreachable", () => {
 });
 
 describe("ledger database unreachable", () => {
-  it("staff changes are not confirmed (pending) and a retry completes them; scans never go green", async () => {
+  it("staff changes are not made (pending: their intent cannot be written) and a retry makes them; scans never go green", async () => {
     const { h, party, os, door, qr } = await setup();
     const admin = await seedOwner(party, `g-${newId()}`, "admin");
     OutageDriver.down.ledger = true;
@@ -53,6 +53,7 @@ describe("ledger database unreachable", () => {
     const join = await h.req("/api/staff/door-invite", api(os, { staff_id: newId(), invite_id: newId(), name: "D", token: newToken() }));
     expect(join.status).toBe(503);
     OutageDriver.down.ledger = false;
-    expect(await (await h.req(`/api/staff/${admin.id}/disable`, api(os))).json()).toEqual({ status: "already" });
+    expect((await env.DB.prepare("SELECT disabled_at FROM staff WHERE id = ?").bind(admin.id).first("disabled_at"))).toBeNull();
+    expect(await (await h.req(`/api/staff/${admin.id}/disable`, api(os))).json()).toEqual({ status: "disabled" });
   });
 });

@@ -45,6 +45,18 @@ export interface Ledger {
    * write is committed (returns the control object read after it); throws otherwise.
    */
   recordAdmission(entry: LogEntry): Promise<Control | null>;
+  /** Writes intents in one transaction (idempotent). Resolves only after the commit; throws otherwise. */
+  putIntents(intents: Intent[]): Promise<void>;
+}
+
+/** A change about to be made (written BEFORE the main-database batch). */
+export interface Intent {
+  op_id: string;
+  entity: string;
+  entity_id: string;
+  party_id: string;
+  action: string;
+  created_at: number;
 }
 
 export class LedgerWriteError extends Error {}
@@ -89,6 +101,17 @@ export class D1Ledger implements Ledger {
       throw new LedgerWriteError(`admission record not confirmed: ${(err as Error).message}`);
     }
     return asControl(rs[1]!.results[0]);
+  }
+
+  async putIntents(intents: Intent[]): Promise<void> {
+    if (intents.length === 0) return;
+    try {
+      await this.driver.batch(intents.map((i) => sql`INSERT INTO intents (op_id, entity, entity_id, party_id, action, created_at)
+        VALUES (${i.op_id}, ${i.entity}, ${i.entity_id}, ${i.party_id}, ${i.action}, ${i.created_at})
+        ON CONFLICT DO NOTHING`));
+    } catch (err) {
+      throw new LedgerWriteError(`intent not confirmed: ${(err as Error).message}`);
+    }
   }
 
   async putEntries(entries: LogEntry[]): Promise<void> {
