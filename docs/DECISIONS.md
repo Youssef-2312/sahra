@@ -82,13 +82,44 @@ redemption per ticket", "reduces the risk", measured numbers only).
 - Stop non-essential work at about 50% of the daily limits.
 - Describe these as "reduces the risk", never as a guarantee.
 
-## Scan cost (Phase 2)
+## Scanning (Phase 2, adopted)
 
-- Try fewer write steps: conditional ticket update that also requires no existing
-  scan row with this scan_id; then insert the scan row with its final outcome
-  computed from the ticket's state (ON CONFLICT DO NOTHING); then read back.
-  Adopt only if all scan tests and deliberate-break checks pass.
-- Drop indexes no query needs. Verify live that rows-written counts match local.
+- **Write sequence:** one main-database batch:
+  1. a conditional ticket update that also requires that no scan row with this
+     scan id exists, the party is open with the control object's pause_number, and
+     the session is valid;
+  2. the scan row inserted with its final outcome, computed from the ticket's
+     state (ON CONFLICT DO NOTHING);
+  3. a read back.
+
+  Then ONE ledger batch: the admission record (`ticket:<id>:<rev>`, idempotent)
+  plus a re-read of the control object.
+- **Rows written (measured locally):** admit 2 main + 1 ledger (the prototype
+  wrote 5 + 1); denial 1 + 0; a retry of a stored scan writes 0.
+- **Tickets and scans** are `WITHOUT ROWID` with no secondary indexes on the scan
+  path. `used_scan_id` has no unique index: a scan id maps to one ticket through
+  `scans.scan_id` (primary key), and the ticket update requires that no scan row
+  with that id exists yet.
+- **Adopted** after all scanning tests passed and 9 deliberate breaks were each
+  caught: dropping the "unused", "no scan row yet", "party open", "current QR
+  version" or "released" rule from the update; green without a confirmed ledger
+  write; skipping the control re-read; no session check in the update; ignoring a
+  paused control object.
+- **QR format:** `S1.<PARTY>.<K><TICKET>.<VERSION>.<SIG>`, Crockford base32, HMAC
+  with a 130-bit truncated signature, per-party key from HKDF with a key id. Every
+  code (up to 79 characters) is QR version 4 at level M in a single alphanumeric
+  segment (33 x 33). Camera test: `docs/qr-camera-test/`.
+- **Admission control:** the control object lives in the ledger (`party_control`),
+  changed only by a conditional write on its rev. Pause writes the control object
+  first, then the main database; open writes the main database first, then the
+  control object. Until both agree, scans answer "paused".
+- **Staging-only test endpoints** (`/api/test/tickets`, `/api/test/door-invite`)
+  answer 404 unless `ENABLE_TEST_TICKETS = "1"` (staging only); a test checks it.
+- **Measurement:** live runs report p50/p95/p99 only from at least 100 samples per
+  endpoint (fewer is labelled "slowest seen"), with first use kept separate. The
+  Google sign-in callback cannot be scripted (it needs real Google sign-ins and is
+  capped at 10 per person per hour), so its numbers stay small-sample.
+- Verify live that rows-written counts match local (step 12 prints rows per request).
 
 ## Recovery tests (before calling the two-database design proven)
 

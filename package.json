@@ -17,6 +17,7 @@
     "@cloudflare/workers-types": "^5.20261007.1",
     "@vitest/runner": "~4.1",
     "@vitest/snapshot": "~4.1",
+    "qrcode": "^1.5.4",
     "typescript": "^7.0.2",
     "vitest": "~4.1",
     "wrangler": "4.124.0"

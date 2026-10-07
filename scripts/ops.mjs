@@ -20,6 +20,7 @@
 
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
+import { readdirSync } from "node:fs";
 import { createInterface } from "node:readline/promises";
 import { stdin, stdout } from "node:process";
 
@@ -99,8 +100,12 @@ const steps = {
     await wrangler(["d1", "migrations", "apply", "DB", "--remote", ...e]);
     await wrangler(["d1", "migrations", "apply", "LEDGER", "--remote", ...e]);
     if (name === "staging") {
-      await wrangler(["d1", "execute", "DB", "--remote", ...e, "--file", "migrations-staging/main/0001_proto.sql"]);
-      await wrangler(["d1", "execute", "LEDGER", "--remote", ...e, "--file", "migrations-staging/ledger/0001_proto.sql"]);
+      // Every staging-only SQL file, in name order; each is safe to run again.
+      for (const [db, dir] of [["DB", "migrations-staging/main"], ["LEDGER", "migrations-staging/ledger"]]) {
+        for (const f of readdirSync(dir).filter((n) => n.endsWith(".sql")).sort()) {
+          await wrangler(["d1", "execute", db, "--remote", ...e, "--file", `${dir}/${f}`]);
+        }
+      }
     }
     await steps.status(name);
   },
@@ -151,9 +156,11 @@ const steps = {
     await new Promise((ok, fail) => spawn(process.execPath, args, { stdio: "inherit" }).on("close", (c) => (c === 0 ? ok() : fail(new Error("create-party failed")))));
   },
 
-  // Read-only: compares admitted prototype tickets (sahra-staging) with admission
-  // records (sahra-ledger-staging), by ticket id AND rev. Every ticket admitted in
-  // the main database must have its ledger record (green-screen rule).
+  // Read-only: every admission in the main database (scan rows with outcome
+  // "admitted": ticket id + the ticket's rev at admission) must have its ledger
+  // record (change_log event "ticket:<id>:<rev>"). A missing record means a scan
+  // whose green-screen step never finished: it never showed green, and recovery
+  // must resolve that ticket (section 8.3).
   async "verify-ledger"() {
     const party = ((await ask("Party id [checkpoint-a]: ")) || "checkpoint-a").replace(/[^a-z0-9-]/g, "");
     const query = async (db, sql) => {
@@ -161,29 +168,27 @@ const steps = {
       // The JSON result starts on its own line ("[" alone); anything before it is wrangler chatter.
       const start = r.stdout.search(/^\[\s*$/m);
       if (start < 0) throw new Error("could not read the query result");
-      const json = JSON.parse(r.stdout.slice(start));
-      return json[0].results;
+      return JSON.parse(r.stdout.slice(start))[0].results;
     };
-    const admitted = await query("DB", `SELECT id, rev, used_scan_id FROM proto_tickets WHERE party_id = '${party}' AND used_scan_id IS NOT NULL`);
-    const scans = await query("DB", `SELECT outcome, COUNT(*) AS n FROM proto_scans WHERE party_id = '${party}' GROUP BY outcome`);
-    const tickets = await query("DB", `SELECT COUNT(*) AS n FROM proto_tickets WHERE party_id = '${party}'`);
-    const records = await query("LEDGER", `SELECT key FROM proto_admissions WHERE key LIKE '${party}/%'`);
-    const recordKeys = new Set(records.map((r) => r.key));
-    const admittedKeys = new Set(admitted.map((t) => `${party}/${t.id}/${t.rev}`));
-    const missing = admitted.filter((t) => !recordKeys.has(`${party}/${t.id}/${t.rev}`));
-    const orphan = records.filter((r) => !admittedKeys.has(r.key));
+    const admitted = await query("DB", `SELECT ticket_id, ticket_rev FROM scans WHERE party_id = '${party}' AND outcome = 'admitted'`);
+    const outcomes = await query("DB", `SELECT outcome, COUNT(*) AS n FROM scans WHERE party_id = '${party}' GROUP BY outcome`);
+    const used = await query("DB", `SELECT COUNT(*) AS n FROM tickets WHERE party_id = '${party}' AND used_scan_id IS NOT NULL`);
+    const records = await query("LEDGER", `SELECT entity_id, rev FROM change_log WHERE party_id = '${party}' AND entity = 'ticket' AND action = 'admitted'`);
+    const recordKeys = new Set(records.map((r) => `${r.entity_id}:${r.rev}`));
+    const admittedKeys = new Set(admitted.map((a) => `${a.ticket_id}:${a.ticket_rev}`));
+    const missing = admitted.filter((a) => !recordKeys.has(`${a.ticket_id}:${a.ticket_rev}`));
+    const orphan = records.filter((r) => !admittedKeys.has(`${r.entity_id}:${r.rev}`));
     console.log(`\nParty ${party} (staging)`);
-    console.log(`  prototype tickets created:              ${tickets[0]?.n ?? 0}`);
-    console.log(`  scan outcomes:                          ${scans.map((s) => `${s.outcome}=${s.n}`).join(", ") || "none"}`);
-    console.log(`  admitted tickets (main database):       ${admitted.length}`);
+    console.log(`  scan outcomes:                          ${outcomes.map((s) => `${s.outcome}=${s.n}`).join(", ") || "none"}`);
+    console.log(`  tickets marked used (main database):    ${used[0]?.n ?? 0}`);
+    console.log(`  admissions (main database scan rows):   ${admitted.length}`);
     console.log(`  admission records (ledger database):    ${records.length}`);
-    console.log(`  admitted WITHOUT a ledger record:       ${missing.length}`);
-    for (const t of missing) console.log(`    MISSING  ticket ${t.id} rev ${t.rev}`);
-    console.log(`  ledger records with no admitted ticket: ${orphan.length}`);
-    for (const r of orphan) console.log(`    ORPHAN   ${r.key}`);
-    const pending = scans.find((s) => s.outcome === "pending");
-    const ok = missing.length === 0 && orphan.length === 0 && admitted.length === records.length && !pending;
-    console.log(ok ? "\nRESULT: OK. Every admitted ticket has its ledger record (same ticket id and rev)."
+    console.log(`  admissions WITHOUT a ledger record:     ${missing.length}`);
+    for (const m of missing) console.log(`    MISSING  ticket ${m.ticket_id} rev ${m.ticket_rev}`);
+    console.log(`  ledger records with no admission row:   ${orphan.length}`);
+    for (const o of orphan) console.log(`    ORPHAN   ticket ${o.entity_id} rev ${o.rev}`);
+    const ok = missing.length === 0 && orphan.length === 0 && admitted.length === records.length;
+    console.log(ok ? "\nRESULT: OK. Every admission has its ledger record (same ticket id and rev)."
       : "\nRESULT: MISMATCH. Stop and send this output to Claude.");
   },
 
@@ -194,8 +199,7 @@ const steps = {
 
   async checkpoint() {
     const link = await ask("Door invitation link from STAGING: ");
-    const phones = (await ask("Simultaneous phones [8]: ")) || "8";
-    await new Promise((ok) => spawn(process.execPath, ["scripts/checkpoint-a.mjs", "--invite", link, "--scans", "50", "--phones", phones], { stdio: "inherit" }).on("close", ok));
+    await new Promise((ok) => spawn(process.execPath, ["scripts/live-check.mjs", "--invite", link], { stdio: "inherit" }).on("close", ok));
   },
 };
 

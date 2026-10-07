@@ -90,6 +90,10 @@ function pct(xs, p) {
   return s[Math.min(s.length - 1, Math.ceil(p * s.length) - 1)];
 }
 
+function avg(xs) {
+  return xs.length ? (xs.reduce((a, b) => a + b, 0) / xs.length).toFixed(2) : "-";
+}
+
 function report() {
   const rows = new Map();
   let withCpu = 0;
@@ -104,8 +108,10 @@ function report() {
     const kind = !log ? "unknown" : log.iso_req === 1 ? "cold" : log.route_req === 1 ? "first" : "warm";
     const jw = log && log.jwks && log.jwks !== "none" ? ` [keys ${log.jwks}]` : "";
     const key = `${ev.event?.request?.method ?? "?"} ${pathOf(ev)}${jw}|${kind}`;
-    if (!rows.has(key)) rows.set(key, { cpu: [], wall: [], outcomes: {} });
+    if (!rows.has(key)) rows.set(key, { cpu: [], wall: [], outcomes: {}, written: [], ledgerWritten: [] });
     const r = rows.get(key);
+    if (log && typeof log.rows_written === "number") r.written.push(log.rows_written);
+    if (log && typeof log.ledger_rows_written === "number") r.ledgerWritten.push(log.ledger_rows_written);
     if (cpu !== null) r.cpu.push(cpu);
     if (typeof ev.wallTime === "number") r.wall.push(ev.wallTime);
     r.outcomes[ev.outcome ?? "?"] = (r.outcomes[ev.outcome ?? "?"] ?? 0) + 1;
@@ -117,14 +123,14 @@ function report() {
   }
   const out = [];
   console.log("\nkind: cold = isolate's first request; first = endpoint's first request in a warm isolate; warm = the rest");
-  console.log("CPU ms per request (staging)                  kind   n     p50   p95   p99   max   outcomes");
+  console.log("CPU ms per request (staging)                  kind   n     p50   p95   p99   max   rows/req main+ledger  outcomes");
   for (const [key, r] of [...rows].sort()) {
     const [path, kind] = key.split("|");
     const n = r.cpu.length;
     const fmt = (v) => (v === undefined ? "  -  " : String(v).padStart(5));
-    const line = `${path.padEnd(45)} ${kind.padEnd(6)} ${String(n).padStart(4)} ${fmt(n ? pct(r.cpu, 0.5) : undefined)} ${fmt(n ? pct(r.cpu, 0.95) : undefined)} ${fmt(n ? pct(r.cpu, 0.99) : undefined)} ${fmt(n ? Math.max(...r.cpu) : undefined)}   ${JSON.stringify(r.outcomes)}`;
+    const line = `${path.padEnd(45)} ${kind.padEnd(6)} ${String(n).padStart(4)} ${fmt(n ? pct(r.cpu, 0.5) : undefined)} ${fmt(n ? pct(r.cpu, 0.95) : undefined)} ${fmt(n ? pct(r.cpu, 0.99) : undefined)} ${fmt(n ? Math.max(...r.cpu) : undefined)}   ${avg(r.written).padStart(5)} + ${avg(r.ledgerWritten).padEnd(5)}        ${JSON.stringify(r.outcomes)}${kind === "warm" && n < 100 ? "   (n < 100: slowest seen, not a p99)" : ""}`;
     console.log(line);
-    out.push({ path, kind, n, p50: n ? pct(r.cpu, 0.5) : null, p95: n ? pct(r.cpu, 0.95) : null, p99: n ? pct(r.cpu, 0.99) : null, max: n ? Math.max(...r.cpu) : null, wall_p95: r.wall.length ? pct(r.wall, 0.95) : null, outcomes: r.outcomes });
+    out.push({ path, kind, n, rows_written_avg: Number(avg(r.written)), ledger_rows_written_avg: Number(avg(r.ledgerWritten)), p50: n ? pct(r.cpu, 0.5) : null, p95: n ? pct(r.cpu, 0.95) : null, p99: n ? pct(r.cpu, 0.99) : null, max: n ? Math.max(...r.cpu) : null, wall_p95: r.wall.length ? pct(r.wall, 0.95) : null, outcomes: r.outcomes });
   }
   const file = `cpu-report-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
   writeFileSync(file, JSON.stringify({ captured: events.length, with_cpu: withCpu, exceeded_cpu: exceeded, rows: out }, null, 2));
@@ -145,8 +151,7 @@ await ask(`\n1) Now, on STAGING in a private window: sign in and out ${args.sign
    Press Enter here when done. `);
 const link = args.invite ?? (await ask("\n2) For scan traffic too: create a NEW door invitation (1 hour) and paste its link here.\n   Or just press Enter to measure only what you did in step 1: "));
 if (link) {
-  const phones = args.phones ?? "8";
-  await new Promise((ok) => spawn(process.execPath, ["scripts/checkpoint-a.mjs", "--invite", link, "--scans", args.scans ?? "50", "--phones", phones], { stdio: "inherit" }).on("close", ok));
+  await new Promise((ok) => spawn(process.execPath, ["scripts/live-check.mjs", "--invite", link], { stdio: "inherit" }).on("close", ok));
 }
 console.log("\nWaiting 20 s for the last events...");
 await new Promise((ok) => setTimeout(ok, 20000));

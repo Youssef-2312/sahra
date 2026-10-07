@@ -46,8 +46,12 @@ const cases: Case[] = [
   ["door invite, junk session", "POST", "/api/staff/door-invite", (h) => h.req("/api/staff/door-invite", { method: "POST", headers: JSON_H, cookies: junkCookie, body: JSON.stringify({ staff_id: id, invite_id: newId(), name: "x", token: newToken() }) })],
   ["role change, junk session", "POST", "/api/staff/:id/role", (h) => h.req(`/api/staff/${id}/role`, { method: "POST", headers: JSON_H, cookies: junkCookie, body: JSON.stringify({ role: "owner" }) })],
   ["disable, junk session", "POST", "/api/staff/:id/disable", (h) => h.req(`/api/staff/${id}/disable`, { method: "POST", headers: JSON_H, cookies: junkCookie })],
-  ["proto ticket, junk session", "POST", "/api/proto/ticket", (h) => h.req("/api/proto/ticket", { method: "POST", headers: JSON_H, cookies: junkCookie, body: "{}" })],
-  ["proto scan, junk session", "POST", "/api/proto/scan", (h) => h.req("/api/proto/scan", { method: "POST", headers: JSON_H, cookies: junkCookie, body: JSON.stringify({ scan_id: newId(), qr: "S1.X" }) })],
+  ["scan, no session", "POST", "/api/scan", (h) => h.req("/api/scan", { method: "POST", headers: JSON_H, body: JSON.stringify({ scan_id: newId(), qr: "S1.X" }) })],
+  ["scan, junk session", "POST", "/api/scan", (h) => h.req("/api/scan", { method: "POST", headers: JSON_H, cookies: junkCookie, body: JSON.stringify({ scan_id: newId(), qr: "S1.X" }) })],
+  ["admission state, junk session", "GET", "/api/admission", (h) => h.req("/api/admission", { cookies: junkCookie })],
+  ["admission change, junk session", "POST", "/api/admission", (h) => h.req("/api/admission", { method: "POST", headers: JSON_H, cookies: junkCookie, body: JSON.stringify({ action: "open" }) })],
+  ["test tickets, junk session", "POST", "/api/test/tickets", (h) => h.req("/api/test/tickets", { method: "POST", headers: JSON_H, cookies: junkCookie, body: "{}" })],
+  ["test door invite, junk session", "POST", "/api/test/door-invite", (h) => h.req("/api/test/door-invite", { method: "POST", headers: JSON_H, cookies: junkCookie, body: "{}" })],
   ["unknown API path", "GET", "/api/*", (h) => h.req("/api/nothing-here")],
 ];
 
@@ -65,7 +69,10 @@ describe("endpoints without a session write nothing", () => {
       await seedParty();
       const before = await counts();
       const res = await run(h);
-      expect(res.status, label).not.toBe(200);
+      if (res.status === 200) {
+        // The scanner protocol always answers 200 with a verdict; without a session it must be this one.
+        expect(await res.clone().json(), label).toEqual({ verdict: "not_signed_in" });
+      }
       const m = lastReq();
       expect(m, label).not.toBeNull();
       expect(m!.rows_written, label).toBe(0);
@@ -76,9 +83,9 @@ describe("endpoints without a session write nothing", () => {
 });
 
 async function counts() {
-  const tables = ["parties", "staff", "invites", "sessions", "audit", "proto_tickets", "proto_scans"];
+  const tables = ["parties", "staff", "invites", "sessions", "audit", "tickets", "scans"];
   const out: Record<string, unknown> = {};
   for (const t of tables) out[t] = await env.DB.prepare(`SELECT COUNT(*) AS n, COALESCE(SUM(rev), 0) AS r FROM ${t}`).first().catch(async () => env.DB.prepare(`SELECT COUNT(*) AS n FROM ${t}`).first());
-  for (const t of ["change_log", "proto_control", "proto_admissions"]) out[t] = await env.LEDGER.prepare(`SELECT COUNT(*) AS n FROM ${t}`).first("n");
+  for (const t of ["change_log", "party_control"]) out[t] = await env.LEDGER.prepare(`SELECT COUNT(*) AS n FROM ${t}`).first("n");
   return out;
 }

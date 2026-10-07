@@ -8,7 +8,9 @@ export interface Env {
   PUBLIC_ORIGIN: string;
   GOOGLE_CLIENT_ID: string;
   GOOGLE_CLIENT_SECRET?: string;
-  ENABLE_PROTO?: string;
+  /** "1" only on staging: enables src/routes/testing.ts. */
+  ENABLE_TEST_TICKETS?: string;
+  QR_KEY_ID?: string;
   QR_MASTER_K1?: string;
   LINK_MASTER_K1?: string;
   COOKIE_MASTER_K1?: string;

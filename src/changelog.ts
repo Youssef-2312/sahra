@@ -18,8 +18,8 @@ export class LogPendingError extends Error {
 // on the Workers Free plan); the entries go to the ledger in one batch.
 const MAX_PER_REQUEST = 20;
 
-export async function flushChangeLog(db: Db, ledger: Ledger, now: number): Promise<number> {
-  const all = await db.unlogged(MAX_PER_REQUEST + 1);
+export async function flushChangeLog(db: Db, ledger: Ledger, now: number, ticketIds: string[] = []): Promise<number> {
+  const all = await db.unlogged(MAX_PER_REQUEST + 1, ticketIds);
   if (all.length === 0) return 0;
   const rows = all.slice(0, MAX_PER_REQUEST);
   try {

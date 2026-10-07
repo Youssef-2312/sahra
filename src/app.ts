@@ -10,7 +10,9 @@ import { D1Ledger } from "./ledger";
 import { authRoutes } from "./routes/auth";
 import { inviteRoutes } from "./routes/invites";
 import { staffRoutes } from "./routes/staff";
-import { protoRoutes } from "./routes/proto";
+import { scanRoutes } from "./routes/scan";
+import { admissionRoutes } from "./routes/admission";
+import { testingRoutes } from "./routes/testing";
 
 export type { Deps } from "./context";
 
@@ -88,7 +90,9 @@ export function createApp(deps: Deps) {
   app.route("/api/auth", authRoutes);
   app.route("/api/invites", inviteRoutes);
   app.route("/api/staff", staffRoutes);
-  app.route("/api/proto", protoRoutes);
+  app.route("/api/scan", scanRoutes);
+  app.route("/api/admission", admissionRoutes);
+  app.route("/api/test", testingRoutes);
 
   app.get("/api/me", requireAuth(["owner", "admin", "door"]), async (c) => {
     const a = c.var.auth;

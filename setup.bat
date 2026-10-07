@@ -36,9 +36,9 @@ echo    6  Create missing secrets on PRODUCTION
 echo    7  Set the Google client secret on STAGING
 echo    8  Set the Google client secret on PRODUCTION
 echo    9  Create a party (staging or production)
-echo  Checkpoint A
-echo   10  Run Checkpoint A against STAGING
-echo   11  Verify ledger records vs admitted tickets (STAGING, read-only)
+echo  Live checks (staging)
+echo   10  Run the live checks against STAGING
+echo   11  Verify ledger records vs admissions (STAGING, read-only)
 echo   12  Measure CPU per endpoint, cold vs warm (STAGING)
 echo    0  Exit
 echo ================================================

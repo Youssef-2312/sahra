@@ -133,14 +133,43 @@ export class FakeGoogle {
 
 /** Ledger wrapper that can fail or lose acknowledgements on demand. */
 export class FlakyLedger implements Ledger {
+  /** Change-log writes (putEntries). */
   mode: "ok" | "fail" | "lose_ack" = "ok";
+  /** Admission record writes (recordAdmission). */
+  admissionMode: "ok" | "fail" | "lose_ack" = "ok";
+  /** Control object reads. */
+  controlMode: "ok" | "fail" = "ok";
+  /** Runs inside recordAdmission AFTER the record is committed (e.g. to pause the party). */
+  afterAdmissionWrite: null | (() => Promise<void>) = null;
   writes = 0;
+  admissions = 0;
   constructor(public inner: Ledger) {}
   async putEntries(entries: LogEntry[]) {
     if (this.mode === "fail") throw new Error("injected ledger failure");
     await this.inner.putEntries(entries);
     this.writes++;
     if (this.mode === "lose_ack") throw new Error("injected lost acknowledgement");
+  }
+  async getControl(partyId: string) {
+    if (this.controlMode === "fail") throw new Error("injected control read failure");
+    return this.inner.getControl(partyId);
+  }
+  setControl(...args: Parameters<Ledger["setControl"]>) {
+    return this.inner.setControl(...args);
+  }
+  async recordAdmission(entry: LogEntry) {
+    if (this.admissionMode === "fail") throw new Error("injected admission write failure");
+    if (this.afterAdmissionWrite) {
+      // Split the real batch so something can happen between the write and the control re-read.
+      await this.inner.putEntries([entry]);
+      await this.afterAdmissionWrite();
+      this.admissions++;
+      return this.inner.getControl(entry.party_id);
+    }
+    const r = await this.inner.recordAdmission(entry);
+    this.admissions++;
+    if (this.admissionMode === "lose_ack") throw new Error("injected lost acknowledgement");
+    return r;
   }
 }
 
@@ -264,4 +293,38 @@ export class OutageDriver implements SqlDriver {
   }
   async all<T>(q: Parameters<SqlDriver["all"]>[0]) { this.check(); return this.inner.all<T>(q); }
   async batch(qs: Parameters<SqlDriver["batch"]>[0]) { this.check(); return this.inner.batch(qs); }
+}
+
+// ------------------------------------------------------------- scanning
+
+/** A door staff member with a session (a "phone"). */
+export async function seedDoor(partyId: string, clock: Clock) {
+  const id = newId();
+  await env.DB.prepare("INSERT INTO staff (id, party_id, name, role, created_at, logged_rev) VALUES (?, ?, ?, 'door', ?, 1)")
+    .bind(id, partyId, `Door ${id.slice(0, 4)}`, clock.now()).run();
+  return { id, ...(await seedSession(partyId, id, "door", clock)) };
+}
+
+/** Party with an owner session, admission opened through the API. */
+export async function openParty(h: Harness) {
+  const party = await seedParty();
+  const owner = await seedOwner(party);
+  const os = await seedSession(party, owner.id, "owner", h.clock);
+  const r = await h.req("/api/admission", api(os, { action: "open" }));
+  if (r.status !== 200) throw new Error(`open failed ${r.status} ${await r.text()}`);
+  return { party, owner, os };
+}
+
+export async function testTickets(h: Harness, sess: { token: string; csrf: string }, count = 1, people = 1) {
+  const r = await h.req("/api/test/tickets", api(sess, { count, people }));
+  if (r.status !== 200) throw new Error(`tickets failed ${r.status} ${await r.text()}`);
+  return ((await r.json()) as { tickets: { id: string; qr: string }[] }).tickets;
+}
+
+export type Verdict = { verdict: string; reason?: string; name?: string; people?: number; when?: number; by?: string };
+
+export async function scan(h: Harness, sess: { token: string; csrf: string }, qr: string, scanId = newId()): Promise<Verdict> {
+  const r = await h.req("/api/scan", api(sess, { scan_id: scanId, qr }));
+  if (r.status !== 200) return { verdict: `http_${r.status}` };
+  return (await r.json()) as Verdict;
 }
