@@ -17,10 +17,13 @@
 //   node scripts/ops.mjs checkpoint
 //   node scripts/ops.mjs verify-ledger          (read-only, staging)
 //   node scripts/ops.mjs measure-cpu            (staging)
+//   node scripts/ops.mjs revoke-door-staging    (staging)
 
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { readdirSync } from "node:fs";
+import { mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { stdin, stdout } from "node:process";
 
@@ -192,7 +195,57 @@ const steps = {
       : "\nRESULT: MISMATCH. Stop and send this output to Claude.");
   },
 
-  // Live CPU per endpoint, cold vs warm, on staging (wrangler tail + Checkpoint A traffic).
+  // STAGING ONLY: revoke every door invitation of a party and end every door
+  // session, in one main-database batch, then write each changed invitation's full
+  // state to the ledger (change log, entity + rev) and mark it logged, the same
+  // record the dashboard's "revoke invite" leaves. Safe to run again.
+  async "revoke-door-staging"() {
+    const party = ((await ask("Party id [checkpoint-a]: ")) || "checkpoint-a").replace(/[^a-z0-9-]/g, "");
+    const sq = (v) => (v === null || v === undefined ? "NULL" : typeof v === "number" ? String(v) : `'${String(v).replace(/'/g, "''")}'`);
+    const run = async (db, sql) => {
+      const dir = mkdtempSync(join(tmpdir(), "sahra-"));
+      const file = join(dir, "q.sql");
+      writeFileSync(file, sql);
+      try {
+        const r = await wrangler(["d1", "execute", db, "--remote", "--env", "staging", "--json", "--file", file], { quiet: true });
+        const start = r.stdout.search(/^\[\s*$/m);
+        return start < 0 ? [] : JSON.parse(r.stdout.slice(start));
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    };
+    const count = async (sql) => {
+      const r = await wrangler(["d1", "execute", "DB", "--remote", "--env", "staging", "--json", "--command", sql], { quiet: true });
+      const start = r.stdout.search(/^\[\s*$/m);
+      return JSON.parse(r.stdout.slice(start))[0].results[0]?.n ?? 0;
+    };
+    const open = await count(`SELECT COUNT(*) AS n FROM invites WHERE party_id = '${party}' AND kind = 'door' AND revoked_at IS NULL`);
+    const sessions = await count(`SELECT COUNT(*) AS n FROM sessions WHERE party_id = '${party}' AND kind = 'door' AND revoked_at IS NULL`);
+    console.log(`\nStaging party ${party}: ${open} door invitation(s) not yet revoked, ${sessions} door session(s) active.`);
+    if (open === 0 && sessions === 0) { console.log("Nothing to do."); return; }
+    if ((await ask("Type YES to revoke all of them: ")) !== "YES") throw new Error("cancelled");
+    const now = Date.now();
+    const op = `ops-revoke-${now}`;
+    await run("DB", [
+      `UPDATE invites SET revoked_at = ${now}, revoked_by = 'operator', rev = rev + 1, last_op = '${op}', last_action = 'invite_revoked' WHERE party_id = '${party}' AND kind = 'door' AND revoked_at IS NULL;`,
+      `UPDATE sessions SET revoked_at = ${now} WHERE party_id = '${party}' AND kind = 'door' AND revoked_at IS NULL;`,
+      `INSERT INTO audit (party_id, at, actor_staff_id, action, entity_type, entity_id, entity_rev, detail) SELECT party_id, ${now}, NULL, 'invite_revoked', 'invite', id, rev, 'operator script (staging)' FROM invites WHERE last_op = '${op}';`,
+    ].join("\n"));
+    const changed = (await run("DB", `SELECT * FROM invites WHERE last_op = '${op}';`))[0]?.results ?? [];
+    if (changed.length) {
+      // Ledger first, then mark logged (same order as the app).
+      const entries = changed.map((r) => {
+        const { logged_rev: _ignored, ...state } = r;
+        return `INSERT INTO change_log (event_id, party_id, entity, entity_id, rev, action, logged_at, state) VALUES (${sq(`invite:${r.id}:${r.rev}`)}, ${sq(r.party_id)}, 'invite', ${sq(r.id)}, ${r.rev}, 'invite_revoked', ${now}, ${sq(JSON.stringify(state))}) ON CONFLICT (event_id) DO NOTHING;`;
+      });
+      await run("LEDGER", entries.join("\n"));
+      await run("DB", changed.map((r) => `UPDATE invites SET logged_rev = ${r.rev} WHERE id = ${sq(r.id)} AND logged_rev < ${r.rev};`).join("\n"));
+    }
+    const left = await count(`SELECT COUNT(*) AS n FROM sessions WHERE party_id = '${party}' AND kind = 'door' AND revoked_at IS NULL`);
+    console.log(`\nRevoked ${changed.length} invitation(s) (recorded in the ledger). Door sessions still active: ${left}.`);
+  },
+
+  // Live CPU per endpoint, cold vs warm, on staging (wrangler tail + live-check traffic).
   async "measure-cpu"() {
     await new Promise((ok) => spawn(process.execPath, ["scripts/measure-cpu.mjs"], { stdio: "inherit" }).on("close", ok));
   },
