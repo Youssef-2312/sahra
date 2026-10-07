@@ -51,6 +51,20 @@ redemption per ticket", "reduces the risk", measured numbers only).
   token names, imported once), derived per-party keys, the cookie encryption key.
   The CSRF token is a SHA-256 (no key import). Router: `hono/tiny` (no route-table
   compile on the first request). Bundle 105 KiB (27 KiB gzipped), was 122 KiB.
+- **Startup warm-up** (CPU pass 2, `src/warmup.ts`). Live (n = 289 warm scans),
+  a cold scan used 10-14 ms and a scan's first use in a warm isolate up to 9 ms;
+  most of that is V8 compiling and first running our own code. The global scope
+  has its own, larger startup limit, so the scan, join and session paths run once
+  there against an in-memory stand-in for the databases (no real binding, a fixed
+  dummy key; random values and body streams are not allowed at startup, so
+  bodies are supplied directly and the parts after a random id are called
+  directly). Its requests are not counted as cold/warm. Local profile
+  (`node scripts/cpu-local.mjs`, Node's V8, SQLite time excluded): cold scan
+  6.3 -> 2.2 ms, cold join 4.5 -> 1.7 ms, first scan in a warm isolate about
+  3.6 -> 1.4 ms. Cloudflare's own binding code is not in those numbers; only a
+  staging measurement shows the live effect.
+- Each request's log line carries `in_flight` (requests running in the isolate
+  at once); step 12 lists the slowest warm requests with it.
 
 ## Rate limits
 
@@ -128,8 +142,11 @@ redemption per ticket", "reduces the risk", measured numbers only).
   changed only by a conditional write on its rev. Pause writes the control object
   first, then the main database; open writes the main database first, then the
   control object. Until both agree, scans answer "paused".
-- **Staging-only test endpoints** (`/api/test/tickets`, `/api/test/door-invite`)
-  answer 404 unless `ENABLE_TEST_TICKETS = "1"` (staging only); a test checks it.
+- **Staging-only test endpoints** (`/api/test/tickets`, `/api/test/door-invite`,
+  `/api/test/ledger-check`, `/api/test/revoke-door-access`) answer 404 unless
+  `ENABLE_TEST_TICKETS = "1"` (staging only); a test checks it. The last two let a
+  cloud session, whose Cloudflare token has no D1 access, run the ledger check
+  and the cleanup after a live run, for its own party only.
 - **Measurement:** live runs report p50/p95/p99 only from at least 100 samples per
   endpoint (fewer is labelled "slowest seen"), with first use kept separate. The
   Google sign-in callback cannot be scripted (it needs real Google sign-ins and is

@@ -22,6 +22,16 @@ node scripts/measure-cpu.mjs --auto --invite "<link from the owner>"
 ```
 
 It prints the PASS/FAIL lines of the live checks and the CPU table per endpoint
-(cold / first use / warm, samples, p50/p95/p99/max, rows written per request).
-Report it to the owner. The ledger check (setup.bat step 11) needs the owner's
-own Cloudflare login and stays on the owner's computer.
+(cold / first use / warm, samples, p50/p95/p99/max, rows written per request),
+then the slowest warm requests with their isolate request number, endpoint
+request number and how many requests were running at once. Report it to the owner.
+
+The token cannot read or change D1 (by design), so the run ends with two
+staging-only endpoints that the Worker itself serves (404 in production):
+
+- **Ledger check** (`GET /api/test/ledger-check`, same check as setup.bat step 11):
+  every admission of the party has its ledger record. It prints a PASS/FAIL line.
+- **Cleanup** (`POST /api/test/revoke-door-access`, same as setup.bat step 13):
+  revokes every door invitation and ends every door session of the party, writes
+  the change log for every revoked invitation (also any earlier one not yet
+  recorded), and ends its own session last.

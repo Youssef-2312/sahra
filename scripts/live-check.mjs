@@ -4,7 +4,7 @@
 // client round-trip latency. CPU per endpoint: setup.bat step 12 (it runs this).
 //
 //   node scripts/live-check.mjs --invite "https://sahra-staging.<you>.workers.dev/join#t=..." \
-//     [--scans 100] [--races 30] [--join-rounds 30]
+//     [--scans 100] [--races 30] [--join-rounds 30] [--keep true]
 //
 // Before running: open admission for the party on the staging dashboard.
 //  1. Join race: 8 simultaneous joins on the given invitation -> exactly one session.
@@ -13,6 +13,9 @@
 //  3. Sequential: per ticket admit, same-id retry (stored outcome), second scan (used),
 //     forged code (stop).
 //  4. Races: N tickets, each scanned by 8 different phones at the same moment -> one admit.
+//  5. Ledger check (staging-only endpoint; same check as setup.bat step 11).
+//  6. Cleanup (staging-only endpoint; same as setup.bat step 13): revokes every door
+//     invitation and session of the party, with change-log records. --keep true skips it.
 
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 
@@ -139,5 +142,27 @@ const pct = (xs, p) => { const s = [...xs].sort((a, b) => a - b); return s[Math.
 console.log("\nclient round trip (includes your network):");
 for (const [k, xs] of Object.entries(lat)) console.log(`  ${k.padEnd(12)} n=${String(xs.length).padStart(4)}  p50=${pct(xs, 0.5)} ms  p95=${pct(xs, 0.95)} ms  p99=${pct(xs, 0.99)} ms`);
 if (networkRetries) console.log(`\nNetwork retries (client side): ${networkRetries}`);
-console.log(`\n${failures === 0 ? "All checks passed." : failures + " check(s) FAILED."} Then run setup.bat step 11 (ledger check). Revoke the invitation on the dashboard.`);
+// 5. Ledger check (what setup.bat step 11 does): every admission has its ledger record.
+const lc = await call("GET", "/api/test/ledger-check", undefined, headersFor(main), "ledger-check");
+if (lc.status === 200) {
+  const b = lc.body;
+  console.log(`\nLedger check (party ${b.party}): scan outcomes ${Object.entries(b.outcomes).map(([k, n]) => `${k}=${n}`).join(", ")}`);
+  console.log(`  tickets used ${b.tickets_used}, admissions ${b.admissions}, ledger records ${b.ledger_records}, missing ${b.missing}, orphan ${b.orphan}`);
+  check("ledger check: every admission has its ledger record (same ticket id and rev)", b.ok === true, b.ok ? "" : JSON.stringify(b.examples));
+} else {
+  console.log(`\nLedger check not available on this deploy (HTTP ${lc.status}): run setup.bat step 11.`);
+}
+
+// 6. Cleanup (what setup.bat step 13 does): revoke every door invitation and session of the party.
+if (args.keep !== "true") {
+  let rv = await call("POST", "/api/test/revoke-door-access", {}, headersFor(main), "cleanup");
+  if (rv.status === 503) rv = await call("POST", "/api/test/revoke-door-access", {}, headersFor(main), "cleanup");
+  if (rv.status === 200) {
+    console.log(`\nCleanup: ${rv.body.invites_revoked} door invitation(s) revoked, ${rv.body.sessions_ended} door session(s) ended, ${rv.body.change_log_written} change-log record(s) written.`);
+  } else {
+    console.log(`\nCleanup not done (HTTP ${rv.status}): run setup.bat step 13.`);
+  }
+}
+
+console.log(`\n${failures === 0 ? "All checks passed." : failures + " check(s) FAILED."}`);
 process.exit(failures === 0 ? 0 : 1);

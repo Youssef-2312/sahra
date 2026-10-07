@@ -97,6 +97,7 @@ function avg(xs) {
 
 function report() {
   const rows = new Map();
+  const perRequest = [];
   let withCpu = 0;
   let exceeded = 0;
   for (const ev of events) {
@@ -114,6 +115,10 @@ function report() {
     if (log && typeof log.rows_written === "number") r.written.push(log.rows_written);
     if (log && typeof log.ledger_rows_written === "number") r.ledgerWritten.push(log.ledger_rows_written);
     if (cpu !== null) r.cpu.push(cpu);
+    if (cpu !== null) {
+      perRequest.push({ path: key.split("|")[0], kind, cpu, wall: ev.wallTime ?? null, status: log?.status ?? null,
+        iso_req: log?.iso_req ?? null, route_req: log?.route_req ?? null, in_flight: log?.in_flight ?? null, iso_age_ms: log?.iso_age_ms ?? null });
+    }
     if (typeof ev.wallTime === "number") r.wall.push(ev.wallTime);
     r.outcomes[ev.outcome ?? "?"] = (r.outcomes[ev.outcome ?? "?"] ?? 0) + 1;
   }
@@ -133,8 +138,14 @@ function report() {
     console.log(line);
     out.push({ path, kind, n, rows_written_avg: Number(avg(r.written)), ledger_rows_written_avg: Number(avg(r.ledgerWritten)), p50: n ? pct(r.cpu, 0.5) : null, p95: n ? pct(r.cpu, 0.95) : null, p99: n ? pct(r.cpu, 0.99) : null, max: n ? Math.max(...r.cpu) : null, wall_p95: r.wall.length ? pct(r.wall, 0.95) : null, outcomes: r.outcomes });
   }
+  // The slowest warm requests, with what was going on in their isolate.
+  const slow = perRequest.filter((x) => x.kind === "warm").sort((a, b) => b.cpu - a.cpu).slice(0, 15);
+  if (slow.length) {
+    console.log("\nSlowest warm requests: cpu ms, endpoint, isolate request #, endpoint request #, requests running at once, status");
+    for (const x of slow) console.log(`  ${String(x.cpu).padStart(3)}  ${x.path.padEnd(32)} iso#${x.iso_req}  route#${x.route_req}  in_flight=${x.in_flight ?? "?"}  ${x.status}`);
+  }
   const file = `cpu-report-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
-  writeFileSync(file, JSON.stringify({ captured: events.length, with_cpu: withCpu, exceeded_cpu: exceeded, rows: out }, null, 2));
+  writeFileSync(file, JSON.stringify({ captured: events.length, with_cpu: withCpu, exceeded_cpu: exceeded, rows: out, requests: perRequest }, null, 2));
   console.log(`\nSaved summary to ${file} (no cookies, links or secrets).`);
   console.log("Target: warm p99 under 5 ms on every endpoint. Cold and first-use rows are reported separately;");
   console.log("rows with few requests (n) are indicative only.");

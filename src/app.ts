@@ -21,9 +21,20 @@ export type { Deps } from "./context";
 // CPU time can be reported separately for cold and warm requests.
 let isolateRequests = 0;
 let isolateStartedAt = 0;
+// Requests running in this isolate right now (several can interleave while one
+// waits for the database); logged to explain slow outliers.
+let inFlight = 0;
 // Per-isolate, per-endpoint counter: request 1 of an endpoint in a warm isolate is
 // that code path's first use (lazy compilation, first key import), reported apart.
 const routeRequests = new Map<string, number>();
+
+/** After the startup warm-up (src/warmup.ts): its requests are not counted. */
+export function resetRequestCounters() {
+  isolateRequests = 0;
+  isolateStartedAt = 0;
+  inFlight = 0;
+  routeRequests.clear();
+}
 
 export function createApp(deps: Deps) {
   const app = new Hono<AppEnv>();
@@ -33,6 +44,7 @@ export function createApp(deps: Deps) {
     isolateRequests++;
     if (isolateStartedAt === 0) isolateStartedAt = started;
     const isoReq = isolateRequests;
+    const concurrent = ++inFlight;
     const mainDriver = new D1Driver(c.env.DB);
     const driver = deps.driver ? deps.driver(mainDriver, "main") : mainDriver;
     c.set("db", new Db(driver));
@@ -43,7 +55,11 @@ export function createApp(deps: Deps) {
     c.set("ledger", deps.ledger ? deps.ledger(ledger) : ledger);
     c.set("deps", deps);
     deps.jwks.lastLookup = "none";
-    await next();
+    try {
+      await next();
+    } finally {
+      inFlight--;
+    }
     const routeKey = `${c.req.method} ${c.req.routePath}`;
     const routeReq = (routeRequests.get(routeKey) ?? 0) + 1;
     routeRequests.set(routeKey, routeReq);
@@ -64,6 +80,7 @@ export function createApp(deps: Deps) {
         cold: isoReq === 1,
         route_req: routeReq,
         iso_age_ms: started - isolateStartedAt,
+        in_flight: concurrent,
         wall_ms: Date.now() - started,
       }),
     );

@@ -282,6 +282,31 @@ export class Db {
     return rs[1]!.meta.changes === 1;
   }
 
+  /**
+   * STAGING ONLY (src/routes/testing.ts): revokes every door invitation of the
+   * session's party and ends every door session except the caller's, in one
+   * batch with audit rows. The caller's own session is ended separately, last
+   * (revokeOwnDoorSession), after the change log has been written.
+   */
+  async revokeAllDoorAccess(sess: SessionRef, actor: string, now: number, op: string) {
+    const ok = sessionValid(sess, ["owner", "admin", "door"], now);
+    const p = sess.partyId;
+    const rs = await this.driver.batch([
+      sql`UPDATE invites SET revoked_at = ${now}, revoked_by = ${actor}, rev = rev + 1, last_op = ${op}, last_action = 'invite_revoked'
+        WHERE party_id = ${p} AND kind = 'door' AND revoked_at IS NULL AND ${ok}`,
+      audit(now, actor, "invite_revoked", "invite", sql`SELECT party_id, id, rev FROM invites WHERE party_id = ${p} AND last_op = ${op}`, "test cleanup"),
+      sql`UPDATE sessions SET revoked_at = ${now}
+        WHERE party_id = ${p} AND kind = 'door' AND revoked_at IS NULL AND id_hash != ${sess.hash} AND ${ok}`,
+    ]);
+    return { invites: rs[0]!.meta.changes, sessions: rs[2]!.meta.changes };
+  }
+
+  async revokeOwnDoorSession(sess: SessionRef, now: number): Promise<number> {
+    const r = await this.driver.all(sql`UPDATE sessions SET revoked_at = ${now}
+      WHERE id_hash = ${sess.hash} AND party_id = ${sess.partyId} AND kind = 'door' AND revoked_at IS NULL`);
+    return r.meta.changes;
+  }
+
   /** Revokes an invitation and the session created from it. Idempotent. */
   async revokeInvite(sess: SessionRef, actor: string, inviteId: string, now: number, op: string) {
     const ok = sessionValid(sess, ["owner"], now);

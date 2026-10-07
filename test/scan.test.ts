@@ -4,7 +4,7 @@ import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import { D1Driver } from "../src/db/driver";
 import { TicketDb } from "../src/db/tickets";
-import { base32, newId, randomBytes, sha256hex } from "../src/lib/crypto";
+import { base32, csrfFor, newId, newToken, parseToken, randomBytes, sha256hex } from "../src/lib/crypto";
 import { signQr, verifyQr } from "../src/qr";
 import { api, harness, openParty, scan, seedDoor, seedParty, seedSession, testTickets, type Harness } from "./helpers";
 
@@ -345,6 +345,80 @@ describe("staging-only test endpoints", () => {
     const before = await env.DB.prepare("SELECT COUNT(*) AS n FROM tickets WHERE party_id = ?").bind(party).first("n");
     expect((await h.req("/api/test/tickets", api(os, { count: 1 }))).status).toBe(404);
     expect((await h.req("/api/test/door-invite", api(os, {}))).status).toBe(404);
+    expect((await h.req("/api/test/revoke-door-access", api(os, {}))).status).toBe(404);
+    expect((await h.req("/api/test/ledger-check", { ...api(os), method: "GET" })).status).toBe(404);
     expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM tickets WHERE party_id = ?").bind(party).first("n")).toBe(before);
+  });
+});
+
+describe("staging-only cleanup and ledger check (cloud runs without database access)", () => {
+  async function join(h: Harness, owner: { token: string; csrf: string }) {
+    const inv = (await (await h.req("/api/test/door-invite", api(owner, {}))).json()) as { token: string; invite_id: string };
+    const session = newToken();
+    const r = await h.req("/api/invites/consume", {
+      method: "POST", headers: { origin: "https://sahra.test", "sec-fetch-site": "same-origin", "content-type": "application/json" },
+      body: JSON.stringify({ token: inv.token, session }),
+    });
+    expect(r.status).toBe(200);
+    return { inviteId: inv.invite_id, token: session, csrf: await csrfFor(parseToken(session)!) };
+  }
+
+  it("ledger check: every admission has its ledger record", async () => {
+    const { h, door, os, party } = await setup();
+    const tickets = await testTickets(h, os, 3);
+    for (const t of tickets) expect((await scan(h, door, t.qr)).verdict).toBe("admit");
+    await scan(h, door, tickets[0]!.qr);
+    const r = await h.req("/api/test/ledger-check", { ...api(door), method: "GET" });
+    expect(await r.json()).toMatchObject({ party, admissions: 3, ledger_records: 3, missing: 0, orphan: 0, tickets_used: 3, ok: true,
+      outcomes: { admitted: 3, already_used: 1 } });
+  });
+
+  it("ledger check: an admission without its record is reported", async () => {
+    const { h, door, os } = await setup();
+    const [t] = await testTickets(h, os, 1);
+    h.ledger.admissionMode = "fail";
+    expect((await scan(h, door, t!.qr)).verdict).toBe("recording");
+    h.ledger.admissionMode = "ok";
+    const r = (await (await h.req("/api/test/ledger-check", { ...api(door), method: "GET" })).json()) as Record<string, unknown>;
+    expect(r).toMatchObject({ admissions: 1, ledger_records: 0, missing: 1, ok: false });
+  });
+
+  it("revokes every door invitation and session of the party, logs each revocation, and ends the caller's session last", async () => {
+    const { h, os, party } = await setup();
+    const a = await join(h, os);
+    const b = await join(h, os);
+    const open = (await (await h.req("/api/test/door-invite", api(os, {}))).json()) as { invite_id: string };
+    const other = await setup();
+    const otherDoor = await join(other.h, other.os);
+
+    const r = await h.req("/api/test/revoke-door-access", api(a, {}));
+    expect(r.status).toBe(200);
+    expect(await r.json()).toMatchObject({ status: "done", invites_revoked: 3, sessions_ended: 3 });
+    for (const sess of [a, b]) expect((await h.req("/api/me", { ...api(sess), method: "GET" })).status).toBe(401);
+    expect((await h.req("/api/me", { ...api(os), method: "GET" })).status).toBe(200);
+    expect((await other.h.req("/api/me", { ...api(otherDoor), method: "GET" })).status).toBe(200);
+    for (const id of [a.inviteId, b.inviteId, open.invite_id]) {
+      const row = (await env.DB.prepare("SELECT rev, logged_rev, revoked_at FROM invites WHERE id = ?").bind(id).first<Record<string, number>>())!;
+      expect(row.revoked_at).not.toBeNull();
+      expect(row.logged_rev).toBe(row.rev);
+      const ev = await env.LEDGER.prepare("SELECT action FROM change_log WHERE event_id = ?").bind(`invite:${id}:${row.rev}`).first("action");
+      expect(ev).toBe("invite_revoked");
+    }
+    const audits = await env.DB.prepare("SELECT COUNT(*) AS n FROM audit WHERE party_id = ? AND action = 'invite_revoked'").bind(party).first("n");
+    expect(audits).toBe(3);
+  });
+
+  it("ledger unreachable: revocations stay pending, the caller keeps its session, and a retry finishes them", async () => {
+    const { h, os } = await setup();
+    const a = await join(h, os);
+    h.ledger.mode = "fail";
+    expect((await h.req("/api/test/revoke-door-access", api(a, {}))).status).toBe(503);
+    h.ledger.mode = "ok";
+    // Its own session is still valid (ended last), so it can retry.
+    const r = await h.req("/api/test/revoke-door-access", api(a, {}));
+    expect(r.status).toBe(200);
+    const row = (await env.DB.prepare("SELECT rev, logged_rev FROM invites WHERE id = ?").bind(a.inviteId).first<Record<string, number>>())!;
+    expect(row.logged_rev).toBe(row.rev);
+    expect((await h.req("/api/me", { ...api(a), method: "GET" })).status).toBe(401);
   });
 });
