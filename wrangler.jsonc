@@ -1,0 +1,64 @@
+// Sahra Worker configuration. D1 only (no R2).
+//
+// Production ("sahra") deploys only from `main` through Workers Builds with deploy
+// command `npx wrangler deploy`. Preview builds stay DISABLED for it.
+// Staging ("sahra-staging", env.staging) is a separate Worker with its own D1
+// databases; Checkpoint A, live concurrency tests and the scan prototype run there.
+//
+// Migrations are NOT applied by the deploy command. The owner applies them from
+// their own computer before merging the pull request that needs them (docs/SETUP.md).
+// With database_id set, `wrangler deploy` makes no D1 API calls.
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "sahra",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-01",
+  "workers_dev": true,
+  "preview_urls": false,
+  "observability": { "enabled": true, "head_sampling_rate": 1 },
+  // Pages and static files are static assets: they do not invoke the Worker.
+  "assets": { "directory": "./public", "html_handling": "auto-trailing-slash", "not_found_handling": "none" },
+  "vars": {
+    // Set after the first deploy to the exact https://sahra.<subdomain>.workers.dev address.
+    "PUBLIC_ORIGIN": "https://sahra.REPLACE-ME.workers.dev",
+    // Set after the Google OAuth client is created (the client ID is not a secret).
+    "GOOGLE_CLIENT_ID": "REPLACE-ME.apps.googleusercontent.com",
+    "COOKIE_KEY_ID": "1",
+    // The scan prototype never runs in production.
+    "ENABLE_PROTO": "0"
+  },
+  // Secrets (set by the owner, never committed):
+  //   GOOGLE_CLIENT_SECRET, COOKIE_MASTER_K1, QR_MASTER_K1, LINK_MASTER_K1
+  "d1_databases": [
+    { "binding": "DB", "database_name": "sahra-prod", "database_id": "637368a6-14fe-4034-b945-d28918ae29f0", "migrations_dir": "migrations" },
+    { "binding": "LEDGER", "database_name": "sahra-ledger-prod", "database_id": "4a8f4f70-04d6-4798-8815-fde97f524a0d", "migrations_dir": "migrations-ledger" }
+  ],
+  "ratelimits": [
+    { "name": "RL_AUTH", "namespace_id": "41001", "simple": { "limit": 20, "period": 60 } },
+    { "name": "RL_SCAN", "namespace_id": "41002", "simple": { "limit": 120, "period": 60 } }
+  ],
+  "env": {
+    "staging": {
+      "name": "sahra-staging",
+      "workers_dev": true,
+      "preview_urls": false,
+      "observability": { "enabled": true, "head_sampling_rate": 1 },
+      "assets": { "directory": "./public", "html_handling": "auto-trailing-slash", "not_found_handling": "none" },
+      "vars": {
+        "PUBLIC_ORIGIN": "https://sahra-staging.REPLACE-ME.workers.dev",
+        "GOOGLE_CLIENT_ID": "REPLACE-ME.apps.googleusercontent.com",
+        "COOKIE_KEY_ID": "1",
+        "ENABLE_PROTO": "1"
+      },
+      "d1_databases": [
+        { "binding": "DB", "database_name": "sahra-staging", "database_id": "edf71c74-5457-42f5-8374-b0a25868bd99", "migrations_dir": "migrations" },
+        { "binding": "LEDGER", "database_name": "sahra-ledger-staging", "database_id": "8715bbed-2b46-498c-9ea9-b7d967756c99", "migrations_dir": "migrations-ledger" }
+      ],
+      "ratelimits": [
+        { "name": "RL_AUTH", "namespace_id": "42001", "simple": { "limit": 20, "period": 60 } },
+        // Higher than production so the Checkpoint A script (one session acting as many phones) is not throttled.
+        { "name": "RL_SCAN", "namespace_id": "42002", "simple": { "limit": 1000, "period": 60 } }
+      ]
+    }
+  }
+}
