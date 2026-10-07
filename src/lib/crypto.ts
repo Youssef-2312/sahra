@@ -106,7 +106,7 @@ export async function csrfFor(sessionToken: Uint8Array): Promise<string> {
 // QR code and ticket link, so a master can be rotated by adding K2 while K1
 // keeps verifying old codes until they are retired.
 
-export type KeyPurpose = "QR" | "LINK";
+export type KeyPurpose = "QR" | "LINK" | "COOKIE";
 
 const derivedCache = new Map<string, Promise<CryptoKey>>();
 
@@ -167,4 +167,79 @@ export function isBase32(s: string, len: number): boolean {
   if (s.length !== len) return false;
   for (const ch of s) if (!B32.includes(ch)) return false;
   return true;
+}
+
+// ---------------------------------------------------------------------------
+// Sealed values (AES-256-GCM), used for short-lived browser cookies that must
+// carry server data (sign-in state, nonce, PKCE verifier) without any database
+// write. Format: <keyId>.<iv>.<ciphertext+tag>, base64url parts. The purpose
+// string is bound as additional authenticated data, so a value sealed for one
+// purpose cannot be replayed as another. The payload carries its own expiry.
+
+const aesCache = new Map<string, Promise<CryptoKey>>();
+
+function aesKey(env: Record<string, unknown>, keyId: number): Promise<CryptoKey> {
+  const name = `COOKIE_MASTER_K${keyId}`;
+  const master = env[name];
+  if (typeof master !== "string") return Promise.reject(new MissingSecretError(name));
+  const raw = b64urlDecode(master);
+  if (!raw || raw.length < 32) return Promise.reject(new MissingSecretError(`${name} must be at least 32 bytes`));
+  const cacheKey = `${name}|${master}`;
+  let p = aesCache.get(cacheKey);
+  if (!p) {
+    p = (async () => {
+      const ikm = await crypto.subtle.importKey("raw", raw, "HKDF", false, ["deriveKey"]);
+      return crypto.subtle.deriveKey(
+        { name: "HKDF", hash: "SHA-256", salt: enc.encode("sahra-hkdf-v1"), info: enc.encode(`COOKIE|global|k${keyId}`) },
+        ikm,
+        { name: "AES-GCM", length: 256 },
+        false,
+        ["encrypt", "decrypt"],
+      );
+    })();
+    p.catch(() => aesCache.delete(cacheKey));
+    aesCache.set(cacheKey, p);
+  }
+  return p;
+}
+
+export function currentCookieKeyId(env: Record<string, unknown>): number {
+  const v = Number(env.COOKIE_KEY_ID ?? 1);
+  return Number.isInteger(v) && v >= 1 && v <= 9 ? v : 1;
+}
+
+export async function seal(env: Record<string, unknown>, purpose: string, payload: Record<string, unknown>, expiresAt: number): Promise<string> {
+  const keyId = currentCookieKeyId(env);
+  const iv = randomBytes(12);
+  const pt = enc.encode(JSON.stringify({ ...payload, exp: expiresAt }));
+  const ct = new Uint8Array(
+    await crypto.subtle.encrypt({ name: "AES-GCM", iv, additionalData: enc.encode(`sahra-seal-v1|${purpose}`) }, await aesKey(env, keyId), pt),
+  );
+  return `${keyId}.${b64url(iv)}.${b64url(ct)}`;
+}
+
+/** Returns the payload, or null if the value is malformed, forged, for another purpose, or expired. */
+export async function unseal(env: Record<string, unknown>, purpose: string, value: string, now: number): Promise<Record<string, unknown> | null> {
+  if (value.length > 2048) return null;
+  const m = /^([1-9])\.([A-Za-z0-9_-]{16})\.([A-Za-z0-9_-]{22,})$/.exec(value);
+  if (!m) return null;
+  const iv = b64urlDecode(m[2]!);
+  const ct = b64urlDecode(m[3]!);
+  if (!iv || iv.length !== 12 || !ct) return null;
+  let key: CryptoKey;
+  try {
+    key = await aesKey(env, Number(m[1]));
+  } catch (e) {
+    // An unknown or retired key id is just an invalid value; a missing CURRENT key is a config error.
+    if (Number(m[1]) === currentCookieKeyId(env)) throw e;
+    return null;
+  }
+  try {
+    const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv, additionalData: enc.encode(`sahra-seal-v1|${purpose}`) }, key, ct);
+    const obj = JSON.parse(new TextDecoder().decode(pt));
+    if (typeof obj !== "object" || obj === null || typeof obj.exp !== "number" || obj.exp <= now) return null;
+    return obj as Record<string, unknown>;
+  } catch {
+    return null;
+  }
 }

@@ -1,7 +1,7 @@
 import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import { canAutoLink, normalizeEmail } from "../src/auth/google";
-import { newId, sha256hex } from "../src/lib/crypto";
+import { newId, seal } from "../src/lib/crypto";
 import { googleLogin, harness, listLog, ORIGIN, seedOwner, seedParty, setCookies } from "./helpers";
 
 async function inviteGoogle(partyId: string, email: string, role: "owner" | "admin" = "admin", expiresAt = Date.UTC(2030, 0, 1)) {
@@ -130,11 +130,12 @@ describe("Google sign-in", () => {
     h.google.identity = { sub: "g-nonce", email: "g-nonce@gmail.com" };
     const first = await googleLogin(h);
     expect(first.res.status).toBe(200);
-    // Replay: same state + attempt cookie again.
-    const replay = await h.req(`/api/auth/google/callback?state=${encodeURIComponent(first.ctx.state)}&code=fake-code`, {
+    // Replay: same state, code and attempt cookie again. Google's code is single use.
+    const replay = await h.req(`/api/auth/google/callback?state=${encodeURIComponent(first.ctx.state)}&code=${encodeURIComponent(first.ctx.code)}`, {
       cookies: { "__Host-sahra_login": first.ctx.attempt },
     });
-    expect(replay.status).toBe(400);
+    expect(replay.status).toBe(401);
+    expect(await replay.text()).toContain("token_exchange_failed");
     expect(setCookies(replay)["__Host-sahra_s"]).toBeUndefined();
 
     // A fresh attempt, but Google returns a token carrying the previous attempt's nonce.
@@ -227,7 +228,7 @@ describe("Google sign-in", () => {
     expect((await env.DB.prepare("SELECT google_sub FROM staff WHERE id = ?").bind(exp.staffId).first())!.google_sub).toBeNull();
   });
 
-  it("lets an account that is staff at several parties pick one, with a single-use grant", async () => {
+  it("lets an account that is staff at several parties pick one, with a sealed 5-minute cookie (no database write)", async () => {
     const h = await harness();
     const p1 = await seedParty();
     const p2 = await seedParty();
@@ -253,10 +254,22 @@ describe("Google sign-in", () => {
     const me = await (await h.req("/api/me", { cookies: { "__Host-sahra_s": sess.value } })).json();
     expect(me).toMatchObject({ party: { id: p2 }, staff: { role: "admin" } });
 
+    expect(setCookies(sel)["__Host-sahra_pick"]!.attrs).toMatch(/Max-Age=0/);
+    // Expired after 5 minutes.
+    h.clock.advance(5 * 60_000 + 1);
     const again = await h.req("/api/auth/select-party", {
       method: "POST", body: form, headers: { origin: ORIGIN }, cookies: { "__Host-sahra_pick": pick.value },
     });
     expect(again.status).toBe(400);
+    // A party the account is not staff at is refused even with a valid cookie.
+    const h2 = await harness({ google: h.google });
+    const r2 = await googleLogin(h2);
+    const f2 = new FormData();
+    f2.set("party_id", await seedParty());
+    const other = await h2.req("/api/auth/select-party", {
+      method: "POST", body: f2, headers: { origin: ORIGIN }, cookies: { "__Host-sahra_pick": r2.cookies["__Host-sahra_pick"]!.value },
+    });
+    expect(other.status).toBe(400);
   });
 
   it("never signs in door staff through Google, and a disabled owner cannot sign in", async () => {
@@ -273,33 +286,57 @@ describe("Google sign-in", () => {
     const { staffId } = await inviteGoogle(party, "pending@gmail.com");
     const h = await harness();
     h.google.identity = { sub: "g-pending", email: "pending@gmail.com" };
-    h.store.mode = "fail";
+    h.ledger.mode = "fail";
     const r1 = await googleLogin(h);
     expect(r1.res.status).toBe(503);
     expect(r1.cookies["__Host-sahra_s"]).toBeUndefined();
     const row = await env.DB.prepare("SELECT google_sub, rev, logged_rev FROM staff WHERE id = ?").bind(staffId).first();
     expect(row).toMatchObject({ google_sub: "g-pending", rev: 2, logged_rev: 1 });
 
-    h.store.mode = "lose_ack";
+    h.ledger.mode = "lose_ack";
     expect((await googleLogin(h)).res.status).toBe(503);
 
-    h.store.mode = "ok";
+    h.ledger.mode = "ok";
     const r3 = await googleLogin(h);
     expect(r3.res.status).toBe(200);
     expect(await listLog(`log/${party}/staff/${staffId}/`)).toHaveLength(1);
     expect((await env.DB.prepare("SELECT logged_rev FROM staff WHERE id = ?").bind(staffId).first())!.logged_rev).toBe(2);
   });
 
-  it("stores only hashes of the state, attempt id and nonce", async () => {
+  it("sign-in start writes nothing to the database; the attempt cookie is sealed and reveals nothing", async () => {
     const h = await harness();
+    const before = await env.DB.prepare("SELECT (SELECT COUNT(*) FROM audit) + (SELECT COUNT(*) FROM sessions) AS n").first("n");
     const start = await h.req("/api/auth/google/start", { method: "POST", headers: { origin: ORIGIN } });
+    expect(start.status).toBe(303);
     const u = new URL(start.headers.get("location")!);
-    const state = u.searchParams.get("state")!;
-    const row = await env.DB.prepare("SELECT * FROM login_attempts WHERE state_hash = ?").bind(await sha256hex(state)).first();
-    expect(row).not.toBeNull();
-    expect(JSON.stringify(row)).not.toContain(state);
-    expect(JSON.stringify(row)).not.toContain(u.searchParams.get("nonce")!);
-    expect(JSON.stringify(row)).not.toContain(setCookies(start)["__Host-sahra_login"]!.value);
+    const ck = setCookies(start)["__Host-sahra_login"]!.value;
+    expect(ck).toMatch(/^1\.[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]+$/);
+    for (const p of ["state", "nonce"]) expect(ck).not.toContain(u.searchParams.get(p)!);
+    expect(await env.DB.prepare("SELECT (SELECT COUNT(*) FROM audit) + (SELECT COUNT(*) FROM sessions) AS n").first("n")).toBe(before);
+  });
+
+  it("rejects a forged, tampered, expired, other-purpose or retired-key attempt cookie before calling Google", async () => {
+    const party = await seedParty();
+    await seedOwner(party, "g-cookie");
+    const h = await harness();
+    h.google.identity = { sub: "g-cookie", email: "g-cookie@gmail.com" };
+    const flip = (v: string) => v.slice(0, -2) + (v.at(-2) === "A" ? "B" : "A") + v.at(-1);
+    for (const [label, mutate] of [
+      ["tampered", (ctx: { attempt: string }) => { ctx.attempt = flip(ctx.attempt); }],
+      ["unknown key id", (ctx: { attempt: string }) => { ctx.attempt = "7" + ctx.attempt.slice(1); }],
+      ["other key id", (ctx: { attempt: string }) => { ctx.attempt = "2" + ctx.attempt.slice(1); }],
+      ["garbage", (ctx: { attempt: string }) => { ctx.attempt = "not-a-cookie"; }],
+      ["party-pick cookie", async (ctx: { attempt: string }) => {
+        ctx.attempt = await seal(env as unknown as Record<string, unknown>, "party-pick", { s: "x", n: "y", v: "z", sub: "g-cookie" }, h.clock.now() + 60_000);
+      }],
+    ] as const) {
+      const r = await googleLogin(h, mutate as (ctx: { attempt: string }) => Promise<void>);
+      expect(r.res.status, label).toBe(400);
+      expect(r.cookies["__Host-sahra_s"], label).toBeUndefined();
+    }
+    const expired = await googleLogin(h, () => { h.clock.advance(10 * 60_000 + 1); });
+    expect(expired.res.status).toBe(400);
+    expect(h.google.tokenRequests.length).toBe(0);
   });
 });
 

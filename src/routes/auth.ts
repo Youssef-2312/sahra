@@ -3,7 +3,7 @@ import { json, requireAuth, type AppEnv, type Ctx } from "../context";
 import { authUrl, canAutoLink, exchangeCode, normalizeEmail, pkceChallenge, verifyIdToken, AuthError } from "../auth/google";
 import { flushChangeLog } from "../changelog";
 import { CONFIG } from "../env";
-import { newId, newToken, parseToken, sha256hex } from "../lib/crypto";
+import { newId, newToken, parseToken, seal, sha256hex, timingSafeEqualStr, unseal } from "../lib/crypto";
 import {
   COOKIE_LOGIN,
   COOKIE_PICK,
@@ -24,6 +24,10 @@ function redirectUri(c: Ctx): string {
   return `${c.env.PUBLIC_ORIGIN}/api/auth/google/callback`;
 }
 
+function envRecord(c: Ctx): Record<string, unknown> {
+  return c.env as unknown as Record<string, unknown>;
+}
+
 function htmlPage(c: Ctx, status: number, title: string, body: string, refreshTo?: string, cookies: string[] = []) {
   const res = c.html(page(title, body, refreshTo), status as 200);
   for (const ck of cookies) res.headers.append("set-cookie", ck);
@@ -32,23 +36,20 @@ function htmlPage(c: Ctx, status: number, title: string, body: string, refreshTo
 
 const tryAgain = `<p><a href="/">Back to sign in</a></p>`;
 
-// Step 1: our sign-in page POSTs here (a form), we record the attempt and send the browser to Google.
+const LOGIN_PURPOSE = "login-attempt";
+const PICK_PURPOSE = "party-pick";
+
+// Step 1: our sign-in page POSTs here (a form). Nothing is written to the database:
+// state, nonce and the PKCE verifier travel in a sealed (AES-GCM, key id, expiry),
+// short-lived Lax cookie, and the browser goes to Google.
 authRoutes.post("/google/start", async (c) => {
   if (!sameOrigin(c, c.env.PUBLIC_ORIGIN)) return json(c, 403, { error: "bad_origin" });
   if (await rateLimited(c.env.RL_AUTH, `login:${clientIp(c)}`)) return json(c, 429, { error: "rate_limited" });
   const now = c.var.deps.now();
-  const attemptId = newToken();
   const state = newToken();
   const nonce = newToken();
   const codeVerifier = newToken();
-  await c.var.db.createLoginAttempt({
-    stateHash: await sha256hex(state),
-    attemptHash: await sha256hex(attemptId),
-    nonceHash: await sha256hex(nonce),
-    codeVerifier,
-    now,
-    expiresAt: now + CONFIG.loginAttemptMs,
-  });
+  const sealed = await seal(envRecord(c), LOGIN_PURPOSE, { s: state, n: nonce, v: codeVerifier }, now + CONFIG.loginAttemptMs);
   const url = authUrl({
     clientId: c.env.GOOGLE_CLIENT_ID,
     redirectUri: redirectUri(c),
@@ -57,12 +58,16 @@ authRoutes.post("/google/start", async (c) => {
     challenge: await pkceChallenge(codeVerifier),
   });
   const res = c.redirect(url, 303);
-  // Lax so it is sent on Google's top-level redirect back to us; it only holds the attempt id.
-  res.headers.append("set-cookie", cookie(COOKIE_LOGIN, attemptId, { maxAgeS: CONFIG.loginAttemptMs / 1000, sameSite: "Lax" }));
+  // Lax so it is sent on Google's top-level redirect back to us.
+  res.headers.append("set-cookie", cookie(COOKIE_LOGIN, sealed, { maxAgeS: CONFIG.loginAttemptMs / 1000, sameSite: "Lax" }));
   return res;
 });
 
-// Step 2: Google redirects back here.
+// Step 2: Google redirects back here. The sealed cookie must exist, be genuine and
+// unexpired, and hold the same state as the URL (this binds the sign-in to the
+// browser that started it). The code is exchanged and the ID token fully verified
+// BEFORE any database access. Single use comes from Google's one-time code and the
+// nonce check; the cookie is cleared on every outcome.
 authRoutes.get("/google/callback", async (c) => {
   const clear = [clearCookie(COOKIE_LOGIN, "Lax")];
   if (await rateLimited(c.env.RL_AUTH, `callback:${clientIp(c)}`)) {
@@ -71,16 +76,16 @@ authRoutes.get("/google/callback", async (c) => {
   if (c.req.query("error")) {
     return htmlPage(c, 400, "Sign-in cancelled", `<p>Sign-in was cancelled.</p>${tryAgain}`, undefined, clear);
   }
-  const attemptId = readCookie(c, COOKIE_LOGIN);
+  const now = c.var.deps.now();
+  const sealed = readCookie(c, COOKIE_LOGIN);
   const state = c.req.query("state") ?? "";
   const code = c.req.query("code") ?? "";
-  if (!attemptId || !parseToken(attemptId) || !parseToken(state) || !code || code.length > 2048) {
+  const attempt = sealed ? await unseal(envRecord(c), LOGIN_PURPOSE, sealed, now) : null;
+  if (
+    !attempt || typeof attempt.s !== "string" || typeof attempt.n !== "string" || typeof attempt.v !== "string" ||
+    !parseToken(state) || !timingSafeEqualStr(state, attempt.s) || !code || code.length > 2048
+  ) {
     return htmlPage(c, 400, "Sign-in failed", `<p>This sign-in did not start in this browser, or it expired. Start again.</p>${tryAgain}`, undefined, clear);
-  }
-  const now = c.var.deps.now();
-  const attempt = await c.var.db.consumeLoginAttempt(await sha256hex(state), await sha256hex(attemptId), now);
-  if (!attempt) {
-    return htmlPage(c, 400, "Sign-in failed", `<p>This sign-in did not start in this browser, was already used, or expired. Start again.</p>${tryAgain}`, undefined, clear);
   }
   if (!c.env.GOOGLE_CLIENT_SECRET) throw new Error("GOOGLE_CLIENT_SECRET not set");
 
@@ -91,11 +96,11 @@ authRoutes.get("/google/callback", async (c) => {
       clientSecret: c.env.GOOGLE_CLIENT_SECRET,
       redirectUri: redirectUri(c),
       code,
-      codeVerifier: attempt.code_verifier,
+      codeVerifier: attempt.v,
     });
     claims = await verifyIdToken(idToken, {
       clientId: c.env.GOOGLE_CLIENT_ID,
-      expectedNonceHash: attempt.nonce_hash,
+      expectedNonceHash: await sha256hex(attempt.n),
       jwks: c.var.deps.jwks,
       nowMs: now,
     });
@@ -105,14 +110,11 @@ authRoutes.get("/google/callback", async (c) => {
     return htmlPage(c, 401, "Sign-in failed", `<p>Google sign-in could not be verified (${escapeHtml(codeName)}).</p>${tryAgain}`, undefined, clear);
   }
 
+  // From here on the request carries a verified Google identity. Writes happen
+  // only if that identity matches a pending invitation or is active staff.
   const db = c.var.db;
   const email = claims.email ? normalizeEmail(claims.email) : null;
-  if (email && canAutoLink(claims)) {
-    await db.linkGoogleInvites(claims.sub, email, now, newId());
-  }
-  // Confirm every staff/invite change (including any link just made) in the change log first.
-  await flushChangeLog(db, c.var.store, now);
-
+  const linked = email && canAutoLink(claims) ? await db.linkGoogleInvites(claims.sub, email, now, newId()) : 0;
   const staff = await db.activeStaffForSub(claims.sub);
   if (staff.length === 0) {
     if (email && !canAutoLink(claims) && (await db.hasPendingGoogleInvite(email, now))) {
@@ -122,6 +124,8 @@ authRoutes.get("/google/callback", async (c) => {
     }
     return htmlPage(c, 403, "No access", `<p>This Google account is not staff at any party.</p>${tryAgain}`, undefined, clear);
   }
+  // Confirm every staff/invite change (including any link just made) in the change log first.
+  if (linked > 0 || staff.length > 0) await flushChangeLog(db, c.var.ledger, now);
 
   if (staff.length === 1) {
     const s = staff[0]!;
@@ -138,14 +142,15 @@ authRoutes.get("/google/callback", async (c) => {
     ]);
   }
 
-  const grant = newToken();
-  await db.createLoginGrant(await sha256hex(grant), claims.sub, now, now + CONFIG.loginGrantMs);
+  // Staff at several parties: a sealed, 5-minute, Strict cookie holds the verified
+  // Google account id until a party is picked. No database write.
+  const pick = await seal(envRecord(c), PICK_PURPOSE, { sub: claims.sub }, now + CONFIG.loginGrantMs);
   const forms = staff
     .map((s) => `<form method="post" action="/api/auth/select-party"><input type="hidden" name="party_id" value="${escapeHtml(s.party_id)}"><button type="submit">${escapeHtml(s.party_name)} (${escapeHtml(s.role)})</button></form>`)
     .join("");
   return htmlPage(c, 200, "Choose party", `<p>Choose a party:</p>${forms}`, undefined, [
     ...clear,
-    cookie(COOKIE_PICK, grant, { maxAgeS: CONFIG.loginGrantMs / 1000, sameSite: "Strict" }),
+    cookie(COOKIE_PICK, pick, { maxAgeS: CONFIG.loginGrantMs / 1000, sameSite: "Strict" }),
   ]);
 });
 
@@ -153,16 +158,17 @@ authRoutes.get("/google/callback", async (c) => {
 authRoutes.post("/select-party", async (c) => {
   const clear = [clearCookie(COOKIE_PICK)];
   if (!sameOrigin(c, c.env.PUBLIC_ORIGIN)) return json(c, 403, { error: "bad_origin" });
-  const grant = readCookie(c, COOKIE_PICK);
+  const now = c.var.deps.now();
+  const sealed = readCookie(c, COOKIE_PICK);
+  const pick = sealed ? await unseal(envRecord(c), PICK_PURPOSE, sealed, now) : null;
   const form = await c.req.parseBody();
   const partyId = typeof form.party_id === "string" ? form.party_id : "";
-  if (!grant || !parseToken(grant) || !partyId) {
+  const sub = typeof pick?.sub === "string" ? pick.sub : null;
+  if (!sub || !partyId) {
     return htmlPage(c, 400, "Sign-in failed", `<p>Party choice expired. Sign in again.</p>${tryAgain}`, undefined, clear);
   }
-  const now = c.var.deps.now();
-  const sub = await c.var.db.consumeLoginGrant(await sha256hex(grant), now);
-  const s = sub ? (await c.var.db.activeStaffForSub(sub)).find((x) => x.party_id === partyId) : undefined;
-  if (!sub || !s) return htmlPage(c, 400, "Sign-in failed", `<p>Party choice expired. Sign in again.</p>${tryAgain}`, undefined, clear);
+  const s = (await c.var.db.activeStaffForSub(sub)).find((x) => x.party_id === partyId);
+  if (!s) return htmlPage(c, 400, "Sign-in failed", `<p>Party choice expired. Sign in again.</p>${tryAgain}`, undefined, clear);
   const token = newToken();
   const ok = await c.var.db.createGoogleSession({
     hash: await sha256hex(token), staffId: s.staff_id, partyId, sub, now, expiresAt: now + CONFIG.googleSessionMs,

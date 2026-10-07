@@ -1,6 +1,7 @@
 export interface Env {
   DB: D1Database;
-  BUCKET: R2Bucket;
+  /** sahra-ledger: separate D1 database for the change log (and, from Phase 2, control objects and admissions). */
+  LEDGER: D1Database;
   ASSETS?: Fetcher;
   RL_AUTH?: RateLimit;
   RL_SCAN?: RateLimit;
@@ -10,6 +11,8 @@ export interface Env {
   ENABLE_PROTO?: string;
   QR_MASTER_K1?: string;
   LINK_MASTER_K1?: string;
+  COOKIE_MASTER_K1?: string;
+  COOKIE_KEY_ID?: string;
 }
 
 export const CONFIG = {

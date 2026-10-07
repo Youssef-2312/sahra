@@ -43,7 +43,7 @@ staffRoutes.post("/google-invite", requireAuth(["owner"]), async (c) => {
     staffId: b.staff_id, inviteId: b.invite_id, name, email, role, now, expiresAt: now + h * 3600_000, op: newId(),
   });
   if (r === "rejected") return json(c, 409, { error: "not_allowed_or_already_invited" });
-  await flushChangeLog(c.var.db, c.var.store, now);
+  await flushChangeLog(c.var.db, c.var.ledger, now);
   return json(c, 200, { status: r, email });
 });
 
@@ -72,7 +72,7 @@ staffRoutes.post("/door-invite", requireAuth(["owner"]), async (c) => {
     throw e;
   }
   if (r === "rejected") return json(c, 409, { error: "not_allowed" });
-  await flushChangeLog(c.var.db, c.var.store, now);
+  await flushChangeLog(c.var.db, c.var.ledger, now);
   return json(c, 200, { status: r, expires_at: now + h * 3600_000 });
 });
 
@@ -84,7 +84,7 @@ staffRoutes.post("/:id/role", requireAuth(["owner"]), async (c) => {
   const now = c.var.deps.now();
   const r = await c.var.db.changeRole({ hash: a.hash, partyId: a.info.party_id }, a.info.staff_id, id, b.role, now, newId());
   if (r === "rejected") return json(c, 409, { error: "not_allowed" });
-  await flushChangeLog(c.var.db, c.var.store, now);
+  await flushChangeLog(c.var.db, c.var.ledger, now);
   return json(c, 200, { status: r });
 });
 
@@ -95,6 +95,6 @@ staffRoutes.post("/:id/disable", requireAuth(["owner"]), async (c) => {
   const now = c.var.deps.now();
   const r = await c.var.db.disableStaff({ hash: a.hash, partyId: a.info.party_id }, a.info.staff_id, id, now, newId());
   if (r === "rejected") return json(c, 409, { error: "not_allowed" });
-  await flushChangeLog(c.var.db, c.var.store, now);
+  await flushChangeLog(c.var.db, c.var.ledger, now);
   return json(c, 200, { status: r });
 });

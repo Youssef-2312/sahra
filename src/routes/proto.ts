@@ -4,6 +4,7 @@
 import { Hono } from "hono";
 import { json, readJson, requireAuth, type AppEnv } from "../context";
 import { ProtoDb } from "../db/proto";
+import { ProtoLedger } from "../ledger/proto";
 import { base32, deriveHmacKey, hmac, isBase32, isUuid, randomBytes, sha256hex, timingSafeEqualStr } from "../lib/crypto";
 import { rateLimited } from "../lib/http";
 
@@ -41,10 +42,7 @@ protoRoutes.post("/ticket", requireAuth(["owner", "admin", "door"]), async (c) =
   if (!(await proto.createTicket({ hash: a.hash, partyId: a.info.party_id }, id, c.var.deps.now()))) {
     return json(c, 401, { error: "not_signed_in" });
   }
-  const ctl = `control/${a.info.party_id}.json`;
-  if (!(await c.env.BUCKET.head(ctl))) {
-    await c.env.BUCKET.put(ctl, JSON.stringify({ state: "open", pause_number: 0 }), { onlyIf: { etagDoesNotMatch: "*" } });
-  }
+  await new ProtoLedger(c.var.ledgerDriver).ensureOpen(a.info.party_id);
   return json(c, 200, { qr: await sign(c.env as unknown as Record<string, unknown>, a.info.party_id, id, 1) });
 });
 
@@ -57,34 +55,46 @@ protoRoutes.post("/scan", requireAuth(["owner", "admin", "door"]), async (c) => 
   const v = await verify(env, a.info.party_id, b.qr);
   if (!v) return json(c, 200, { verdict: "stop", reason: "invalid code" });
 
-  const ctlKey = `control/${a.info.party_id}.json`;
-  const ctl1 = await c.env.BUCKET.get(ctlKey);
-  if (!ctl1) return json(c, 200, { verdict: "paused" });
-  const control = (await ctl1.json()) as { state: string; pause_number: number };
-  if (control.state !== "open") return json(c, 200, { verdict: "paused" });
+  const pl = new ProtoLedger(c.var.ledgerDriver);
+  let control;
+  try {
+    control = await pl.control(a.info.party_id);
+  } catch {
+    return json(c, 200, { verdict: "cant_verify" });
+  }
+  if (!control || control.state !== "open") return json(c, 200, { verdict: "paused" });
 
   const now = c.var.deps.now();
   const proto = new ProtoDb(c.var.db.driver);
   const fp = await sha256hex(b.qr);
-  const r = await proto.redeem({
+  let r;
+  try {
+    r = await proto.redeem({
     sess: { hash: a.hash, partyId: a.info.party_id }, staffId: a.info.staff_id, scanId: b.scan_id,
     ticketId: v.ticketId, qrVersion: v.version, fingerprint: fp, pauseNumber: control.pause_number, now,
-  });
+    });
+  } catch {
+    // Database unreachable or the batch failed: never green.
+    return json(c, 200, { verdict: "cant_verify" });
+  }
   if (!r.row) return json(c, 200, { verdict: "not_signed_in" });
   if (r.row.ticket_id !== v.ticketId || r.row.qr_fingerprint !== fp || r.row.session_hash !== a.hash) {
     return json(c, 200, { verdict: "stop", reason: "scan id conflict" });
   }
   if (r.row.outcome !== "admitted") return json(c, 200, { verdict: r.row.outcome === "already_used" ? "used" : "stop", reason: r.row.outcome });
 
-  // Green-screen rule: admission record confirmed in R2, then control object re-read.
+  // Green-screen rule: admission record confirmed in the ledger, then control re-read.
   try {
-    const put = await c.env.BUCKET.put(`proto-admissions/${a.info.party_id}/${v.ticketId}/${r.row.rev}.json`, JSON.stringify(r.row));
-    if (!put) throw new Error("unconfirmed");
+    await pl.recordAdmission(`${a.info.party_id}/${v.ticketId}/${r.row.rev}`, JSON.stringify(r.row));
   } catch {
     return json(c, 200, { verdict: "recording" });
   }
-  const ctl2 = await c.env.BUCKET.get(ctlKey);
-  const after = ctl2 ? ((await ctl2.json()) as { state: string; pause_number: number }) : null;
+  let after;
+  try {
+    after = await pl.control(a.info.party_id);
+  } catch {
+    return json(c, 200, { verdict: "cant_verify" });
+  }
   if (!after || after.state !== "open" || after.pause_number !== control.pause_number) return json(c, 200, { verdict: "paused" });
   return json(c, 200, { verdict: "admit", rows_written: r.rows_written });
 });

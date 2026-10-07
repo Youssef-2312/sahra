@@ -83,25 +83,6 @@ export class Db {
 
   // ------------------------------------------------------------ Google sign-in
 
-  async createLoginAttempt(a: {
-    stateHash: string;
-    attemptHash: string;
-    nonceHash: string;
-    codeVerifier: string;
-    now: number;
-    expiresAt: number;
-  }): Promise<void> {
-    await this.driver.all(sql`INSERT INTO login_attempts (state_hash, attempt_hash, nonce_hash, code_verifier, created_at, expires_at)
-      VALUES (${a.stateHash}, ${a.attemptHash}, ${a.nonceHash}, ${a.codeVerifier}, ${a.now}, ${a.expiresAt})`);
-  }
-
-  /** Single use: only the first caller with the matching state AND browser cookie gets the row. */
-  async consumeLoginAttempt(stateHash: string, attemptHash: string, now: number) {
-    return this.first<{ nonce_hash: string; code_verifier: string }>(sql`UPDATE login_attempts SET used_at = ${now}
-      WHERE state_hash = ${stateHash} AND attempt_hash = ${attemptHash} AND used_at IS NULL AND expires_at > ${now}
-      RETURNING nonce_hash, code_verifier`);
-  }
-
   /**
    * Links every pending Google invitation for this (normalized) email to the
    * Google account, in one transaction. The caller has already checked that
@@ -154,17 +135,6 @@ export class Db {
         SELECT party_id, ${a.now}, staff_id, 'login_google', 'staff', staff_id, NULL, NULL FROM sessions WHERE id_hash = ${a.hash}`,
     ]);
     return rs[0]!.meta.changes === 1;
-  }
-
-  async createLoginGrant(hash: string, sub: string, now: number, expiresAt: number): Promise<void> {
-    await this.driver.all(sql`INSERT INTO login_grants (id_hash, google_sub, created_at, expires_at)
-      VALUES (${hash}, ${sub}, ${now}, ${expiresAt})`);
-  }
-
-  async consumeLoginGrant(hash: string, now: number): Promise<string | null> {
-    const r = await this.first<{ google_sub: string }>(sql`UPDATE login_grants SET used_at = ${now}
-      WHERE id_hash = ${hash} AND used_at IS NULL AND expires_at > ${now} RETURNING google_sub`);
-    return r?.google_sub ?? null;
   }
 
   // -------------------------------------------------------- door invitations
@@ -347,7 +317,7 @@ export class Db {
 
   // -------------------------------------------------------------- change log
 
-  /** Rows whose latest rev is not yet confirmed in the R2 change log. */
+  /** Rows whose latest rev is not yet confirmed in the change log (ledger). */
   async unlogged(limit = 50): Promise<UnloggedRow[]> {
     const rs = await this.driver.batch([
       sql`SELECT * FROM parties WHERE rev > logged_rev LIMIT ${limit}`,

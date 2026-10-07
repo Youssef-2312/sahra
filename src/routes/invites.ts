@@ -45,7 +45,7 @@ inviteRoutes.post("/consume", async (c) => {
   if ((row.s_expires_at ?? 0) <= now) return json(c, 410, { error: "session_expired" });
 
   // Confirm the invitation use in the change log before telling the browser it worked.
-  await flushChangeLog(c.var.db, c.var.store, now);
+  await flushChangeLog(c.var.db, c.var.ledger, now);
 
   const res = json(c, 200, { status: "joined", staff_name: row.staff_name, expires_at: row.s_expires_at });
   res.headers.append(
@@ -62,6 +62,6 @@ inviteRoutes.post("/:id/revoke", requireAuth(["owner"]), async (c) => {
   const now = c.var.deps.now();
   const r = await c.var.db.revokeInvite({ hash: a.hash, partyId: a.info.party_id }, a.info.staff_id, id, now, newId());
   if (r === "rejected") return json(c, 409, { error: "not_allowed" });
-  await flushChangeLog(c.var.db, c.var.store, now);
+  await flushChangeLog(c.var.db, c.var.ledger, now);
   return json(c, 200, { status: r });
 });

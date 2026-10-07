@@ -1,7 +1,7 @@
 import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import { newId, newToken } from "../src/lib/crypto";
-import { api, harness, listLog, ORIGIN, seedOwner, seedParty, seedSession } from "./helpers";
+import { api, harness, listLog, logEntry, ORIGIN, seedOwner, seedParty, seedSession } from "./helpers";
 
 async function setup() {
   const h = await harness();
@@ -79,8 +79,8 @@ describe("staff management", () => {
     expect((await h.req("/api/me", { cookies: { "__Host-sahra_s": os.token } })).status).toBe(401);
     const logs = await listLog(`log/${party}/staff/${admin.id}/`);
     expect(logs.at(-1)).toBe(`log/${party}/staff/${admin.id}/0000000002.json`);
-    const entry = JSON.parse(await (await env.BUCKET.get(logs.at(-1)!))!.text());
-    expect(entry).toMatchObject({ entity: "staff", id: admin.id, rev: 2, action: "role_changed", state: { role: "owner" } });
+    const entry = await logEntry("staff", admin.id, 2);
+    expect(entry).toMatchObject({ entity: "staff", entity_id: admin.id, rev: 2, action: "role_changed", state: { role: "owner" } });
   });
 
   it("disabling door staff revokes their session and their unused invitations", async () => {
@@ -112,11 +112,11 @@ describe("staff management", () => {
   it("an action whose log write fails reports pending, and the retry completes it", async () => {
     const { h, party, os } = await setup();
     const admin = await seedOwner(party, `sub-${newId()}`, "admin");
-    h.store.mode = "fail";
+    h.ledger.mode = "fail";
     const r1 = await h.req(`/api/staff/${admin.id}/disable`, api(os));
     expect(r1.status).toBe(503);
     expect(await r1.json()).toMatchObject({ status: "pending" });
-    h.store.mode = "ok";
+    h.ledger.mode = "ok";
     const r2 = await h.req(`/api/staff/${admin.id}/disable`, api(os));
     expect(await r2.json()).toEqual({ status: "already" });
     expect(await listLog(`log/${party}/staff/${admin.id}/`)).toEqual([`log/${party}/staff/${admin.id}/0000000002.json`]);

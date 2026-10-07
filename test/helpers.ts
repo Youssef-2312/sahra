@@ -1,9 +1,8 @@
 import { env } from "cloudflare:test";
 import { createApp, type Deps } from "../src/app";
 import { GOOGLE_JWKS_URL, GOOGLE_TOKEN_URL, JwksCache } from "../src/auth/google";
-import { b64url, csrfFor, newId, newToken, parseToken, sha256hex } from "../src/lib/crypto";
-import type { ObjectStore } from "../src/storage";
-import { R2Store } from "../src/storage";
+import { b64url, csrfFor, newId, newToken, parseToken, sha256, sha256hex } from "../src/lib/crypto";
+import type { Ledger, LogEntry } from "../src/ledger";
 
 export const ORIGIN = "https://sahra.test";
 export const CLIENT_ID = "test-client.apps.googleusercontent.com";
@@ -60,6 +59,9 @@ export class FakeGoogle {
   nonceFor: string | null = null;
   tamper = false;
   tokenRequests: URLSearchParams[] = [];
+  /** code -> PKCE challenge, registered when the browser "returns" from Google. */
+  codes = new Map<string, string>();
+  usedCodes = new Set<string>();
 
   static async create() {
     const g = new FakeGoogle();
@@ -113,6 +115,12 @@ export class FakeGoogle {
       if (input === GOOGLE_TOKEN_URL) {
         const form = new URLSearchParams(String(init?.body ?? ""));
         this.tokenRequests.push(form);
+        const code = form.get("code") ?? "";
+        const challenge = this.codes.get(code);
+        // Like Google: each code works once, and only with the matching PKCE verifier.
+        if (!challenge || this.usedCodes.has(code)) return Response.json({ error: "invalid_grant" }, { status: 400 });
+        this.usedCodes.add(code);
+        if (b64url(await sha256(form.get("code_verifier") ?? "")) !== challenge) return Response.json({ error: "invalid_grant" }, { status: 400 });
         if (!this.nonceFor) return new Response("no", { status: 400 });
         return Response.json({ id_token: await this.idToken(this.nonceFor, clock.now()) });
       }
@@ -123,27 +131,23 @@ export class FakeGoogle {
 
 // ------------------------------------------------------------- test client
 
-/** Object store wrapper that can fail or lose acknowledgements on demand. */
-export class FlakyStore implements ObjectStore {
+/** Ledger wrapper that can fail or lose acknowledgements on demand. */
+export class FlakyLedger implements Ledger {
   mode: "ok" | "fail" | "lose_ack" = "ok";
-  puts = 0;
-  constructor(private readonly inner: ObjectStore) {}
-  async put(key: string, body: string, ct: string) {
-    if (this.mode === "fail") throw new Error("injected R2 failure");
-    const r = await this.inner.put(key, body, ct);
-    this.puts++;
+  writes = 0;
+  constructor(public inner: Ledger) {}
+  async putEntries(entries: LogEntry[]) {
+    if (this.mode === "fail") throw new Error("injected ledger failure");
+    await this.inner.putEntries(entries);
+    this.writes++;
     if (this.mode === "lose_ack") throw new Error("injected lost acknowledgement");
-    return r;
-  }
-  get(key: string) {
-    return this.inner.get(key);
   }
 }
 
 export interface Harness {
   clock: Clock;
   google: FakeGoogle;
-  store: FlakyStore;
+  ledger: FlakyLedger;
   jwks: JwksCache;
   app: ReturnType<typeof createApp>;
   req: (path: string, init?: RequestInit & { cookies?: Record<string, string> }) => Promise<Response>;
@@ -152,10 +156,11 @@ export interface Harness {
 export async function harness(opts: { google?: FakeGoogle; clock?: Clock } = {}): Promise<Harness> {
   const clock = opts.clock ?? new Clock();
   const google = opts.google ?? (await FakeGoogle.create());
-  const store = new FlakyStore(new R2Store(env.BUCKET));
+  const ledger = new FlakyLedger(null as unknown as Ledger);
   const fetcher = google.fetcher(clock);
   const jwks = new JwksCache(fetcher);
-  const deps: Deps = { fetch: fetcher, now: clock.now, jwks, store: () => store };
+  const deps: Deps = { fetch: fetcher, now: clock.now, jwks, ledger: (base) => { ledger.inner = base; return ledger; },
+    driver: (base, which) => new OutageDriver(base, which) };
   const app = createApp(deps);
   const req = async (path: string, init: RequestInit & { cookies?: Record<string, string> } = {}) => {
     const headers = new Headers(init.headers);
@@ -164,7 +169,7 @@ export async function harness(opts: { google?: FakeGoogle; clock?: Clock } = {})
     }
     return app.request(`${ORIGIN}${path}`, { ...init, headers }, env);
   };
-  return { clock, google, store, jwks, app, req };
+  return { clock, google, ledger, jwks, app, req };
 }
 
 export function setCookies(res: Response): Record<string, { value: string; attrs: string }> {
@@ -213,19 +218,21 @@ export function api(sess: { token: string; csrf: string }, body?: unknown, metho
   };
 }
 
+/** Change-log event ids for one entity, from the ledger database, as "<party>/<entity>/<id>/<rev>". */
 export async function listLog(prefix: string): Promise<string[]> {
-  const out: string[] = [];
-  let cursor: string | undefined;
-  do {
-    const r = await env.BUCKET.list({ prefix, cursor });
-    out.push(...r.objects.map((o) => o.key));
-    cursor = r.truncated ? r.cursor : undefined;
-  } while (cursor);
-  return out.sort();
+  const [party, entity, id] = prefix.replace(/^log\//, "").split("/");
+  const r = await env.LEDGER.prepare("SELECT rev FROM change_log WHERE party_id = ? AND entity = ? AND entity_id = ? ORDER BY rev")
+    .bind(party, entity, id).all<{ rev: number }>();
+  return r.results.map((x) => `log/${party}/${entity}/${id}/${String(x.rev).padStart(10, "0")}.json`);
+}
+
+export async function logEntry(entity: string, id: string, rev: number) {
+  const r = await env.LEDGER.prepare("SELECT * FROM change_log WHERE event_id = ?").bind(`${entity}:${id}:${rev}`).first<Record<string, unknown>>();
+  return r ? { ...r, state: JSON.parse(String(r.state)) } : null;
 }
 
 /** Runs a full Google sign-in through the app. Returns the final response and cookies. */
-export async function googleLogin(h: Harness, mutateBeforeCallback?: (ctx: { state: string; nonce: string; attempt: string }) => void | Promise<void>) {
+export async function googleLogin(h: Harness, mutateBeforeCallback?: (ctx: { state: string; nonce: string; attempt: string; code: string }) => void | Promise<void>) {
   const start = await h.req("/api/auth/google/start", { method: "POST", headers: { origin: ORIGIN, "sec-fetch-site": "same-origin" } });
   if (start.status !== 303) throw new Error(`start failed ${start.status}`);
   const loc = new URL(start.headers.get("location")!);
@@ -233,10 +240,28 @@ export async function googleLogin(h: Harness, mutateBeforeCallback?: (ctx: { sta
   const nonce = loc.searchParams.get("nonce")!;
   const attempt = setCookies(start)["__Host-sahra_login"]!.value;
   h.google.nonceFor = nonce;
-  const ctx = { state, nonce, attempt };
+  const code = `code-${newId()}`;
+  h.google.codes.set(code, loc.searchParams.get("code_challenge")!);
+  const ctx = { state, nonce, attempt, code };
   await mutateBeforeCallback?.(ctx);
-  const res = await h.req(`/api/auth/google/callback?state=${encodeURIComponent(ctx.state)}&code=fake-code`, {
+  const res = await h.req(`/api/auth/google/callback?state=${encodeURIComponent(ctx.state)}&code=${encodeURIComponent(ctx.code)}`, {
     cookies: ctx.attempt ? { "__Host-sahra_login": ctx.attempt } : {},
   });
   return { res, start, ctx, cookies: setCookies(res), html: await res.clone().text() };
+}
+
+// ------------------------------------------------------------- outages
+
+import type { SqlDriver } from "../src/db/driver";
+
+/** Driver wrapper that throws like an unreachable D1 database when `down` is set. */
+export class OutageDriver implements SqlDriver {
+  static down = { main: false, ledger: false };
+  constructor(private readonly inner: SqlDriver, private readonly which: "main" | "ledger") {}
+  get usage() { return this.inner.usage; }
+  private check() {
+    if (OutageDriver.down[this.which]) throw new Error("D1_ERROR: Network connection lost.");
+  }
+  async all<T>(q: Parameters<SqlDriver["all"]>[0]) { this.check(); return this.inner.all<T>(q); }
+  async batch(qs: Parameters<SqlDriver["batch"]>[0]) { this.check(); return this.inner.batch(qs); }
 }

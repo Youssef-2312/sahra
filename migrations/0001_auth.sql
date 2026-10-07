@@ -1,6 +1,7 @@
--- Phase 1: parties, staff, invitations, sessions, login attempts, audit.
+-- Phase 1: parties, staff, invitations, sessions, audit. (Google sign-in attempts are
+-- not stored: they live in a sealed browser cookie until Google answers.)
 -- Every change to a party, staff or invite row bumps `rev`. `logged_rev` is the
--- highest rev whose full state is confirmed in the R2 change log. `last_op` is a
+-- highest rev whose full state is confirmed in the change log (the separate sahra-ledger database). `last_op` is a
 -- random id of the request that made the latest change (used to tie audit rows and
 -- follow-up statements in the same batch to that change). Times are Unix ms.
 
@@ -72,28 +73,6 @@ CREATE TABLE sessions (
   invite_id TEXT UNIQUE REFERENCES invites(id)
 ) STRICT;
 CREATE INDEX sessions_staff ON sessions(staff_id);
-
--- One row per Google sign-in attempt, keyed by SHA-256 of `state`, bound to the
--- browser by `attempt_hash` (SHA-256 of the value in the short-lived Lax cookie).
-CREATE TABLE login_attempts (
-  state_hash TEXT PRIMARY KEY,
-  attempt_hash TEXT NOT NULL,
-  nonce_hash TEXT NOT NULL,
-  code_verifier TEXT NOT NULL,
-  created_at INTEGER NOT NULL,
-  expires_at INTEGER NOT NULL,
-  used_at INTEGER
-) STRICT;
-
--- Short-lived, single-use grant to pick a party after a verified Google sign-in
--- when the account is staff at more than one party.
-CREATE TABLE login_grants (
-  id_hash TEXT PRIMARY KEY,
-  google_sub TEXT NOT NULL,
-  created_at INTEGER NOT NULL,
-  expires_at INTEGER NOT NULL,
-  used_at INTEGER
-) STRICT;
 
 CREATE TABLE audit (
   id INTEGER PRIMARY KEY,

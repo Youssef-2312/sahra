@@ -3,6 +3,7 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig(async () => {
   const migrations = await readD1Migrations("./migrations");
+  const ledgerMigrations = await readD1Migrations("./migrations-ledger");
   return {
     plugins: [
       cloudflareTest({
@@ -11,11 +12,15 @@ export default defineConfig(async () => {
         miniflare: {
           bindings: {
             TEST_MIGRATIONS: migrations,
+            TEST_LEDGER_MIGRATIONS: ledgerMigrations,
             PUBLIC_ORIGIN: "https://sahra.test",
             GOOGLE_CLIENT_ID: "test-client.apps.googleusercontent.com",
             GOOGLE_CLIENT_SECRET: "test-client-secret",
-            // Test-only master secret (32 zero-ish bytes); real ones are Cloudflare secrets.
+            // Test-only master secrets; real ones are Cloudflare secrets.
             QR_MASTER_K1: "dGVzdC1vbmx5LXFyLW1hc3Rlci1zZWNyZXQtMzItYnl0ZXM",
+            COOKIE_MASTER_K1: "dGVzdC1vbmx5LWNvb2tpZS1tYXN0ZXItc2VjcmV0LTMyYg",
+            // A second key id, to test that old-key cookies stop working once removed.
+            COOKIE_MASTER_K2: "dGVzdC1vbmx5LWNvb2tpZS1tYXN0ZXItc2VjcmV0LWsyLTMyYg",
             ENABLE_PROTO: "1",
           },
           // Generous limits for the functional tests; RL_TEST checks limiting itself.

@@ -155,14 +155,14 @@ describe("door invitations", () => {
     const { h, party, os } = await setup();
     const inv = await doorInvite(h, os);
     const v = newToken();
-    h.store.mode = "fail";
+    h.ledger.mode = "fail";
     const r1 = await join(h, inv.token, v);
     expect(r1.status).toBe(503);
     expect(await r1.json()).toMatchObject({ status: "pending", retry: true });
     expect(setCookies(r1)["__Host-sahra_s"]).toBeUndefined();
-    h.store.mode = "lose_ack";
+    h.ledger.mode = "lose_ack";
     expect((await join(h, inv.token, v)).status).toBe(503);
-    h.store.mode = "ok";
+    h.ledger.mode = "ok";
     const r3 = await join(h, inv.token, v);
     expect(r3.status).toBe(200);
     expect(setCookies(r3)["__Host-sahra_s"]!.value).toBe(v);

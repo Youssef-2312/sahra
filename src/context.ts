@@ -1,17 +1,20 @@
 import type { Context, MiddlewareHandler } from "hono";
 import type { Fetcher, JwksCache } from "./auth/google";
 import type { Db, Role, SessionInfo } from "./db";
+import type { SqlDriver } from "./db/driver";
 import type { Env } from "./env";
 import { csrfFor, parseToken, sha256hex, timingSafeEqualStr } from "./lib/crypto";
 import { COOKIE_SESSION, readCookie, sameOrigin } from "./lib/http";
-import type { ObjectStore } from "./storage";
+import type { Ledger } from "./ledger";
 
 export interface Deps {
   fetch: Fetcher;
   now: () => number;
   jwks: JwksCache;
-  /** Wraps the object store (tests use this to inject failures). */
-  store?: (env: Env) => ObjectStore;
+  /** Wraps the ledger (tests use this to inject failures). */
+  ledger?: (base: Ledger) => Ledger;
+  /** Wraps a database driver (tests use this to simulate a database outage). */
+  driver?: (base: SqlDriver, which: "main" | "ledger") => SqlDriver;
 }
 
 export interface Auth {
@@ -23,7 +26,7 @@ export interface Auth {
 
 export type AppEnv = {
   Bindings: Env;
-  Variables: { db: Db; store: ObjectStore; deps: Deps; auth: Auth; jwks: "hit" | "miss" | "none" };
+  Variables: { db: Db; ledger: Ledger; ledgerDriver: SqlDriver; deps: Deps; auth: Auth; jwks: "hit" | "miss" | "none" };
 };
 export type Ctx = Context<AppEnv>;
 

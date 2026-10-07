@@ -6,7 +6,7 @@ import { D1Driver } from "./db/driver";
 import { Db } from "./db";
 import { MissingSecretError, csrfFor } from "./lib/crypto";
 import { SECURITY_HEADERS } from "./lib/http";
-import { R2Store } from "./storage";
+import { D1Ledger } from "./ledger";
 import { authRoutes } from "./routes/auth";
 import { inviteRoutes } from "./routes/invites";
 import { staffRoutes } from "./routes/staff";
@@ -19,9 +19,14 @@ export function createApp(deps: Deps) {
 
   app.use("*", async (c, next) => {
     const started = Date.now();
-    const driver = new D1Driver(c.env.DB);
+    const mainDriver = new D1Driver(c.env.DB);
+    const driver = deps.driver ? deps.driver(mainDriver, "main") : mainDriver;
     c.set("db", new Db(driver));
-    c.set("store", deps.store ? deps.store(c.env) : new R2Store(c.env.BUCKET));
+    const baseLedgerDriver = new D1Driver(c.env.LEDGER);
+    const ledgerDriver = deps.driver ? deps.driver(baseLedgerDriver, "ledger") : baseLedgerDriver;
+    const ledger = new D1Ledger(ledgerDriver);
+    c.set("ledgerDriver", ledgerDriver);
+    c.set("ledger", deps.ledger ? deps.ledger(ledger) : ledger);
     c.set("deps", deps);
     deps.jwks.lastLookup = "none";
     await next();
@@ -36,6 +41,7 @@ export function createApp(deps: Deps) {
         d1_queries: driver.usage.queries,
         rows_read: driver.usage.rows_read,
         rows_written: driver.usage.rows_written,
+        ledger_rows_written: ledgerDriver.usage.rows_written,
         jwks: deps.jwks.lastLookup,
         wall_ms: Date.now() - started,
       }),
@@ -47,6 +53,11 @@ export function createApp(deps: Deps) {
       return json(c, 503, { status: "pending", error: "not_recorded_yet", retry: true });
     }
     if (err instanceof AuthError) return json(c, 401, { error: err.code });
+    if (/D1_|Network connection lost/.test(String((err as Error)?.message ?? ""))) {
+      // Database unreachable or failing: never a success; clients show "can't verify" / retry.
+      console.error(JSON.stringify({ evt: "db_error", message: String((err as Error).message) }));
+      return json(c, 503, { error: "database_unavailable", retry: true });
+    }
     if (err instanceof MissingSecretError) {
       console.error(JSON.stringify({ evt: "config_error", message: err.message }));
       return json(c, 500, { error: "server_not_configured" });
