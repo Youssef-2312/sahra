@@ -38,6 +38,7 @@ echo    8  Set the Google client secret on PRODUCTION
 echo    9  Create a party (staging or production)
 echo  Checkpoint A
 echo   10  Run Checkpoint A against STAGING
+echo   11  Verify ledger records vs admitted tickets (STAGING, read-only)
 echo    0  Exit
 echo ================================================
 set "choice="
@@ -53,5 +54,6 @@ if "%choice%"=="7" node scripts\ops.mjs google-secret staging
 if "%choice%"=="8" node scripts\ops.mjs google-secret prod
 if "%choice%"=="9" node scripts\ops.mjs create-party
 if "%choice%"=="10" node scripts\ops.mjs checkpoint
+if "%choice%"=="11" node scripts\ops.mjs verify-ledger
 pause
 goto menu

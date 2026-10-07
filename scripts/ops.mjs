@@ -15,6 +15,7 @@
 //   node scripts/ops.mjs google-secret staging|prod
 //   node scripts/ops.mjs create-party
 //   node scripts/ops.mjs checkpoint
+//   node scripts/ops.mjs verify-ledger          (read-only, staging)
 
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
@@ -35,7 +36,7 @@ function quote(a) {
 }
 
 /** Runs `npx wrangler ...`; streams output; returns { code, out }. */
-function wranglerOnce(args, { input, interactive = false } = {}) {
+function wranglerOnce(args, { input, interactive = false, quiet = false } = {}) {
   return new Promise((resolve) => {
     const cmd = WIN ? "npx.cmd" : "npx";
     const full = ["wrangler", ...args];
@@ -44,12 +45,13 @@ function wranglerOnce(args, { input, interactive = false } = {}) {
       stdio: interactive ? "inherit" : [input === undefined ? "inherit" : "pipe", "pipe", "pipe"],
     });
     let out = "";
+    let stdoutOnly = "";
     if (!interactive) {
-      child.stdout.on("data", (d) => { out += d; stdout.write(d); });
+      child.stdout.on("data", (d) => { out += d; stdoutOnly += d; if (!quiet) stdout.write(d); });
       child.stderr.on("data", (d) => { out += d; process.stderr.write(d); });
       if (input !== undefined) { child.stdin.write(input); child.stdin.end(); }
     }
-    child.on("close", (code) => resolve({ code: code ?? 1, out }));
+    child.on("close", (code) => resolve({ code: code ?? 1, out, stdout: stdoutOnly }));
   });
 }
 
@@ -146,6 +148,42 @@ const steps = {
       "--owner-email", await ask("Owner Gmail address: ")];
     await confirmProd(name, `create party ${id}`);
     await new Promise((ok, fail) => spawn(process.execPath, args, { stdio: "inherit" }).on("close", (c) => (c === 0 ? ok() : fail(new Error("create-party failed")))));
+  },
+
+  // Read-only: compares admitted prototype tickets (sahra-staging) with admission
+  // records (sahra-ledger-staging), by ticket id AND rev. Every ticket admitted in
+  // the main database must have its ledger record (green-screen rule).
+  async "verify-ledger"() {
+    const party = ((await ask("Party id [checkpoint-a]: ")) || "checkpoint-a").replace(/[^a-z0-9-]/g, "");
+    const query = async (db, sql) => {
+      const r = await wrangler(["d1", "execute", db, "--remote", "--env", "staging", "--json", "--command", sql], { quiet: true });
+      // The JSON result starts on its own line ("[" alone); anything before it is wrangler chatter.
+      const start = r.stdout.search(/^\[\s*$/m);
+      if (start < 0) throw new Error("could not read the query result");
+      const json = JSON.parse(r.stdout.slice(start));
+      return json[0].results;
+    };
+    const admitted = await query("DB", `SELECT id, rev, used_scan_id FROM proto_tickets WHERE party_id = '${party}' AND used_scan_id IS NOT NULL`);
+    const scans = await query("DB", `SELECT outcome, COUNT(*) AS n FROM proto_scans WHERE party_id = '${party}' GROUP BY outcome`);
+    const tickets = await query("DB", `SELECT COUNT(*) AS n FROM proto_tickets WHERE party_id = '${party}'`);
+    const records = await query("LEDGER", `SELECT key FROM proto_admissions WHERE key LIKE '${party}/%'`);
+    const recordKeys = new Set(records.map((r) => r.key));
+    const admittedKeys = new Set(admitted.map((t) => `${party}/${t.id}/${t.rev}`));
+    const missing = admitted.filter((t) => !recordKeys.has(`${party}/${t.id}/${t.rev}`));
+    const orphan = records.filter((r) => !admittedKeys.has(r.key));
+    console.log(`\nParty ${party} (staging)`);
+    console.log(`  prototype tickets created:              ${tickets[0]?.n ?? 0}`);
+    console.log(`  scan outcomes:                          ${scans.map((s) => `${s.outcome}=${s.n}`).join(", ") || "none"}`);
+    console.log(`  admitted tickets (main database):       ${admitted.length}`);
+    console.log(`  admission records (ledger database):    ${records.length}`);
+    console.log(`  admitted WITHOUT a ledger record:       ${missing.length}`);
+    for (const t of missing) console.log(`    MISSING  ticket ${t.id} rev ${t.rev}`);
+    console.log(`  ledger records with no admitted ticket: ${orphan.length}`);
+    for (const r of orphan) console.log(`    ORPHAN   ${r.key}`);
+    const pending = scans.find((s) => s.outcome === "pending");
+    const ok = missing.length === 0 && orphan.length === 0 && admitted.length === records.length && !pending;
+    console.log(ok ? "\nRESULT: OK. Every admitted ticket has its ledger record (same ticket id and rev)."
+      : "\nRESULT: MISMATCH. Stop and send this output to Claude.");
   },
 
   async checkpoint() {
