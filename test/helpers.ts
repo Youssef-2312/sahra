@@ -153,7 +153,7 @@ export interface Harness {
   req: (path: string, init?: RequestInit & { cookies?: Record<string, string> }) => Promise<Response>;
 }
 
-export async function harness(opts: { google?: FakeGoogle; clock?: Clock } = {}): Promise<Harness> {
+export async function harness(opts: { google?: FakeGoogle; clock?: Clock; env?: Partial<typeof env> } = {}): Promise<Harness> {
   const clock = opts.clock ?? new Clock();
   const google = opts.google ?? (await FakeGoogle.create());
   const ledger = new FlakyLedger(null as unknown as Ledger);
@@ -167,7 +167,7 @@ export async function harness(opts: { google?: FakeGoogle; clock?: Clock } = {})
     if (init.cookies) {
       headers.set("cookie", Object.entries(init.cookies).map(([k, v]) => `${k}=${v}`).join("; "));
     }
-    return app.request(`${ORIGIN}${path}`, { ...init, headers }, env);
+    return app.request(`${ORIGIN}${path}`, { ...init, headers }, opts.env ? { ...env, ...opts.env } : env);
   };
   return { clock, google, ledger, jwks, app, req };
 }

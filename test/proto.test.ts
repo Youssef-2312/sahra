@@ -47,3 +47,58 @@ describe("scan prototype", () => {
     void newToken;
   });
 });
+
+describe("scan rate limit", () => {
+  /** Fake limiter: `limit` calls per key per window, recording the keys it saw. */
+  function fakeLimiter(limit: number, fail = false) {
+    const counts = new Map<string, number>();
+    return {
+      keys: counts,
+      async limit({ key }: { key: string }) {
+        if (fail) throw new Error("limiter unavailable");
+        counts.set(key, (counts.get(key) ?? 0) + 1);
+        return { success: counts.get(key)! <= limit };
+      },
+    };
+  }
+
+  it("is keyed per scanner session, not per IP: phones on one Wi-Fi each get their own budget", async () => {
+    const rl = fakeLimiter(3);
+    const h = await harness({ env: { RL_SCAN: rl as unknown as RateLimit } });
+    const party = await seedParty();
+    const o = await seedOwner(party);
+    const a = await seedSession(party, o.id, "owner", h.clock);
+    const b = await seedSession(party, o.id, "owner", h.clock);
+    const { qr } = (await (await h.req("/api/proto/ticket", api(a, {}))).json()) as { qr: string };
+    const sameIp = (s: typeof a) => {
+      const init = api(s, { scan_id: newId(), qr });
+      (init.headers as Record<string, string>)["cf-connecting-ip"] = "203.0.113.7";
+      return h.req("/api/proto/scan", init).then((r) => r.json() as Promise<{ verdict: string; reason?: string }>);
+    };
+    for (let i = 0; i < 3; i++) expect((await sameIp(a)).reason).not.toBe("rate_limited");
+    expect(await sameIp(a)).toEqual({ verdict: "cant_verify", reason: "rate_limited" });
+    // Same IP, different phone (session): not affected by the first phone's budget.
+    expect((await sameIp(b)).reason).not.toBe("rate_limited");
+    expect([...rl.keys.keys()].every((k) => k.startsWith("scan:") && !k.includes("203.0.113.7"))).toBe(true);
+    expect(rl.keys.size).toBe(2);
+  });
+
+  it("a limiter outage does not stop the door (the database still decides)", async () => {
+    const h = await harness({ env: { RL_SCAN: fakeLimiter(0, true) as unknown as RateLimit } });
+    const party = await seedParty();
+    const o = await seedOwner(party);
+    const s = await seedSession(party, o.id, "owner", h.clock);
+    const { qr } = (await (await h.req("/api/proto/ticket", api(s, {}))).json()) as { qr: string };
+    expect(await (await h.req("/api/proto/scan", api(s, { scan_id: newId(), qr }))).json()).toMatchObject({ verdict: "admit" });
+    expect(await (await h.req("/api/proto/scan", api(s, { scan_id: newId(), qr }))).json()).toMatchObject({ verdict: "used" });
+  });
+
+  it("a missing limiter binding blocks (misconfiguration fails closed)", async () => {
+    const h = await harness({ env: { RL_SCAN: undefined } });
+    const party = await seedParty();
+    const o = await seedOwner(party);
+    const s = await seedSession(party, o.id, "owner", h.clock);
+    const { qr } = (await (await h.req("/api/proto/ticket", api(s, {}))).json()) as { qr: string };
+    expect(await (await h.req("/api/proto/scan", api(s, { scan_id: newId(), qr }))).json()).toEqual({ verdict: "cant_verify", reason: "rate_limited" });
+  });
+});

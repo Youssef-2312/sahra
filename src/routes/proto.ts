@@ -48,7 +48,8 @@ protoRoutes.post("/ticket", requireAuth(["owner", "admin", "door"]), async (c) =
 
 protoRoutes.post("/scan", requireAuth(["owner", "admin", "door"]), async (c) => {
   const a = c.var.auth;
-  if (await rateLimited(c.env.RL_SCAN, `scan:${a.hash}`)) return json(c, 429, { verdict: "cant_verify", reason: "rate_limited" });
+  // Keyed per scanner session (never per IP: door phones on one Wi-Fi share an IP).
+  if (await rateLimited(c.env.RL_SCAN, `scan:${a.hash}`, "open")) return json(c, 429, { verdict: "cant_verify", reason: "rate_limited" });
   const b = await readJson(c);
   if (!b || !isUuid(b.scan_id) || typeof b.qr !== "string" || b.qr.length > 128) return json(c, 400, { error: "invalid_request" });
   const env = c.env as unknown as Record<string, unknown>;

@@ -22,7 +22,9 @@ import { createInterface } from "node:readline/promises";
 import { stdin, stdout } from "node:process";
 
 const WIN = process.platform === "win32";
-const ENVS = { staging: ["--env", "staging"], prod: [] };
+// `--env=` selects the top-level (production) config explicitly; it also avoids
+// wrangler's "multiple environments" warning and survives Windows argument quoting.
+const ENVS = { staging: ["--env", "staging"], prod: ["--env="] };
 const GENERATED_SECRETS = ["COOKIE_MASTER_K1", "QR_MASTER_K1", "LINK_MASTER_K1"];
 
 // Errors that will not go away by retrying.

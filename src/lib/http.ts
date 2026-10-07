@@ -47,15 +47,19 @@ export function clientIp(c: Context): string {
 /**
  * Workers Rate Limiting binding. It is per Cloudflare location and eventually
  * consistent (Cloudflare docs), so it is abuse protection, not an exact counter.
- * A missing binding fails closed.
+ * A missing binding (misconfiguration) always blocks. If the limiter service itself
+ * errors, `onError` decides: "closed" blocks; "open" lets the request through (used
+ * for door scans, where D1 still decides every admission, so a limiter outage must
+ * not stop the door).
  */
-export async function rateLimited(binding: RateLimit | undefined, key: string): Promise<boolean> {
+export async function rateLimited(binding: RateLimit | undefined, key: string, onError: "open" | "closed" = "closed"): Promise<boolean> {
   if (!binding) return true;
   try {
     const { success } = await binding.limit({ key });
     return !success;
-  } catch {
-    return true;
+  } catch (e) {
+    console.error(JSON.stringify({ evt: "rate_limiter_error", key_kind: key.split(":")[0], on_error: onError, message: String((e as Error)?.message ?? e) }));
+    return onError === "closed";
   }
 }
 
