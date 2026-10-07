@@ -1,4 +1,4 @@
-import { Hono } from "hono";
+import { Hono } from "hono/tiny";
 import { flushChangeLog } from "../changelog";
 import { json, readJson, requireAuth, type AppEnv } from "../context";
 import { CONFIG } from "../env";

@@ -91,12 +91,17 @@ export function timingSafeEqualStr(a: string, b: string): boolean {
 }
 
 /**
- * CSRF token for a session: HMAC-SHA256 keyed by the raw session token. The
- * server can recompute it from the cookie on every request, so nothing is stored,
- * and it cannot be derived from anything stored in the database.
+ * CSRF token for a session: SHA-256 of a fixed label and the raw 256-bit session
+ * token. The server recomputes it from the cookie on every request (nothing is
+ * stored), it cannot be derived from anything in the database (only the token's
+ * own hash is stored, without the label), and it needs no key import per request.
  */
 export async function csrfFor(sessionToken: Uint8Array): Promise<string> {
-  return b64url(await hmac(await hmacKey(sessionToken), "sahra-csrf-v1"));
+  const label = enc.encode("sahra-csrf-v2|");
+  const buf = new Uint8Array(label.length + sessionToken.length);
+  buf.set(label);
+  buf.set(sessionToken, label.length);
+  return b64url(await sha256(buf));
 }
 
 // ---------------------------------------------------------------------------

@@ -1,7 +1,7 @@
 // TEMPORARY (Checkpoint A): measures the scan path before Phase 2 builds it for real.
 // Enabled only when ENABLE_PROTO = "1". Phase 2 removes this file.
 
-import { Hono } from "hono";
+import { Hono } from "hono/tiny";
 import { json, readJson, requireAuth, type AppEnv } from "../context";
 import { ProtoDb } from "../db/proto";
 import { ProtoLedger } from "../ledger/proto";

@@ -11,7 +11,7 @@
 // 3. Scan race: --phones scanners scan the same ticket at the same moment, each with
 //    its own scan id. Expected: exactly one admit per ticket.
 
-import { createHmac, randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 
 const args = Object.fromEntries(process.argv.slice(2).reduce((acc, a, i, all) => {
   if (a.startsWith("--")) acc.push([a.slice(2), all[i + 1]]);
@@ -29,7 +29,8 @@ if (!token) { console.error("invitation link has no #t= token"); process.exit(1)
 const scans = Number(args.scans ?? 50);
 const phones = Number(args.phones ?? 8);
 
-const csrfFor = (s) => createHmac("sha256", Buffer.from(s, "base64url")).update("sahra-csrf-v1").digest("base64url");
+// Must match src/lib/crypto.ts csrfFor: SHA-256("sahra-csrf-v2|" || raw token bytes).
+const csrfFor = (s) => createHash("sha256").update(Buffer.concat([Buffer.from("sahra-csrf-v2|"), Buffer.from(s, "base64url")])).digest("base64url");
 
 async function post(path, body, headers) {
   const t0 = performance.now();

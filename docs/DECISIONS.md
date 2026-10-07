@@ -40,6 +40,18 @@ redemption per ticket", "reduces the risk", measured numbers only).
   2 minutes only yields another session for the same verified person, subject to
   the cap.
 
+## CPU (Workers Free: 10 ms per request)
+
+- Target: **warm p99 under 5 ms on every endpoint**; cold requests (the first
+  request in an isolate) are reported separately.
+- Method: `setup.bat` step 12 (`scripts/measure-cpu.mjs`) streams staging's request
+  events with `wrangler tail` (Cloudflare's CPU time per request) and splits them
+  by our log field `iso_req` (1 = cold), per endpoint.
+- Kept per isolate, not redone per request: imported Google keys (only the key a
+  token names, imported once), derived per-party keys, the cookie encryption key.
+  The CSRF token is a SHA-256 (no key import). Router: `hono/tiny` (no route-table
+  compile on the first request). Bundle 105 KiB (27 KiB gzipped), was 122 KiB.
+
 ## Rate limits
 
 - Scans: `RL_SCAN` is keyed per scanner session (never per IP; door phones on one

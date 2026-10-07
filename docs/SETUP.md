@@ -195,7 +195,20 @@ rows written, about 1.3% of the daily limit.
 
 3. Revoke the invitation on the dashboard afterwards.
 
-### C3. Read CPU time and rows
+### C3. CPU per endpoint, cold vs warm (setup.bat step 12)
+
+Right after a staging deploy (new isolates), run step 12. It connects to the
+staging request stream (`wrangler tail`), asks you to sign in on staging 3 times,
+then asks for a new 1-hour door invitation link and runs the Checkpoint A traffic.
+At the end it prints CPU p50/p95/p99/max per endpoint, separately for cold
+requests (an isolate's first) and warm ones, and saves a summary file
+`cpu-report-<time>.json` (no cookies, links or secrets). Target: warm p99 under
+5 ms on every endpoint. Revoke the invitation afterwards.
+
+Step 11 (read-only) compares admitted tickets with ledger admission records; run
+it after any Checkpoint A run.
+
+### C4. Read CPU time and rows in the dashboard (alternative)
 
 **Workers & Pages > sahra-staging > Observability**, last hour, Query Builder:
 

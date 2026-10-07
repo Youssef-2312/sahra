@@ -1,4 +1,4 @@
-import { Hono } from "hono";
+import { Hono } from "hono/tiny";
 import { normalizeEmail } from "../auth/google";
 import { flushChangeLog } from "../changelog";
 import { json, readJson, requireAuth, type AppEnv } from "../context";
