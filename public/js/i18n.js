@@ -6,6 +6,10 @@
 var SahraText = {
   en: {
     lang_other: "العربية",
+    sign_in: "Sign in",
+    privacy: "Privacy",
+    terms: "Terms",
+    built_by: "Built by Nova",
     loading: "Loading...",
     error_generic: "Something went wrong. Please try again.",
     error_network: "No connection. Check your internet and try again.",
@@ -112,6 +116,10 @@ var SahraText = {
 
   ar: {
     lang_other: "English",
+    sign_in: "تسجيل الدخول",
+    privacy: "الخصوصية",
+    terms: "الشروط",
+    built_by: "صُنع بواسطة Nova",
     loading: "جارٍ التحميل...",
     error_generic: "حدث خطأ. حاول مرة أخرى.",
     error_network: "لا يوجد اتصال. تحقق من الإنترنت وحاول مرة أخرى.",

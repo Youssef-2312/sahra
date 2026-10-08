@@ -1,26 +1,28 @@
-// Guest sign-up and "resend my link" (bare test page). The sign-up token is
-// generated once and saved until the request is confirmed, so a retry after
-// "pending" is the same request, not a second ticket.
+// Guest sign-up page: /signup.html?party=<id>. Order (owner, brainstorm idea 2):
+// party name, date and time; address status; ticket types with prices; a short
+// form. The sign-up token is created once and kept until the request is
+// confirmed, so a retry after "not confirmed yet" is the same request, never a
+// second ticket. A confirmed ticket link is remembered in this browser
+// (sahra_tickets) for the home page.
 "use strict";
 (function () {
+  var t = Sahra.t, el = Sahra.el;
   var party = new URLSearchParams(location.search).get("party") || "";
-  var info = document.getElementById("info");
-  var result = document.getElementById("result");
-  var widgets = {};
-  var siteKey = null;
   var tokenKey = "sahra_signup_" + party;
+  var draftKey = "sahra_draft_" + party;
+  var app = document.getElementById("app");
+  var data = null;        // GET /api/guest/parties/:party
+  var loadError = null;
+  var done = null;        // the confirmed request: { link, earlier }
+  var built = false;
+  var widgets = {};
+  var turnstileReady = false;
 
-  function show(el, v) { el.textContent = typeof v === "string" ? v : JSON.stringify(v, null, 2); }
-
-  window.sahraTurnstileReady = function () {
-    if (!siteKey || widgets.signup !== undefined) return;
-    widgets.signup = turnstile.render("#turnstile-signup", { sitekey: siteKey });
-    widgets.resend = turnstile.render("#turnstile-resend", { sitekey: siteKey });
-  };
+  // ------------------------------------------------------------ helpers
 
   // Target about 250 KB (server maximum 600,000 bytes): longest side about 1600 px,
-  // JPEG, quality stepped down until it fits. An image already small enough (and of
-  // an accepted type) is sent as it is, so amounts and references stay sharp.
+  // JPEG, quality stepped down until it fits. A small enough image of an accepted
+  // type is sent as it is.
   var TARGET = 250 * 1000;
   var ACCEPTED = ["image/jpeg", "image/png", "image/webp"];
   async function compress(file) {
@@ -31,137 +33,327 @@
     c.width = Math.round(bmp.width * scale);
     c.height = Math.round(bmp.height * scale);
     var g = c.getContext("2d");
-    // JPEG has no transparency: white behind it, not black.
     g.fillStyle = "#fff";
     g.fillRect(0, 0, c.width, c.height);
     g.drawImage(bmp, 0, 0, c.width, c.height);
     var blob = null;
     for (var q = 0.85; q >= 0.4; q -= 0.1) {
-      blob = await new Promise(function (resolve) { c.toBlob(resolve, "image/jpeg", q); });
+      blob = await new Promise(function (ok) { c.toBlob(ok, "image/jpeg", q); });
       if (blob && blob.size <= TARGET) break;
     }
     return blob;
   }
-  function kb(n) { return Math.round(n / 1000) + " KB"; }
 
-  async function load() {
-    var r = await fetch("/api/guest/parties/" + encodeURIComponent(party));
-    var j = await r.json();
-    if (!r.ok) return show(info, j);
-    document.getElementById("title").textContent = "Ticket request: " + j.party.name;
-    siteKey = j.turnstile_site_key;
-    var closedWhy = j.full ? "This party is full. Requests are closed."
-      : j.registration.state === "not_open_yet" ? "Requests open at " + new Date(j.registration.opens_at).toLocaleString() + "."
-        : j.registration.state === "closed" ? "Requests are closed." : null;
-    show(info, (closedWhy || "Places left: " + j.places_left +
-      (j.registration.closes_at ? "\nRequests close at " + new Date(j.registration.closes_at).toLocaleString() + "." : "") +
-      (j.max_tickets_per_email ? "\nAt most " + j.max_tickets_per_email + " ticket(s) per email address." : "")) +
-      (siteKey ? "" : "\nThe bot check is not configured: requests are closed."));
-    // Ticket types: a request must name one when the party has any. Prices are EGP per person.
-    var sel = document.querySelector("#signup [name=type_id]");
-    var typeInfo = document.getElementById("type-info");
-    var byId = {};
-    j.types.forEach(function (t) {
-      byId[t.id] = t;
-      var o = document.createElement("option");
-      o.value = t.id;
-      o.disabled = !t.on_sale;
-      o.textContent = t.name + " - " + (t.price ? "EGP " + t.price + " per person" : "free") +
-        (t.sold_out ? " (sold out)" : !t.on_sale ? " (not on sale now)" : " (" + t.places_left + " left)");
-      sel.appendChild(o);
-    });
-    function describe() {
-      var t = byId[sel.value];
-      typeInfo.textContent = t ? [t.description, t.payment_instructions ? "How to pay: " + t.payment_instructions : null]
-        .filter(Boolean).join("\n") : (j.payment_instructions ? "How to pay: " + j.payment_instructions : "");
-    }
-    sel.addEventListener("change", describe);
-    document.getElementById("type-row").hidden = j.types.length === 0;
-    sel.required = j.types.length > 0;
-    var firstOnSale = j.types.filter(function (t) { return t.on_sale; })[0];
-    if (firstOnSale) sel.value = firstOnSale.id;
-    describe();
-    var f = document.getElementById("signup");
-    f.people.max = j.max_people_per_ticket;
-    if (j.form.screenshot === "none") document.getElementById("shot-row").hidden = true;
-    f.screenshot.required = j.form.screenshot === "required";
-    var qs = document.getElementById("questions");
-    j.form.questions.forEach(function (q) {
-      var p = document.createElement("p");
-      var l = document.createElement("label");
-      l.textContent = q.label + (q.required ? " " : " (optional) ");
-      var input;
-      if (q.type === "choice") {
-        input = document.createElement("select");
-        var blank = document.createElement("option");
-        blank.value = "";
-        input.appendChild(blank);
-        q.options.forEach(function (o) { var op = document.createElement("option"); op.value = o; op.textContent = o; input.appendChild(op); });
-      } else {
-        input = document.createElement("input");
-        input.maxLength = 500;
-      }
-      input.dataset.q = q.id;
-      input.required = q.required;
-      l.appendChild(input);
-      p.appendChild(l);
-      qs.appendChild(p);
-    });
-    f.hidden = !!closedWhy || !siteKey;
-    document.getElementById("resend").hidden = !siteKey;
-    if (window.turnstile) window.sahraTurnstileReady();
+  function remember(link) {
+    var list = [];
+    try { list = JSON.parse(Sahra.store.get("sahra_tickets") || "[]"); } catch (e) { list = []; }
+    if (!Array.isArray(list)) list = [];
+    list = list.filter(function (x) { return x && x.link !== link; });
+    list.unshift({ party: party, link: link, at: Date.now() });
+    Sahra.store.set("sahra_tickets", JSON.stringify(list.slice(0, 20)));
   }
 
-  document.getElementById("signup").addEventListener("submit", async function (e) {
+  function closedReason() {
+    if (!data) return null;
+    if (!data.turnstile_site_key) return t("closed_unavailable");
+    if (data.full) return t("closed_full");
+    if (data.registration.state === "not_open_yet") return t("closed_not_yet", { when: Sahra.when(data.registration.opens_at, tz()) });
+    if (data.registration.state === "closed") return t("closed_over");
+    if (data.types.length && !data.types.some(function (x) { return x.on_sale; })) return t("closed_unavailable");
+    return null;
+  }
+  function tz() { return data && data.details ? data.details.time_zone : null; }
+
+  // ------------------------------------------------------------ sections
+
+  function partyCard() {
+    var d = data.details || {};
+    var timeLine = d.starts_at ? Sahra.when(d.starts_at, d.time_zone) + (d.ends_at ? " - " + Sahra.time(d.ends_at, d.time_zone) : "") : null;
+    return el("section", null,
+      el("h1", { text: data.party.name }),
+      timeLine ? el("p", { class: "muted", text: timeLine }) : null,
+      d.description ? el("p", { class: "pre", text: d.description }) : null);
+  }
+
+  function addressCard() {
+    var d = data.details;
+    if (!d) return null;
+    var body;
+    if (d.address || d.venue_name) {
+      body = [d.venue_name ? el("p", { text: d.venue_name }) : null, d.address ? el("p", { class: "pre", text: d.address }) : null,
+        d.map_url ? el("a", { text: t("open_map"), attrs: { href: d.map_url, rel: "noopener", target: "_blank" } }) : null];
+    } else if (d.reveal && d.reveal.mode === "at_time" && d.reveal.at) {
+      body = el("p", { text: t("addr_at_time", { rel: Sahra.rel(d.reveal.at) }) });
+    } else if (d.reveal && d.reveal.mode === "manual") {
+      body = el("p", { text: t("addr_manual") });
+    } else {
+      body = el("p", { text: t("addr_with_ticket") });
+    }
+    return el("section", { class: "card" }, el("p", { class: "small muted", text: t("where") }), body);
+  }
+
+  function rulesCard() {
+    var d = data.details;
+    if (!d || !d.rules) return null;
+    return el("section", { class: "card" }, el("p", { class: "small muted", text: t("rules") }), el("p", { class: "pre", text: d.rules }));
+  }
+
+  function typeStatus(x) {
+    if (x.sold_out) return el("span", { class: "pill no", text: t("sold_out") });
+    if (!x.on_sale) {
+      if (x.sales_opens_at && x.sales_opens_at > Date.now()) return el("span", { class: "pill", text: t("opens_rel", { rel: Sahra.rel(x.sales_opens_at) }) });
+      return el("span", { class: "pill", text: t("not_on_sale") });
+    }
+    var bits = [];
+    if (x.sales_closes_at) bits.push(t("closes_rel", { rel: Sahra.rel(x.sales_closes_at) }));
+    if (x.places_left <= 20) bits.push(t("left_n", { n: x.places_left }));
+    return bits.length ? el("span", { class: "small muted", text: bits.join(" · ") }) : null;
+  }
+
+  function typesBlock(form) {
+    if (!data.types.length) return null;
+    return el("fieldset", { class: "field", attrs: { "aria-label": t("choose_type") } },
+      el("p", { class: "label", text: t("choose_type") }),
+      data.types.map(function (x) {
+        var input = el("input", { attrs: { type: "radio", name: "type_id", value: x.id, disabled: !x.on_sale, required: true } });
+        input.addEventListener("change", function () { paymentRefresh(form); });
+        return el("label", { class: "choice" + (x.on_sale ? "" : " off") }, input,
+          el("span", { class: "grow" },
+            el("span", { class: "row" }, el("strong", { text: x.name }), el("span", { class: "price", text: x.price ? Sahra.money(x.price) + " " + t("per_person") : t("free") })),
+            x.description ? el("span", { class: "small muted pre", text: x.description }) : null,
+            el("span", null, typeStatus(x))));
+      }));
+  }
+
+  function questionField(q) {
+    var input;
+    if (q.type === "choice") {
+      input = el("select", { attrs: { required: q.required } }, el("option", { text: "", attrs: { value: "" } }),
+        q.options.map(function (o) { return el("option", { text: o, attrs: { value: o } }); }));
+    } else if (q.type === "long") {
+      input = el("textarea", { attrs: { maxlength: 500, required: q.required } });
+    } else if (q.type === "yesno") {
+      input = el("input", { attrs: { type: "checkbox" } });
+      input.dataset.q = q.id;
+      input.dataset.kind = "yesno";
+      return el("div", { class: "field" }, el("label", { class: "check" }, input, el("span", { text: q.label })));
+    } else {
+      input = el("input", { attrs: { type: "text", maxlength: 500, required: q.required } });
+    }
+    input.dataset.q = q.id;
+    return el("div", { class: "field" },
+      el("label", null, q.label + (q.required ? "" : " (" + t("optional") + ")"), input));
+  }
+
+  // Payment instructions and the total follow the chosen ticket and the number of people.
+  function paymentRefresh(form) {
+    var box = form.querySelector("[data-pay]");
+    if (!box) return;
+    var chosen = form.querySelector("input[name=type_id]:checked");
+    var type = chosen ? data.types.filter(function (x) { return x.id === chosen.value; })[0] : null;
+    var how = type ? type.payment_instructions : data.payment_instructions;
+    var people = Math.max(1, Number(form.elements.people.value) || 1);
+    Sahra.clear(box);
+    if (type && type.price) box.appendChild(el("p", { class: "price", text: t("total_due", { amount: Sahra.money(type.price * people) }) }));
+    if (how) box.appendChild(el("p", { class: "pre", text: how }));
+    box.hidden = !box.firstChild;
+  }
+
+  function formBlock() {
+    var shot = data.form.screenshot;
+    var maxPeople = data.max_people_per_ticket;
+    var draft = {};
+    try { draft = JSON.parse(sessionStorage.getItem(draftKey) || "{}"); } catch (e) { draft = {}; }
+    var people = el("input", { attrs: { type: "number", name: "people", min: 1, max: maxPeople, value: draft.people || 1, inputmode: "numeric", required: true } });
+    var typesSlot = el("div");
+    var form = el("form", null,
+      typesSlot,
+      el("h2", { text: t("your_details") }),
+      el("div", { class: "field" }, el("label", null, t("full_name"),
+        el("input", { attrs: { type: "text", name: "name", maxlength: 80, required: true, autocomplete: "name", value: draft.name || "" } }))),
+      el("div", { class: "field" }, el("label", null, t("email"),
+        el("input", { attrs: { type: "email", name: "email", maxlength: 254, required: true, autocomplete: "email", inputmode: "email", value: draft.email || "" } }),
+        el("span", { class: "hint", text: t("email_hint") }))),
+      el("div", { class: "field", hidden: maxPeople <= 1 }, el("label", null, t("people"), people,
+        el("span", { class: "hint", text: t("people_hint", { n: maxPeople }) }))),
+      data.form.questions.map(questionField),
+      shot === "none" ? null : el("div", null,
+        el("h2", { text: t("how_to_pay") }),
+        el("div", { class: "card", attrs: { "data-pay": "" } }),
+        el("div", { class: "field" }, el("label", null, t("screenshot") + (shot === "required" ? "" : " (" + t("optional") + ")"),
+          el("input", { attrs: { type: "file", name: "screenshot", accept: "image/jpeg,image/png,image/webp", required: shot === "required" } }),
+          el("span", { class: "hint", text: t("screenshot_hint") + " " + t("screenshot_size") })))),
+      el("div", { attrs: { id: "turnstile-signup" } }),
+      el("div", { class: "spacer" }),
+      el("button", { class: "btn primary", text: t("request_ticket"), attrs: { type: "submit" } }),
+      el("div", { attrs: { role: "status", "aria-live": "polite", "data-result": "" } }));
+    // The ticket choices need the form for their change handler; the first one on sale is chosen.
+    if (data.types.length) {
+      typesSlot.appendChild(typesBlock(form));
+      var first = data.types.filter(function (x) { return x.on_sale; })[0];
+      if (first) form.querySelector("input[value='" + first.id + "']").checked = true;
+    }
+    people.addEventListener("input", function () { paymentRefresh(form); });
+    form.addEventListener("submit", submit);
+    setTimeout(function () { paymentRefresh(form); }, 0);
+    return form;
+  }
+
+  function lostLinkBlock() {
+    var out = el("div", { attrs: { role: "status", "aria-live": "polite" } });
+    var f = el("form", null,
+      el("p", { class: "muted", text: t("lost_text") }),
+      el("div", { class: "field" }, el("label", null, t("email"),
+        el("input", { attrs: { type: "email", name: "email", maxlength: 254, required: true, inputmode: "email", autocomplete: "email" } }))),
+      el("div", { attrs: { id: "turnstile-resend" } }),
+      el("div", { class: "spacer" }),
+      el("button", { class: "btn", text: t("send_link"), attrs: { type: "submit" } }),
+      out);
+    f.addEventListener("submit", async function (e) {
+      e.preventDefault();
+      var btn = f.querySelector("button");
+      btn.disabled = true;
+      var r = await Sahra.api.post("/api/guest/parties/" + encodeURIComponent(party) + "/resend",
+        { email: f.elements.email.value, turnstile: window.turnstile ? window.turnstile.getResponse(widgets.resend) || "" : "" });
+      if (window.turnstile && widgets.resend !== undefined) window.turnstile.reset(widgets.resend);
+      btn.disabled = false;
+      Sahra.clear(out).appendChild(el("p", { class: "notice " + (r.ok ? "yes" : "no"), text: r.ok ? t("link_on_way") : Sahra.errorText(r) }));
+    });
+    return el("section", null, el("h2", { text: t("lost_title") }), f);
+  }
+
+  function doneView() {
+    var url = location.origin + done.link;
+    var copy = el("button", { class: "btn", text: t("copy"), attrs: { type: "button" } });
+    copy.addEventListener("click", async function () {
+      try { await navigator.clipboard.writeText(url); copy.textContent = t("copied"); } catch (e) { /* the link is shown below to copy by hand */ }
+    });
+    return el("section", null,
+      el("h1", { text: t("done_title") }),
+      el("p", { text: t("done_text") }),
+      done.earlier > 0 ? el("p", { class: "notice maybe", text: t("earlier_n", { n: done.earlier }) }) : null,
+      el("a", { class: "btn primary", text: t("open_ticket"), attrs: { href: done.link } }),
+      copy,
+      el("p", { class: "small muted pre", text: url }),
+      el("p", { class: "small muted", text: t("device_note") }));
+  }
+
+  // ------------------------------------------------------------ render
+
+  function render() {
+    // A language switch after the page is built reloads it (the bot-check widgets
+    // cannot be moved); what was typed is kept for this tab.
+    if (built) {
+      saveDraft();
+      location.reload();
+      return;
+    }
+    built = true;
+    Sahra.clear(app);
+    document.title = data && data.party ? data.party.name + " - Sahra" : "Sahra";
+    if (loadError) { app.appendChild(el("p", { class: "notice no", text: loadError })); return; }
+    if (done) { app.appendChild(doneView()); return; }
+    app.appendChild(partyCard());
+    app.appendChild(addressCard());
+    app.appendChild(rulesCard());
+    var closed = closedReason();
+    if (closed) {
+      app.appendChild(el("p", { class: "notice maybe", text: closed }));
+    } else {
+      var notes = [];
+      if (data.registration.closes_at) notes.push(t("closes_at", { when: Sahra.when(data.registration.closes_at, tz()) }));
+      if (data.max_tickets_per_email) notes.push(t("max_per_email", { n: data.max_tickets_per_email }));
+      if (notes.length) app.appendChild(el("p", { class: "small muted", text: notes.join(" ") }));
+      app.appendChild(formBlock());
+    }
+    if (data.turnstile_site_key) app.appendChild(lostLinkBlock());
+    mountTurnstile();
+  }
+
+  function saveDraft() {
+    var f = app.querySelector("form");
+    if (!f || !f.elements.name) return;
+    try {
+      sessionStorage.setItem(draftKey, JSON.stringify({ name: f.elements.name.value, email: f.elements.email.value, people: f.elements.people.value }));
+    } catch (e) { /* not kept */ }
+  }
+
+  window.sahraTurnstileReady = function () { turnstileReady = true; mountTurnstile(); };
+  function mountTurnstile() {
+    if (!turnstileReady || !data || !data.turnstile_site_key || !window.turnstile) return;
+    [["signup", "#turnstile-signup"], ["resend", "#turnstile-resend"]].forEach(function (w) {
+      if (widgets[w[0]] === undefined && document.querySelector(w[1])) {
+        widgets[w[0]] = window.turnstile.render(w[1], { sitekey: data.turnstile_site_key, language: Sahra.lang() });
+      }
+    });
+  }
+
+  // ------------------------------------------------------------ submit
+
+  async function submit(e) {
     e.preventDefault();
     var f = e.target;
+    var out = f.querySelector("[data-result]");
+    var btn = f.querySelector("button[type=submit]");
+    var say = function (cls, text) { Sahra.clear(out).appendChild(el("p", { class: "notice " + cls, text: text })); };
     var token = Sahra.store.get(tokenKey) || Sahra.token();
     Sahra.store.set(tokenKey, token);
     var answers = {};
-    f.querySelectorAll("[data-q]").forEach(function (el) { if (el.value.trim()) answers[el.dataset.q] = el.value; });
+    f.querySelectorAll("[data-q]").forEach(function (x) {
+      if (x.dataset.kind === "yesno") { if (x.checked) answers[x.dataset.q] = "yes"; }
+      else if (x.value.trim()) answers[x.dataset.q] = x.value;
+    });
     var fd = new FormData();
     fd.set("signup", token);
-    fd.set("name", f.name.value);
-    fd.set("email", f.email.value);
-    fd.set("people", f.people.value);
-    if (f.type_id.value) fd.set("type_id", f.type_id.value);
+    fd.set("name", f.elements.name.value);
+    fd.set("email", f.elements.email.value);
+    fd.set("people", f.elements.people.value || "1");
+    var chosen = f.querySelector("input[name=type_id]:checked");
+    if (chosen) fd.set("type_id", chosen.value);
     fd.set("answers", JSON.stringify(answers));
-    fd.set("cf-turnstile-response", turnstile.getResponse(widgets.signup) || "");
-    var sizeNote = "";
-    if (f.screenshot.files[0]) {
-      var original = f.screenshot.files[0];
-      var shot = await compress(original);
-      fd.set("screenshot", shot, shot === original ? original.name : "screenshot.jpg");
-      sizeNote = "Screenshot: " + kb(shot.size) + (shot === original ? " (sent as it is)" : " (made smaller from " + kb(original.size) + ")") + "\n";
+    fd.set("cf-turnstile-response", window.turnstile ? window.turnstile.getResponse(widgets.signup) || "" : "");
+    btn.disabled = true;
+    btn.textContent = t("sending");
+    try {
+      var file = f.elements.screenshot && f.elements.screenshot.files[0];
+      if (file) {
+        var shot = await compress(file);
+        fd.set("screenshot", shot, shot === file ? file.name : "screenshot.jpg");
+      }
+    } catch (err) {
+      btn.disabled = false;
+      btn.textContent = t("request_ticket");
+      return say("no", t("e_screenshot_must_be_jpeg_png_or_webp"));
     }
-    show(result, sizeNote + "Sending...");
-    var r = await fetch("/api/guest/parties/" + encodeURIComponent(party) + "/signup", { method: "POST", body: fd, credentials: "same-origin" });
-    var j = await r.json().catch(function () { return {}; });
-    turnstile.reset(widgets.signup);
-    if (r.ok) {
+    var r = await Sahra.api.post("/api/guest/parties/" + encodeURIComponent(party) + "/signup", fd);
+    if (window.turnstile && widgets.signup !== undefined) window.turnstile.reset(widgets.signup);
+    btn.disabled = false;
+    btn.textContent = t("request_ticket");
+    if (r.ok && r.body.link) {
       Sahra.store.del(tokenKey);
-      result.textContent = sizeNote + (j.notice ? j.notice + "\n" : "") + "Request received. Keep this link private and open it to see your ticket: ";
-      var a = document.createElement("a");
-      a.href = j.link;
-      a.textContent = location.origin + j.link;
-      result.appendChild(a);
-    } else if (j.status === "pending") {
-      show(result, "Not confirmed yet. Press the button again (your request is kept).");
-    } else {
-      Sahra.store.del(tokenKey);
-      show(result, j);
+      try { sessionStorage.removeItem(draftKey); } catch (x) { /* nothing kept */ }
+      remember(r.body.link);
+      done = { link: r.body.link, earlier: r.body.earlier_requests || 0 };
+      built = false;
+      render();
+      window.scrollTo(0, 0);
+      return;
     }
-  });
+    // "Pending": stored but not yet confirmed; the same token finishes it. Kept for every other answer too
+    // (a retry with the same token can never make a second ticket).
+    say(r.body && r.body.status === "pending" ? "maybe" : "no", r.body && r.body.status === "pending" ? t("not_confirmed") : Sahra.errorText(r));
+  }
 
-  document.getElementById("resend").addEventListener("submit", async function (e) {
-    e.preventDefault();
-    var r = await fetch("/api/guest/parties/" + encodeURIComponent(party) + "/resend", {
-      method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ email: e.target.email.value, turnstile: turnstile.getResponse(widgets.resend) || "" }),
-    });
-    turnstile.reset(widgets.resend);
-    show(document.getElementById("resend-result"), await r.json().catch(function () { return {}; }));
-  });
+  // ------------------------------------------------------------ start
 
-  load();
+  (async function () {
+    if (!/^[a-z0-9-]{3,24}$/.test(party)) loadError = t("party_missing");
+    else {
+      var r = await Sahra.api.get("/api/guest/parties/" + encodeURIComponent(party));
+      if (r.status === 404) loadError = t("party_missing");
+      else if (!r.ok) loadError = Sahra.errorText(r);
+      else data = r.body;
+    }
+    Sahra.boot({ render: render });
+  })();
 })();

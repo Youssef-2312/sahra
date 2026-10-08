@@ -1,45 +1,29 @@
 /* Sahra design (Phase 5). Mobile first: one column, large tap targets, text that
-   reads without zooming. Colour carries meaning only: green = yes / admitted,
-   red = no / used, amber = uncertain. Logical properties (inline/block) so the
-   Arabic pages (dir="rtl") mirror without extra rules. No external fonts: the
-   phone's own fonts cover Latin and Arabic. */
+   reads without zooming. Owner decisions: a dark charcoal base with ONE calm
+   accent colour, the same all year (nothing seasonal); colour otherwise carries
+   meaning only: green = yes / admitted, red = no / used, amber = uncertain.
+   Logical properties so the Arabic pages (dir="rtl") mirror without extra rules.
+   No external fonts: the phone's own fonts cover Latin and Arabic. */
 
 :root {
-  --bg: #f7f6f3;
-  --surface: #ffffff;
-  --text: #17171a;
-  --muted: #5f5f66;
-  --line: #e2e0da;
-  --accent: #3b3bd6;
-  --accent-text: #ffffff;
-  --yes: #137a3a;
-  --yes-bg: #e3f4e8;
-  --no: #b3261e;
-  --no-bg: #fbe7e5;
-  --maybe: #8a5a00;
-  --maybe-bg: #fdf0d5;
+  --bg: #121316;
+  --surface: #1b1d21;
+  --surface-2: #23262b;
+  --text: #f2f2f0;
+  --muted: #a3a6ad;
+  --line: #2f3238;
+  --accent: #8ea2ff;        /* calm periwinkle: the only brand colour */
+  --accent-text: #0f1220;
+  --yes: #4cc77a;
+  --yes-bg: #13301e;
+  --no: #ff7b72;
+  --no-bg: #3a1614;
+  --maybe: #f2b54a;
+  --maybe-bg: #33270d;
   --radius: 14px;
   --gap: 16px;
   --font: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", "Noto Sans Arabic", Tahoma, sans-serif;
-  color-scheme: light dark;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #111114;
-    --surface: #1b1b20;
-    --text: #f1f0ee;
-    --muted: #a6a6ae;
-    --line: #2e2e35;
-    --accent: #8f8fff;
-    --accent-text: #0e0e12;
-    --yes: #4cc77a;
-    --yes-bg: #12301d;
-    --no: #ff7a70;
-    --no-bg: #3a1513;
-    --maybe: #f2b54a;
-    --maybe-bg: #33260c;
-  }
+  color-scheme: dark;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -150,7 +134,7 @@ a { color: var(--accent); }
   cursor: pointer;
 }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
-.btn.yes { background: var(--yes); border-color: var(--yes); color: #fff; }
+.btn.yes { background: var(--yes); border-color: var(--yes); color: #08210f; }
 .btn.no { background: transparent; border-color: var(--no); color: var(--no); }
 .btn.link { width: auto; min-height: 44px; border: 0; background: none; color: var(--accent); padding: 8px 0; font-weight: 600; }
 .btn:disabled { opacity: 0.55; cursor: default; }
@@ -204,9 +188,31 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, .btn:focus-vi
 /* Full-screen scanner verdicts (piece 5). */
 .verdict { min-height: 60vh; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; border-radius: var(--radius); padding: 24px; }
 .verdict .word { font-size: 2.6rem; font-weight: 800; line-height: 1.1; }
-.verdict.yes { background: var(--yes); color: #fff; }
-.verdict.no { background: var(--no); color: #fff; }
+.verdict.yes { background: #1f9d55; color: #fff; }
+.verdict.no { background: #c62828; color: #fff; }
 .verdict.maybe { background: #f2b54a; color: #1f1400; }
 
 .spacer { height: var(--gap); }
-.footer { color: var(--muted); font-size: 0.85rem; text-align: center; margin-top: calc(var(--gap) * 2); }
+
+/* Site footer (brainstorm idea 28): links, copyright, and in the corner the Nova
+   credit with Nova's logo and an Instagram icon next to it. Stacks on a phone. */
+.site-footer {
+  max-width: 34rem;
+  margin: calc(var(--gap) * 2) auto 0;
+  padding: var(--gap) var(--gap) calc(var(--gap) * 2);
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.85rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.site-footer a { color: var(--muted); }
+.site-footer .links a { display: inline-block; padding: 10px 0; margin-inline-end: 16px; }
+.nova { display: inline-flex; align-items: center; gap: 10px; }
+.nova .credit { display: inline-flex; align-items: center; gap: 8px; text-decoration: none; color: var(--text); padding: 6px 0; }
+.nova .credit img { width: 28px; height: 28px; border-radius: 7px; }
+.icon-link { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 999px; border: 1px solid var(--line); color: var(--text); }
+.icon-link svg { width: 20px; height: 20px; }
