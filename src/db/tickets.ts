@@ -203,7 +203,7 @@ export class TicketDb {
   /** Cancel: the ticket can never be admitted (status leaves 'approved'). Not for a ticket already used. */
   cancel(sess: SessionRef, id: string, now: number, actor: string, op: string) {
     return this.change(sess, ["owner", "admin"], id, "cancelled",
-      sql`status = 'cancelled'`, sql`status IN ('pending', 'approved') AND used_scan_id IS NULL`, now, actor, op);
+      sql`status = 'cancelled', cancelled_at = ${now}, cancelled_by = ${actor}`, sql`status IN ('pending', 'approved') AND used_scan_id IS NULL`, now, actor, op);
   }
 
   /** Reissue: bumps qr_version, so every older QR code for this ticket stops working. */

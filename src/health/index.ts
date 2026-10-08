@@ -41,6 +41,7 @@ import { newId } from "../lib/crypto";
 import { ACCOUNT_DAILY_WRITES, BUDGET_STOP_AT, dayOf, DAY_MS } from "../limits";
 import { outboxInsert } from "../outbox";
 import { PLATFORM } from "../platform/db";
+import { filesCapacity, FILES_FULL_AT, type FilesEnv, type PurgeReport } from "../storage";
 import { bothTimes, deliverDiscord, DISCORD, discordInsert, discordStatus, discordView, type DiscordReport, type DiscordStatus } from "./discord";
 
 const MIN = 60_000;
@@ -109,6 +110,8 @@ export interface HealthDeps {
   /** An email provider is configured (only changes the wording of the outbox check). */
   emailConfigured: boolean;
   origin: string;
+  /** Daily: deletes old screenshots (src/storage/ purgeOldScreenshots). Optional. */
+  purgeScreenshots?: (now: number) => Promise<PurgeReport>;
   /** Optional Discord webhook (secret); used only if discordStatus() says "configured". */
   discordUrl?: string;
   fetch?: (input: string, init?: RequestInit) => Promise<Response>;
@@ -122,6 +125,7 @@ export interface HealthReport {
   admissions_checked?: number;
   usage_est?: number;
   discord?: DiscordReport | "not_configured" | "error";
+  screenshots_purged?: PurgeReport | "error";
   main: { queries: number; rows_read: number; rows_written: number };
   ledger: { queries: number; rows_read: number; rows_written: number };
 }
@@ -194,6 +198,16 @@ export async function runHealth(deps: HealthDeps): Promise<HealthReport> {
   });
   await guarded("outbox", () => checkOutbox(main, now, deps.emailConfigured));
   await guarded("db_size", () => checkSizes(deps));
+  // Daily: screenshot retention. A failure is logged and retried the next day (it is not a health problem by itself).
+  let purge: PurgeReport | "error" | undefined;
+  if (daily && deps.purgeScreenshots) {
+    try {
+      purge = await deps.purgeScreenshots(now);
+    } catch (e) {
+      purge = "error";
+      console.error(JSON.stringify({ evt: "screenshot_purge_error", message: errText(e) }));
+    }
+  }
   results.push(checkBackup(state, now));
 
   // Daily write estimate (cheap aggregates; see DECISIONS "Workstream F").
@@ -272,6 +286,7 @@ export async function runHealth(deps: HealthDeps): Promise<HealthReport> {
   const out: HealthReport = {
     ...report(), daily, checks: runReport.checks, alerts: changes.length * owners.length,
     admissions_checked: admissions.checked, usage_est: est.usage_est, discord: discordReport,
+    ...(purge ? { screenshots_purged: purge } : {}),
   };
   console.log(JSON.stringify({ evt: "health", ...out }));
   return out;
@@ -455,6 +470,11 @@ async function checkSizes(deps: HealthDeps): Promise<CheckResult> {
     if (bytes >= HEALTH.dbBytes * HEALTH.sizeWarn) over.push(`${name} ${mb(bytes)} of ${mb(HEALTH.dbBytes)}`);
   }
   if (total >= HEALTH.accountBytes * HEALTH.sizeWarn) over.push(`all databases ${mb(total)} of ${mb(HEALTH.accountBytes)} (staging counts too)`);
+  // Screenshot uploads stop when every files database is past 70% (src/storage/ uploadTarget).
+  const files = Object.entries(sizes).filter(([n, b]) => /^files(_\d)?$/.test(n) && b != null);
+  if (files.length && files.every(([, b]) => b! >= HEALTH.dbBytes * FILES_FULL_AT)) {
+    over.push("screenshot uploads are closed (every files database is past 70%): create the next sahra-files-N database and add its FILES_N binding");
+  }
   const list = Object.entries(sizes).filter(([, b]) => b != null).map(([n, b]) => `${n} ${mb(b!)}`).join(", ");
   return over.length
     ? { id: "db_size", status: "problem", summary: `Past 70%: ${over.join("; ")}.`, detail: sizes }
@@ -551,13 +571,16 @@ export async function healthView(main: SqlDriver, ok: Sql, now: number, discord:
  * Bytes per database as D1 reports them (meta.size_after of a trivial query: no
  * rows read, nothing written). `PRAGMA page_count` is not allowed on D1.
  */
-export async function dbSizes(env: { DB: D1Database; LEDGER: D1Database; FILES?: D1Database }): Promise<Record<string, number | null>> {
+export async function dbSizes(env: { DB: D1Database; LEDGER: D1Database } & FilesEnv): Promise<Record<string, number | null>> {
   const one = async (d?: D1Database) => {
     if (!d) return null;
     const r = await d.prepare("SELECT 1").all();
     const s = Number((r.meta as { size_after?: number }).size_after);
     return Number.isFinite(s) ? s : null;
   };
-  const [main, ledger, files] = await Promise.all([one(env.DB), one(env.LEDGER), one(env.FILES)]);
-  return { main, ledger, files };
+  const [main, ledger, cap] = await Promise.all([one(env.DB), one(env.LEDGER), filesCapacity(env)]);
+  // "files" is sahra-files-1 (null when not bound); "files_2" .. only when bound.
+  const out: Record<string, number | null> = { main, ledger, files: null };
+  for (const d of cap.databases) out[d.shard === 1 ? "files" : `files_${d.shard}`] = d.bytes;
+  return out;
 }

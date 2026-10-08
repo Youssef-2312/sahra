@@ -10,6 +10,7 @@
     if (!r.ok) { out.textContent = "This link is not valid (it may have been replaced)."; return; }
     var k = j.ticket;
     var lines = ["Party: " + j.party.name, "Name: " + (k.guest_name || ""), "People: " + k.people, "Status: " + k.status];
+    if (k.group_note) lines.push(k.group_note);
     if (k.reject_reason) lines.push("Reason: " + k.reject_reason);
     if (k.on_hold) lines.push("On hold: the organisers are checking this ticket.");
     if (k.used) lines.push("Already used at the door.");

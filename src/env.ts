@@ -16,6 +16,10 @@ export interface Env {
   LINK_KEY_ID?: string;
   /** sahra-files-N: payment screenshots (src/storage/). Not created yet: without it, uploads answer 503. */
   FILES?: D1Database;
+  /** More screenshot databases (sahra-files-2 .. 4), used in order once FILES is 70% full. Optional. */
+  FILES_2?: D1Database;
+  FILES_3?: D1Database;
+  FILES_4?: D1Database;
   /** Cloudflare Turnstile for guest sign-up and "resend my link" (the secret is a Cloudflare secret). */
   TURNSTILE_SITE_KEY?: string;
   TURNSTILE_SECRET?: string;

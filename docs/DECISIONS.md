@@ -535,7 +535,7 @@ files database). Test pages: `public/signup.html`, `public/ticket.html`,
   Requests close automatically at capacity (sign-up answers 409 `full`; the
   public form shows `full: true`). Rejected and cancelled tickets free their places.
 - **Screenshots** in a separate D1 database (binding `FILES`), BLOB bound as a
-  parameter, at most 1,500,000 bytes (server-enforced; Content-Length is checked
+  parameter, at most 600,000 bytes since the follow-up below (was 1,500,000; server-enforced; Content-Length is checked
   before the body is read), type taken from the first bytes (JPEG, PNG, WebP
   only). Served only by `GET /api/tickets/:id/screenshot` to the ticket's party
   owner/admin (door 403, other parties 404), `cache-control: no-store`. Without
@@ -623,15 +623,69 @@ and written"). Main = sahra-prod, ledger = sahra-ledger, files = FILES.
 - Create a Turnstile widget per Worker (staging, production) and set
   `TURNSTILE_SITE_KEY` (var) and `TURNSTILE_SECRET` (secret); set
   `LINK_MASTER_K1` (secret, at least 32 random bytes, base64url) if not already set.
-- A screenshot stored for a sign-up that then found the party full stays as an
-  orphan row in the files database (never served). A cleanup job and the 70% size
-  warnings are not built yet.
+- (Done in the follow-up below: orphan screenshots are deleted after 1 day, and
+  the files databases have the 70% rule.)
 - `TicketDb.approve` (src/db/tickets.ts) has no capacity check; nothing in this
   workstream calls it (approvals go through `GuestDb.approve`). Add the check or
   remove the method at integration.
 - The guest does not get an email on sign-up (only the link on screen); "resend
   my link" covers a lost link. Adding a confirmation email costs 1 outbox row
   per sign-up.
+
+### Workstream C follow-up (audit #1, owner decisions)
+
+- **Screenshot capacity.** The browser compresses before upload (longest side
+  about 1600 px, JPEG, quality stepped down from 0.85 until the file is at most
+  about 250 KB; an accepted image already that small is sent as it is; the page
+  shows the size). The server maximum is now **600,000 bytes**. Capacity math:
+  4,000 screenshots x about 250 KB = about 1 GB, but one D1 database holds 500 MB
+  and we stop at 70% (350 MB, about 1,400 screenshots). So plan **2 to 3 files
+  databases**: `FILES` (sahra-files-1) and optional `FILES_2` .. `FILES_4`
+  (sahra-files-2 .. 4; the code works with only `FILES`). A new upload goes to
+  the first configured database whose size (D1's `meta.size_after` of `SELECT 1`:
+  no rows read) is under 70% of 500 MB, cached per isolate for a minute. The
+  ticket's key names the database (`f2:<id>`); keys written before (`1:<id>`, or
+  a bare id) mean `FILES`. When every configured database is past 70%, a sign-up
+  with a screenshot answers 503 `uploads_full` (fail closed; nothing written) and
+  the health check's database-size problem says "screenshot uploads are closed".
+  `filesCapacity(env)` (src/storage/) is what `dbSizes` uses: it now reports
+  `files_2` .. when bound. **The owner creates sahra-files-2 (same EEUR
+  location), applies `migrations-files/` and adds the `FILES_2` binding when
+  health warns about `files`.**
+- **Retention.** `purgeOldScreenshots(env, main, now)`, called by the daily health
+  run: a screenshot's bytes are deleted 30 days after its party's `ends_at`, 30
+  days after its ticket was rejected (`rejected_at`) or cancelled (`cancelled_at`,
+  new column set by `TicketDb.cancel`; tickets cancelled earlier wait for the
+  party rule), and after 1 day when no ticket points to it (a sign-up that then
+  found the party full). The files row stays (party, ticket, type, original size,
+  so the backup list does not change) with empty bytes, plus a tombstone
+  (`file_tombstones`, why); the queue's screenshot request answers 410 with
+  "screenshot deleted 30 days after the party (kept in the Drive backup)". At
+  most 200 per database per run (the next day continues); a retried sign-up
+  whose file was purged as an orphan stores it again. The main database is not
+  written (tickets keep their rev and key, so recovery's checks are unaffected).
+  Measured locally (7 live files, 4 deleted): main 10 rows read, files 27 rows
+  read and 8 written (2 per deleted file).
+- **Reject old pending requests** (owner decision: manual cleanup only):
+  `POST /api/tickets/reject-stale {hours 1..720, reason}` rejects the party's
+  pending requests created more than N hours ago, oldest first, at most 20 per
+  call in one statement, with the reason the guests see; places are freed at
+  once; audited and change-logged like any rejection; the answer says how many
+  remain and the queue page repeats the call. Counted as `reject_stale` in the
+  per-party limits (100 calls per day, non-essential: stops at the daily budget).
+- **Group tickets** (owner decision): one QR admits the whole group at once (as
+  before). The ticket page (`group_note`) and the release email say "This QR
+  admits N people together; arrive together."; the scan verdict carries `people`.
+  Tested: a 3-person ticket admits once with people = 3, the second scan says used.
+- New migrations: `migrations/0010_guest_retention.sql` (tickets.cancelled_at,
+  cancelled_by) and `migrations-files/0002_retention.sql` (file_tombstones, and
+  a covering index `files_meta` so the purge never reads the BLOBs; 1 extra row
+  written per upload). `file_tombstones` is listed as excluded from the backup
+  (src/backup/export.ts).
+- **For workstream E (backups):** the backup reads only `FILES`; screenshots in
+  `FILES_2` .. are not backed up yet. And `/api/backup/file/:id` serves empty
+  bytes for a purged file, which only matters if a file is purged before its
+  first backup (orphans after 1 day; hourly backups copy new screenshots first).
 ## Workstream B: organisers, party creation, site owners (Phase 4)
 
 Built on branch `claude/p4-b-organisers` (base c1da976). Only tested locally

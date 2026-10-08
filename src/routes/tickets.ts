@@ -24,7 +24,7 @@ import { linkPath, signLink } from "../guests/link";
 import { isBase32, isUuid, newId } from "../lib/crypto";
 import { chargeStaff } from "../limits";
 import type { OutboxRow } from "../outbox";
-import { FileStore } from "../storage";
+import { getScreenshot } from "../storage";
 import { guestEmail } from "./guests";
 
 export const ticketRoutes = new Hono<AppEnv>();
@@ -111,9 +111,10 @@ ticketRoutes.get("/:id/screenshot", requireAuth(MANAGERS), async (c) => {
   const { sess, now } = sessOf(c);
   const key = await new GuestDb(c.var.db.driver).screenshotKey(sess, id, now);
   if (!key) return json(c, 404, { error: "not_found" });
-  if (!c.env.FILES) return json(c, 503, { error: "uploads_not_configured" });
-  const f = await new FileStore(new D1Driver(c.env.FILES)).get(key, sess.partyId, id);
+  const f = await getScreenshot(c.env, key, sess.partyId, id);
+  if (f === "not_configured") return json(c, 503, { error: "uploads_not_configured" });
   if (!f) return json(c, 404, { error: "not_found" });
+  if ("deleted" in f) return json(c, 410, { error: "screenshot_deleted", message: f.deleted });
   return new Response(f.bytes, {
     headers: { "content-type": f.type, "cache-control": "no-store, private", "content-disposition": "inline" },
   });
@@ -139,6 +140,26 @@ ticketRoutes.post("/reject", requireAuth(MANAGERS), async (c) => {
   return json(c, 200, { results });
 });
 
+/**
+ * "Reject every pending request older than N hours" (owner decision: pending
+ * requests are only cleaned up by hand). One bounded batch per call; the page
+ * repeats the call while `remaining` > 0. The reason is shown to the guests.
+ */
+ticketRoutes.post("/reject-stale", requireAuth(MANAGERS), async (c) => {
+  const b = await readJson(c);
+  const hours = b?.hours;
+  const reason = typeof b?.reason === "string" ? b.reason.trim().slice(0, 300) : "";
+  if (typeof hours !== "number" || !Number.isInteger(hours) || hours < 1 || hours > 720 || !reason) {
+    return json(c, 400, { error: "invalid_request", hours: "1..720", reason: "required" });
+  }
+  const over = await chargeStaff(c, "reject_stale", 1, MANAGERS);
+  if (over) return over;
+  const { sess, actor, now } = sessOf(c);
+  const r = await new GuestDb(c.var.db.driver).rejectStale(sess, now - hours * 3600_000, reason, MAX_BULK, now, actor, newId());
+  await flushChangeLog(c.var.db, c.var.ledger, now, r.ids);
+  return json(c, 200, { rejected: r.ids.length, remaining: r.remaining });
+});
+
 /** "Send QR" for one or many approved tickets: release + their emails in one batch. */
 ticketRoutes.post("/release", requireAuth(MANAGERS), async (c) => {
   const ids = ticketIds((await readJson(c))?.ids);
@@ -154,7 +175,7 @@ ticketRoutes.post("/release", requireAuth(MANAGERS), async (c) => {
     const link = await signLink(env, { partyId: sess.partyId, ticketId: t.id, version: t.link_version });
     emails.push(releasedEmail({
       origin: c.env.PUBLIC_ORIGIN, partyId: sess.partyId, partyName: t.party_name, ticketId: t.id, to: t.guest_email,
-      guestName: t.guest_name, link, now, actor,
+      guestName: t.guest_name, people: t.people, link, now, actor,
     }));
   }
   const results = await gdb.release(sess, ids, emails, now, actor, newId());

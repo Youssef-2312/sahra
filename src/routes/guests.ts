@@ -8,7 +8,7 @@
 //  2. Parse and check the fields and the screenshot (size, type from its first bytes).
 //  3. Turnstile (siteverify). Missing secret -> 503; failure -> 403. No write before this.
 //  4. One read: the party, its form, places held, and whether this sign-up exists (a retry).
-//  5. Screenshot into FILES (separate database), under an id derived from the
+//  5. Screenshot into the first files database under 70% full (src/storage/), under an id derived from the
 //     sign-up token, so a retry rewrites the same row (a no-op).
 //  6. One main-database batch: insert the pending ticket only if the party has room
 //     (src/guests/db.ts), audit, read back.
@@ -20,7 +20,7 @@ import { flushChangeLog } from "../changelog";
 import { json, readJson, type AppEnv, type Ctx } from "../context";
 import { D1Driver } from "../db/driver";
 import { GuestDb } from "../guests/db";
-import { linkEmail } from "../guests/emails";
+import { groupNote, linkEmail } from "../guests/emails";
 import { checkAnswers, storedForm } from "../guests/form";
 import { linkPath, signLink, verifyLink } from "../guests/link";
 import { turnstileConfigured, verifyTurnstile } from "../guests/turnstile";
@@ -30,7 +30,7 @@ import { chargeGuest } from "../limits";
 import { PartyDb } from "../party/db";
 import { visiblePartyDetails } from "../party/details";
 import { signQr } from "../qr";
-import { FileStore, MAX_FILE_BYTES, sniffImage } from "../storage";
+import { FileStore, MAX_FILE_BYTES, sniffImage, uploadTarget, type FilesCapacity } from "../storage";
 
 export const guestRoutes = new Hono<AppEnv>();
 
@@ -69,6 +69,8 @@ async function signupIds(partyId: string, token: string) {
   return { ticketId: base32(h.subarray(0, 10), 16), fileId: n + 1 };
 }
 
+const shotsOk = (cap: FilesCapacity) => cap.state === "ok";
+
 function turnstileAnswer(c: Ctx, r: "failed" | "not_configured" | "unavailable") {
   if (r === "not_configured") return json(c, 503, { error: "bot_check_not_configured" });
   if (r === "unavailable") return json(c, 503, { error: "bot_check_unavailable", retry: true });
@@ -88,7 +90,7 @@ guestRoutes.get("/parties/:party", async (c) => {
     max_people_per_ticket: p.max_people_per_ticket,
     places_left: Math.max(0, p.capacity - p.held),
     full: p.held >= p.capacity,
-    uploads: !!c.env.FILES,
+    uploads: shotsOk(await uploadTarget(c.env, c.var.deps.now())),
     turnstile_site_key: turnstileConfigured(c.env) ? c.env.TURNSTILE_SITE_KEY : null,
   });
 });
@@ -167,13 +169,20 @@ guestRoutes.post("/parties/:party/signup", async (c) => {
   if (pf.screenshot === "none" && shot) return json(c, 400, { error: "screenshot_not_wanted" });
   // Early answer when already full (the insert below re-checks in the same statement).
   if (party.held + people > party.capacity) return json(c, 409, { error: "full" });
+  // Every files database past 70% (or unreadable): no new screenshots (fail closed; health alerts the owner).
+  const target = shot ? await uploadTarget(c.env, now) : null;
+  if (target && target.state !== "ok") {
+    return json(c, 503, target.state === "full"
+      ? { error: "uploads_full", message: "Screenshot uploads are full for now. Please try again later." }
+      : { error: "uploads_not_configured" });
+  }
   // Per-party daily cap (src/limits/); a retry of a stored sign-up is not counted.
   const over = await chargeGuest(c, partyId, "signup");
   if (over) return over;
 
   let screenshotKey: string | null = null;
   if (shot) {
-    screenshotKey = await new FileStore(new D1Driver(c.env.FILES!)).put({
+    screenshotKey = await FileStore.for(c.env, target!.writable!)!.put({
       id: fileId, partyId, ticketId, type: shot.type, bytes: shot.bytes, now,
     });
   }
@@ -247,6 +256,7 @@ guestRoutes.get("/ticket", async (c) => {
       status: released ? "released" : t.status,
       guest_name: t.guest_name,
       people: t.people,
+      group_note: groupNote(t.people),
       reject_reason: t.status === "rejected" ? t.reject_reason : null,
       on_hold: t.hold_at != null,
       used: t.used_at != null,

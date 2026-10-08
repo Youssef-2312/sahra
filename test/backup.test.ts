@@ -3,6 +3,7 @@
 // a full export -> restore into fresh databases -> identical rows and identical
 // screenshot bytes, checked again by the recovery engine (verify / replay).
 import { applyD1Migrations, env } from "cloudflare:test";
+import { MAX_FILE_BYTES } from "../src/storage";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { canonical, signedHeaders, SIG_HEADER, TIME_HEADER } from "../src/backup/auth";
 import { EXCLUDED, EXPORTED, INTERNAL_TABLE, PAGE_MAX, schedule, tablesFor } from "../src/backup/export";
@@ -22,11 +23,12 @@ afterEach(() => vi.restoreAllMocks());
 
 const parsed = (evt: string) => logs.filter((l) => l.startsWith(`{"evt":"${evt}"`)).map((l) => JSON.parse(l) as Record<string, number | string>);
 
-const BIG = 1_500_000;
+// The largest screenshot the server accepts.
+const BIG = MAX_FILE_BYTES;
 let bigShot: Uint8Array;
 let h: Harness;
 
-/** Tickets, an admission, guest sign-ups with screenshots (one of 1.5 MB), an approval, a release, a cancel with its intent. */
+/** Tickets, an admission, guest sign-ups with screenshots (one of the maximum size), an approval, a release, a cancel with its intent. */
 async function world() {
   const p = await openParty(h);
   const door = await seedDoor(p.party, h.clock);

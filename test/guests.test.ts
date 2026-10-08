@@ -56,7 +56,7 @@ describe("guest sign-up", () => {
     const t = await ticket(s.body.ticket_id!);
     expect(t).toMatchObject({ status: "pending", people: 2, guest_name: "Laila Hassan", guest_email: "laila@example.com",
       answers: JSON.stringify({ insta: "@laila" }), last_action: "ticket_requested", rev: 1, logged_rev: 1 });
-    expect(t!.screenshot_key).toMatch(/^1:\d+$/);
+    expect(t!.screenshot_key).toMatch(/^f1:\d+$/);
     const f = await env.FILES!.prepare("SELECT party_id, ticket_id, content_type, size FROM files WHERE ticket_id = ?").bind(t!.id).first();
     expect(f).toEqual({ party_id: party, ticket_id: t!.id, content_type: "image/png", size: PNG.length });
     expect(await env.LEDGER.prepare("SELECT action FROM change_log WHERE event_id = ?").bind(`ticket:${t!.id}:1`).first("action")).toBe("ticket_requested");

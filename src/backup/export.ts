@@ -57,6 +57,7 @@ export const EXCLUDED: readonly { db: BackupDb; table: string; reason: string }[
   { db: "main", table: "d1_migrations", reason: "recreated by applying migrations to the fresh database; the names are in the manifest" },
   { db: "ledger", table: "d1_migrations", reason: "same" },
   { db: "files", table: "d1_migrations", reason: "same" },
+  { db: "files", table: "file_tombstones", reason: "which screenshots the retention purge emptied (src/storage/): a restore brings their bytes back from Drive, and the next daily purge empties them again" },
 ];
 
 /** D1's and SQLite's own tables, never ours. */

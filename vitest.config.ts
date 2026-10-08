@@ -40,7 +40,7 @@ export default defineConfig(async () => {
           },
           // Test-only: the real files databases (sahra-files-N) do not exist yet. RESTORE_*:
           // fresh databases the backup tests restore into (src/backup/restore.ts).
-          d1Databases: { FILES: "test-files", RESTORE_MAIN: "test-restore-main", RESTORE_LEDGER: "test-restore-ledger", RESTORE_FILES: "test-restore-files" },
+          d1Databases: { FILES: "test-files", FILES_2: "test-files-2", RESTORE_MAIN: "test-restore-main", RESTORE_LEDGER: "test-restore-ledger", RESTORE_FILES: "test-restore-files" },
           // Generous limits for the functional tests; RL_TEST checks limiting itself.
           ratelimits: {
             RL_AUTH: { namespace_id: "91001", simple: { limit: 100000, period: 60 } },
