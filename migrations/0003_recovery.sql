@@ -6,3 +6,8 @@
 -- Additive only: existing rows get NULL (not on hold).
 ALTER TABLE tickets ADD COLUMN hold_at INTEGER;
 ALTER TABLE tickets ADD COLUMN hold_reason TEXT;
+
+-- A staff member on hold is also disabled (disabled_at), so every existing check
+-- refuses them; hold_at marks it as a recovery hold that an owner may release.
+ALTER TABLE staff ADD COLUMN hold_at INTEGER;
+ALTER TABLE staff ADD COLUMN hold_reason TEXT;
