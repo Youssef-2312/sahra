@@ -229,3 +229,15 @@ coordinator's session. Status: agreed, rejected or open.
 - Effort: medium
 - Free-tier cost: small; a few more fields, one extra email only when an email is changed
 - Rule conflicts: the reference must never work as a key to open a ticket (the private link stays the only access). Fail closed: if the link is reissued, the old link and QR stop working. No emojis.
+
+## 16. Organiser support contact: required phone or WhatsApp number
+
+- Status: agreed
+- Owner's words: "A phone or WhatsApp number. required"
+- Each party must have a support phone or WhatsApp number (required before the party can open registration). Optional extras: an email and a short availability line (for example "Available 6pm to midnight on party day").
+- Shown on: the sign-up page (next to the payment instructions and refund policy), the confirmation page and email, the guest ticket page, and the door scanner screen (so staff can call the organiser during a problem).
+- Privacy note for the coordinator: the number is public to anyone who opens the party page, so the organiser should be told that when they enter it (it is their own choice of number; it should not be a personal number they want to keep private). Not part of the hidden-address rules.
+- Needs: new party field(s) with basic format checks; show them in the four places above; make "support number set" a condition for opening registration. Wording must not suggest Sahra itself provides support.
+- Effort: small
+- Free-tier cost: none
+- Rule conflicts: none
