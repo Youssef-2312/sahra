@@ -383,3 +383,6 @@ coordinator's session. Status: agreed, rejected or open.
 - Needs from the owner: Nova's Instagram link, Nova's website link, and Nova's logo file (PNG or SVG, ideally a version that works on a dark background).
 - Needs (build): one shared footer used on every public page; the logo stored in the project as a static file (small size). Links to Instagram and Nova open in a new tab and load nothing from those sites until tapped. No embedded Instagram feed or widget (extra weight, tracking, outside dependency).
 - Effort: small. Free-tier cost: none (static). Rule conflicts: none; icons are drawn shapes, not emojis.
+- Owner supplied Nova's website: https://bynova.vercel.app/ (Nova, a web design studio). The page lists Nova's Instagram as https://www.instagram.com/nova.dev26/ (read from the page; owner to confirm it is the right account). The logo on that site is a file called favicon.svg, shown beside the text "Nova"; the owner should hand the logo file to the coordinator (a copy stored in the Sahra project, not loaded from Nova's site at run time).
+- Still needed from the owner: confirm the Instagram link, supply the logo file, and say yes or no to the Privacy and Terms pages.
+- Note: Nova's site is a separate project on Vercel and is only linked to from the footer. Sahra reads nothing from it and touches nothing on it (and nothing of Halloween-26).
