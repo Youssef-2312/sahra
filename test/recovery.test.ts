@@ -17,8 +17,10 @@ import { flushAll, newestByEntity, ledgerEntries, replay, verify } from "../src/
 import { recover } from "../src/recovery/procedure";
 import { api, FlakyLedger, harness, openParty, scan, seedDoor, seedOwner, seedSession, testTickets, type Harness } from "./helpers";
 
-const TABLES = ["parties", "staff", "invites", "sessions", "audit", "tickets", "scans", "outbox"];
-const DELETE_ORDER = ["sessions", "scans", "outbox", "audit", "tickets", "invites", "staff", "parties"];
+const TABLES = ["platform_admins", "organisers", "organiser_invites", "platform_sessions",
+  "parties", "staff", "invites", "sessions", "audit", "tickets", "scans", "outbox"];
+const DELETE_ORDER = ["sessions", "platform_sessions", "scans", "outbox", "audit", "tickets", "invites", "staff", "parties",
+  "organiser_invites", "organisers", "platform_admins"];
 
 async function snapshot() {
   const out: Record<string, Record<string, unknown>[]> = {};
@@ -276,6 +278,42 @@ describe("main database cannot be checked: unconfirmed changes are held until an
     expect(report.mainChecked).toBe(false);
     expect(report.holds.map((x) => x.id)).toContain(id);
     expect(await env.DB.prepare("SELECT hold_at IS NOT NULL FROM tickets WHERE id = ?").bind(id).first()).toEqual({ "hold_at IS NOT NULL": 1 });
+  });
+});
+
+describe("site-level records (site owners, organisers)", () => {
+  it("site owner and organiser sessions end, unused organiser invitations are revoked, and an unconfirmed switch-off is held", async () => {
+    const w = await world();
+    const { h, party, ledger } = w;
+    const now = h.clock.now();
+    const org = newId(), inv = newId(), used = newId();
+    await env.DB.batch([
+      env.DB.prepare("INSERT INTO organisers (id, name, email, google_sub, created_at) VALUES (?, 'Org', 'org@gmail.com', ?, ?)").bind(org, `sub-${org}`, now),
+      env.DB.prepare("INSERT INTO organiser_invites (id, organiser_id, created_by, created_at, expires_at) VALUES (?, ?, 'x', ?, ?)").bind(inv, org, now, now + 3600_000),
+      env.DB.prepare("INSERT INTO organiser_invites (id, organiser_id, created_by, created_at, expires_at, used_at) VALUES (?, ?, 'x', ?, ?, ?)").bind(used, org, now, now + 3600_000, now),
+      env.DB.prepare("INSERT INTO platform_sessions (id_hash, google_sub, created_at, expires_at) VALUES (?, ?, ?, ?)").bind(await sha256hex(newToken()), `sub-${org}`, now, now + 3600_000),
+    ]);
+    await complete();
+    const snap = await snapshot();
+    // A party switch-off whose main batch never ran (or whose record was lost).
+    await recordIntent(ledger, newId(), party, "party_disabled", [{ entity: "party", id: party }], now);
+    const { d, state } = (() => {
+      const base = mainDriver();
+      const st = { up: false };
+      const drv: SqlDriver = { usage: base.usage, all: (q) => (st.up ? base.all(q) : Promise.reject(new Error("D1_ERROR: unreachable"))),
+        batch: (qs) => (st.up ? base.batch(qs) : Promise.reject(new Error("D1_ERROR: unreachable"))) };
+      return { d: drv, state: st };
+    })();
+    const report = await recover({ main: d, ledger: ledgerDriver(), now: h.clock.now, restore: async () => { await restore(snap); state.up = true; } });
+    expect(report.finalOk).toBe(true);
+    expect(mine(report.holds, party)).toEqual([expect.objectContaining({ entity: "party", id: party })]);
+    expect(await env.DB.prepare("SELECT disabled_at IS NOT NULL AS off FROM parties WHERE id = ?").bind(party).first("off")).toBe(1);
+    expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM platform_sessions WHERE revoked_at IS NULL").first("n")).toBe(0);
+    const invites = (await env.DB.prepare("SELECT id, revoked_at IS NOT NULL AS revoked FROM organiser_invites WHERE organiser_id = ? ORDER BY id").bind(org).all()).results;
+    expect(Object.fromEntries(invites.map((r) => [r.id, r.revoked]))).toEqual({ [inv]: 1, [used]: 0 });
+    // Every site-level change is in the change log under "_platform".
+    const logged = await env.LEDGER.prepare("SELECT COUNT(*) AS n FROM change_log WHERE party_id = '_platform' AND entity = 'organiser_invite' AND entity_id = ?").bind(inv).first("n");
+    expect(logged).toBe(2);
   });
 });
 

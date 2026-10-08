@@ -27,15 +27,25 @@
 import type { SqlDriver } from "../db/driver";
 import { sql, raw, type Sql } from "../db/sql";
 
-export type Entity = "party" | "staff" | "invite" | "ticket";
+export type Entity = "party" | "staff" | "invite" | "ticket" | "platform_admin" | "organiser" | "organiser_invite";
 
 /** Logged tables, parents before children (foreign keys). */
 export const ENTITY_TABLES: readonly { entity: Entity; table: string }[] = [
+  { entity: "platform_admin", table: "platform_admins" },
+  { entity: "organiser", table: "organisers" },
+  { entity: "organiser_invite", table: "organiser_invites" },
   { entity: "party", table: "parties" },
   { entity: "staff", table: "staff" },
   { entity: "invite", table: "invites" },
   { entity: "ticket", table: "tickets" },
 ];
+
+/** Site-level rows (site owners, organisers) belong to no party; the change log files them under this id. */
+export const PLATFORM = "_platform";
+const PLATFORM_ENTITIES: ReadonlySet<Entity> = new Set(["platform_admin", "organiser", "organiser_invite"]);
+
+/** Entities recovery can hold: tickets (not admitted), staff, parties, organisers and site owners (disabled). */
+const HOLDABLE: ReadonlySet<string> = new Set(["ticket", "staff", "party", "organiser", "platform_admin"]);
 
 type Row = Record<string, unknown>;
 
@@ -94,6 +104,7 @@ export function sameState(row: Row, state: Row): boolean {
 }
 
 function partyOf(entity: Entity, row: Row): string {
+  if (PLATFORM_ENTITIES.has(entity)) return PLATFORM;
   return String(entity === "party" ? row.id : row.party_id);
 }
 
@@ -212,7 +223,7 @@ export async function holdsFromIntents(ledger: SqlDriver): Promise<Hold[]> {
     const k = `${i.op_id}|${i.entity}|${i.entity_id}`;
     if (confirmed.has(k)) continue;
     const entity = String(i.entity) as Entity;
-    if (entity !== "ticket" && entity !== "staff") continue; // only these can be held
+    if (!HOLDABLE.has(entity)) continue;
     holds.set(`${entity}:${i.entity_id}`, {
       entity, id: String(i.entity_id), party_id: String(i.party_id), reason: `unconfirmed ${String(i.action)} (${String(i.op_id)})`,
     });
@@ -300,6 +311,12 @@ export async function applyHolds(main: SqlDriver, holds: Hold[], now: number, op
       writes.push(sql`UPDATE staff SET hold_at = ${now}, hold_reason = ${h.reason}, disabled_at = ${now}, rev = rev + 1, last_op = ${op},
           last_action = 'recovery_hold'
         WHERE id = ${h.id} AND hold_at IS NULL AND disabled_at IS NULL`);
+    } else if (h.entity === "party" || h.entity === "organiser" || h.entity === "platform_admin") {
+      // An unconfirmed switch-off: switched off until a site owner checks it
+      // (a party is turned back on from the site owner page; it stays paused).
+      const table = raw(h.entity === "party" ? "parties" : h.entity === "organiser" ? "organisers" : "platform_admins");
+      writes.push(sql`UPDATE ${table} SET disabled_at = ${now}, rev = rev + 1, last_op = ${op}, last_action = 'recovery_hold'
+        WHERE id = ${h.id} AND disabled_at IS NULL`);
     }
   }
   if (!writes.length) return 0;
@@ -309,24 +326,39 @@ export async function applyHolds(main: SqlDriver, holds: Hold[], now: number, op
   writes.push(sql`INSERT INTO audit (party_id, at, actor_staff_id, action, entity_type, entity_id, entity_rev, detail)
     SELECT party_id, ${now}, NULL, 'recovery_hold', 'staff', id, rev, hold_reason FROM staff WHERE last_op = ${op}
       AND NOT EXISTS (SELECT 1 FROM audit a WHERE a.entity_type = 'staff' AND a.entity_id = staff.id AND a.entity_rev = staff.rev)`);
+  for (const [entity, table, partyCol] of [["party", "parties", "id"], ["organiser", "organisers", `'${PLATFORM}'`], ["platform_admin", "platform_admins", `'${PLATFORM}'`]] as const) {
+    writes.push(sql`INSERT INTO audit (party_id, at, actor_staff_id, action, entity_type, entity_id, entity_rev, detail)
+      SELECT ${raw(partyCol)}, ${now}, NULL, 'recovery_hold', ${entity}, id, rev, 'unconfirmed switch-off during a recovery' FROM ${raw(table)} WHERE last_op = ${op}
+        AND NOT EXISTS (SELECT 1 FROM audit a WHERE a.entity_type = ${entity} AND a.entity_id = ${raw(table)}.id AND a.entity_rev = ${raw(table)}.rev)`);
+  }
   for (let i = 0; i < writes.length; i += 50) await main.batch(writes.slice(i, i + 50));
-  const n = await main.all<{ n: number }>(sql`SELECT (SELECT COUNT(*) FROM tickets WHERE last_op = ${op}) + (SELECT COUNT(*) FROM staff WHERE last_op = ${op}) AS n`);
+  const n = await main.all<{ n: number }>(sql`SELECT (SELECT COUNT(*) FROM tickets WHERE last_op = ${op}) + (SELECT COUNT(*) FROM staff WHERE last_op = ${op})
+    + (SELECT COUNT(*) FROM parties WHERE last_op = ${op} AND last_action = 'recovery_hold') + (SELECT COUNT(*) FROM organisers WHERE last_op = ${op})
+    + (SELECT COUNT(*) FROM platform_admins WHERE last_op = ${op}) AS n`);
   return Number(n.results[0]?.n ?? 0);
 }
 
 /** Every session ends and every unused invitation is revoked: everyone signs in again. */
 export async function revokeAccess(main: SqlDriver, now: number, op: string): Promise<{ sessions: number; invites: number }> {
   // Counted with reads: the script's driver does not report per-statement changes.
-  const active = Number((await main.all<{ n: number }>(sql`SELECT COUNT(*) AS n FROM sessions WHERE revoked_at IS NULL`)).results[0]?.n ?? 0);
+  const active = Number((await main.all<{ n: number }>(sql`SELECT (SELECT COUNT(*) FROM sessions WHERE revoked_at IS NULL)
+    + (SELECT COUNT(*) FROM platform_sessions WHERE revoked_at IS NULL) AS n`)).results[0]?.n ?? 0);
   await main.batch([
     sql`UPDATE sessions SET revoked_at = ${now} WHERE revoked_at IS NULL`,
+    sql`UPDATE platform_sessions SET revoked_at = ${now} WHERE revoked_at IS NULL`,
+    sql`UPDATE organiser_invites SET revoked_at = ${now}, rev = rev + 1, last_op = ${op}, last_action = 'invite_revoked'
+      WHERE used_at IS NULL AND revoked_at IS NULL`,
+    sql`INSERT INTO audit (party_id, at, actor_staff_id, action, entity_type, entity_id, entity_rev, detail)
+      SELECT ${PLATFORM}, ${now}, NULL, 'invite_revoked', 'organiser_invite', id, rev, 'controlled recovery' FROM organiser_invites WHERE last_op = ${op}
+        AND NOT EXISTS (SELECT 1 FROM audit a WHERE a.entity_type = 'organiser_invite' AND a.entity_id = organiser_invites.id AND a.entity_rev = organiser_invites.rev)`,
     sql`UPDATE invites SET revoked_at = ${now}, revoked_by = NULL, rev = rev + 1, last_op = ${op}, last_action = 'invite_revoked'
       WHERE used_at IS NULL AND revoked_at IS NULL`,
     sql`INSERT INTO audit (party_id, at, actor_staff_id, action, entity_type, entity_id, entity_rev, detail)
       SELECT party_id, ${now}, NULL, 'invite_revoked', 'invite', id, rev, 'controlled recovery' FROM invites WHERE last_op = ${op}
         AND NOT EXISTS (SELECT 1 FROM audit a WHERE a.entity_type = 'invite' AND a.entity_id = invites.id AND a.entity_rev = invites.rev)`,
   ]);
-  const invites = Number((await main.all<{ n: number }>(sql`SELECT COUNT(*) AS n FROM invites WHERE last_op = ${op} AND revoked_at = ${now}`)).results[0]?.n ?? 0);
+  const invites = Number((await main.all<{ n: number }>(sql`SELECT (SELECT COUNT(*) FROM invites WHERE last_op = ${op} AND revoked_at = ${now})
+    + (SELECT COUNT(*) FROM organiser_invites WHERE last_op = ${op} AND revoked_at = ${now}) AS n`)).results[0]?.n ?? 0);
   return { sessions: active, invites };
 }
 

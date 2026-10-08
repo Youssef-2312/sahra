@@ -46,7 +46,7 @@ export async function recover(o: {
     mismatchesBefore = v.mismatches.length;
     mainChecked = v.ok;
     for (const m of v.mismatches) {
-      if (m.entity === "ticket" || m.entity === "staff") holds.set(`${m.entity}:${m.id}`, { ...m, reason: `change log ${m.problem} before restore` });
+      if (["ticket", "staff", "party", "organiser", "platform_admin"].includes(m.entity)) holds.set(`${m.entity}:${m.id}`, { ...m, reason: `change log ${m.problem} before restore` });
     }
     log(`2. main database reachable: ${flushedBefore} change(s) copied to the ledger; ${v.rows} rows checked, ${v.mismatches.length} mismatch(es)`);
   } catch (e) {
