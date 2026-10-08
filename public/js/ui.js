@@ -150,7 +150,8 @@ var Sahra = (function () {
     });
     label();
     document.body.insertBefore(el("header", { class: "topbar" }, account, sw), document.body.firstChild);
-    document.body.appendChild(foot);
+    // The door scanner shows only the camera and the result (brainstorm idea 12): no footer there.
+    if (!opts || opts.footer !== false) document.body.appendChild(foot);
     if (renderFn) renderFn();
   }
 

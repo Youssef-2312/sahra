@@ -1,0 +1,3 @@
+jsQR 1.4.0 (https://github.com/cozmo/jsQR), dist/jsQR.js copied unchanged from the npm
+package, Apache License 2.0 (see LICENSE). Loaded only on phones whose browser
+has no built-in QR reader (BarcodeDetector).

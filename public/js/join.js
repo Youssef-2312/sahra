@@ -32,7 +32,8 @@
     if (r.status === 200) {
       Sahra.store.del("sahra_join");
       msg.textContent = "Joined as " + j.staff_name + ". You can now use the scanner.";
-      setTimeout(function () { location.href = "/dashboard"; }, 800);
+      // Door staff go straight to the scanner (Phase 5).
+      setTimeout(function () { location.href = "/scan.html"; }, 800);
       return;
     }
     if (r.status === 503 && j.retry && n < 5) return setTimeout(function () { attempt(n + 1); }, 1500);
