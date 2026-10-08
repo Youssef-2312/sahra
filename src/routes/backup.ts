@@ -171,8 +171,13 @@ backupRoutes.post("/done", async (c) => {
   if (d.getUTCMonth() !== +m[3]! - 1 || d.getUTCDate() !== +m[4]! || +m[5]! > 23 || +m[6]! > 59) return json(c, 400, { error: "invalid_request" });
   if (at > now + 5 * 60_000 || at < now - 3 * 86_400_000) return json(c, 400, { error: "invalid_time" });
   const note = `${kind} ${b.folder}: ${b.rows} rows, ${b.files} screenshots (${b.bytes} bytes)`;
-  const r = await c.var.db.driver.all(sql`UPDATE health_state SET last_backup_at = ${at}, last_backup_note = ${note}
-    WHERE id = 'main' AND (last_backup_at IS NULL OR last_backup_at <= ${at})`);
+  // Only a full (nightly) backup moves last_backup_at, so the health check's
+  // "backup too old" alert cannot be kept quiet by hourly runs while nightly ones
+  // fail. An hourly report only updates the note.
+  const r = kind === "nightly"
+    ? await c.var.db.driver.all(sql`UPDATE health_state SET last_backup_at = ${at}, last_backup_note = ${note}
+        WHERE id = 'main' AND (last_backup_at IS NULL OR last_backup_at <= ${at})`)
+    : await c.var.db.driver.all(sql`UPDATE health_state SET last_backup_note = ${note} WHERE id = 'main'`);
   logUsage(c, null);
-  return json(c, 200, { recorded: r.meta.changes === 1, last_backup_at: at });
+  return json(c, 200, { recorded: r.meta.changes === 1, last_backup_at: kind === "nightly" ? at : null });
 });

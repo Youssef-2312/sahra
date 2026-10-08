@@ -424,10 +424,12 @@ describe("POST /api/backup/done", () => {
     const req = parsed("req").at(-1)!;
     expect(req.rows_written).toBe(1);
     expect(req.ledger_rows_written).toBe(0);
-    // An hourly (ledger) backup later moves it forward; an older report never moves it back.
+    // An hourly (ledger) backup only updates the note: last_backup_at tracks FULL backups,
+    // so hourly runs cannot keep the "backup too old" alert quiet. An older report never moves it back.
     const later = folderAt(h.clock.now() - 5 * 60_000, "sahra-ledger-");
     expect((await backupPost(h, "/api/backup/done", good({ kind: "hourly", folder: later }))).status).toBe(200);
     expect((await state())!.last_backup_note).toMatch(/^hourly sahra-ledger-/);
+    expect((await state())!.last_backup_at).toBe(at);
     const older = (await (await backupPost(h, "/api/backup/done", good({ folder: folderAt(h.clock.now() - 3600_000) }))).json()) as { recorded: boolean };
     expect(older.recorded).toBe(false);
     expect((await state())!.last_backup_note).toMatch(/^hourly sahra-ledger-/);
