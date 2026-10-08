@@ -125,13 +125,13 @@ coordinator's session. Status: agreed, rejected or open.
 
 ## 9. Organiser adds cash guests, one by one or by spreadsheet import
 
-- Status: agreed (open point: file format, see below)
+- Status: agreed
 - Owner's words: "yes orgainsers adds a guest who paid cash or imports an excel sheet with their email and writes that its paid in cash and that the approvals should be done and the qrs should be sent"
 - One guest: the organiser types name, email, ticket type and people. No payment screenshot needed. The ticket is approved at once, marked "paid in cash", and the QR is sent.
 - Many guests: the organiser imports a spreadsheet with name and email (and ticket type if more than one). One setting for the whole file: "paid in cash", approve all, send QRs. A preview screen shows every row, flags problems (bad email, duplicates, over capacity, over the max tickets per email) and nothing is created until the organiser confirms.
 - Dashboard: a separate "Cash" total beside "Money expected", and a filter for cash tickets in the guest list and export.
 - Needs: add-guest form and import screen in the organiser dashboard; a payment-method flag on the ticket ("cash" vs "screenshot"); the server must apply the same rules as a normal sign-up and approval (hard capacity inside the statement, max per email, audit with the organiser's name, change log and intents). Email goes through the normal outbox.
-- File format (recommend): CSV, or paste rows copied from Excel, read in the browser. A real .xlsx file needs a heavy reading library on a phone; the organiser can use "Save as CSV" in Excel. Owner has not decided.
+- File format (recommend): CSV, or paste rows copied from Excel, read in the browser. A real .xlsx file needs a heavy reading library on a phone; the organiser can use "Save as CSV" in Excel. Owner decision: "csv". Provide a downloadable CSV template (name, email, ticket type, people) so organisers know the columns.
 - Effort: medium to large
 - Free-tier cost: about 4 to 5 rows written per guest (ticket, change log, outbox, audit), so 300 guests is roughly 1,500 rows, fine. Large imports should be done in chunks so no single request goes over 50 queries or 10 ms CPU. The bigger limit is email: QR emails leave a few per minute through the outbox and count against the Gmail daily cap, so a big import may take a while to finish sending. The dashboard should show "x of y QRs sent".
 - Rule conflicts: none, if capacity and QR issuing use the same code as normal tickets. An imported guest must never get a QR that skips the capacity check. Emails contain no emojis.
