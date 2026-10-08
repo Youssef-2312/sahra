@@ -5,7 +5,7 @@
 import { env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { newId, newToken } from "../src/lib/crypto";
-import { googleLogin, harness, ORIGIN, seedParty, type Harness } from "./helpers";
+import { googleLogin, harness, ORIGIN, platformLogin, seedParty, type Harness } from "./helpers";
 
 let logs: string[] = [];
 beforeEach(() => {
@@ -21,6 +21,7 @@ function lastReq() {
 
 const JSON_H = { origin: ORIGIN, "sec-fetch-site": "same-origin", "content-type": "application/json" };
 const junkCookie = { "__Host-sahra_s": newToken() };
+const junkPlatform = { "__Host-sahra_p": newToken() };
 const id = newId();
 
 type Case = [label: string, method: string, path: string, run: (h: Harness) => Promise<Response>];
@@ -54,6 +55,23 @@ const cases: Case[] = [
   ["test door invite, junk session", "POST", "/api/test/door-invite", (h) => h.req("/api/test/door-invite", { method: "POST", headers: JSON_H, cookies: junkCookie, body: "{}" })],
   ["test revoke door access, junk session", "POST", "/api/test/revoke-door-access", (h) => h.req("/api/test/revoke-door-access", { method: "POST", headers: JSON_H, cookies: junkCookie, body: "{}" })],
   ["test ledger check, junk session", "GET", "/api/test/ledger-check", (h) => h.req("/api/test/ledger-check", { cookies: junkCookie })],
+  ["platform sign-in start, wrong origin", "POST", "/api/auth/platform/start", (h) => h.req("/api/auth/platform/start", { method: "POST", headers: { origin: "https://evil.example" } })],
+  ["platform sign-in start", "POST", "/api/auth/platform/start", (h) => h.req("/api/auth/platform/start", { method: "POST", headers: { origin: ORIGIN } })],
+  ["platform callback, verified Google account that is not admin or organiser", "GET", "/api/auth/google/callback", async (h) => { h.google.identity = { sub: `stranger-${newId()}`, email: "stranger2@gmail.com" }; return (await platformLogin(h)).res; }],
+  ["platform callback, not Gmail/Workspace", "GET", "/api/auth/google/callback", async (h) => { h.google.identity = { sub: `stranger-${newId()}`, email: "x@example.org" }; return (await platformLogin(h)).res; }],
+  ["platform me, no session", "GET", "/api/platform/me", (h) => h.req("/api/platform/me")],
+  ["platform me, junk session", "GET", "/api/platform/me", (h) => h.req("/api/platform/me", { cookies: junkPlatform })],
+  ["platform logout, junk session", "POST", "/api/platform/logout", (h) => h.req("/api/platform/logout", { method: "POST", headers: JSON_H, cookies: junkPlatform })],
+  ["organiser list, junk session", "GET", "/api/platform/organisers", (h) => h.req("/api/platform/organisers", { cookies: junkPlatform })],
+  ["organiser invite, junk session", "POST", "/api/platform/organisers", (h) => h.req("/api/platform/organisers", { method: "POST", headers: JSON_H, cookies: junkPlatform, body: JSON.stringify({ organiser_id: newId(), invite_id: newId(), name: "x", email: "x@gmail.com" }) })],
+  ["organiser invite, staff cookie", "POST", "/api/platform/organisers", (h) => h.req("/api/platform/organisers", { method: "POST", headers: JSON_H, cookies: junkCookie, body: JSON.stringify({ organiser_id: newId(), invite_id: newId(), name: "x", email: "x@gmail.com" }) })],
+  ["organiser disable, junk session", "POST", "/api/platform/organisers/:id/disable", (h) => h.req(`/api/platform/organisers/${id}/disable`, { method: "POST", headers: JSON_H, cookies: junkPlatform })],
+  ["party counts, junk session", "GET", "/api/platform/parties", (h) => h.req("/api/platform/parties", { cookies: junkPlatform })],
+  ["party disable, junk session", "POST", "/api/platform/parties/:id/disable", (h) => h.req("/api/platform/parties/some-party/disable", { method: "POST", headers: JSON_H, cookies: junkPlatform })],
+  ["party disable, no session", "POST", "/api/platform/parties/:id/disable", (h) => h.req("/api/platform/parties/some-party/disable", { method: "POST", headers: JSON_H })],
+  ["my parties, junk session", "GET", "/api/platform/my-parties", (h) => h.req("/api/platform/my-parties", { cookies: junkPlatform })],
+  ["create party, junk session", "POST", "/api/platform/parties", (h) => h.req("/api/platform/parties", { method: "POST", headers: JSON_H, cookies: junkPlatform, body: JSON.stringify({ id: "new-party", name: "x", capacity: 10, staff_id: newId() }) })],
+  ["create party, no session", "POST", "/api/platform/parties", (h) => h.req("/api/platform/parties", { method: "POST", headers: JSON_H, body: JSON.stringify({ id: "new-party", name: "x", capacity: 10, staff_id: newId() }) })],
   ["unknown API path", "GET", "/api/*", (h) => h.req("/api/nothing-here")],
 ];
 
@@ -85,9 +103,10 @@ describe("endpoints without a session write nothing", () => {
 });
 
 async function counts() {
-  const tables = ["parties", "staff", "invites", "sessions", "audit", "tickets", "scans"];
+  const tables = ["parties", "staff", "invites", "sessions", "audit", "tickets", "scans",
+    "platform_admins", "organisers", "organiser_invites", "platform_sessions"];
   const out: Record<string, unknown> = {};
   for (const t of tables) out[t] = await env.DB.prepare(`SELECT COUNT(*) AS n, COALESCE(SUM(rev), 0) AS r FROM ${t}`).first().catch(async () => env.DB.prepare(`SELECT COUNT(*) AS n FROM ${t}`).first());
-  for (const t of ["change_log", "party_control"]) out[t] = await env.LEDGER.prepare(`SELECT COUNT(*) AS n FROM ${t}`).first("n");
+  for (const t of ["change_log", "party_control", "intents"]) out[t] = await env.LEDGER.prepare(`SELECT COUNT(*) AS n FROM ${t}`).first("n");
   return out;
 }
