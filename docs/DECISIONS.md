@@ -1621,17 +1621,27 @@ admission open and sessions that only that program held.)
   row, so 4,000 admissions are about 12,000 rows written (12% of the free daily
   100,000) and about 4,300 requests (4% of 100,000). Tickets are created over the
   days before, not on the night.
-- **Seen in passing:** every request that writes something flushes the change
-  log, which today reads the whole parties, staff and invites tables (about 480
-  rows per join on staging after many test parties). Production starts small; a
-  partial index per table (as done for ticket_types) removes it. Open, owner's
-  call.
+- **Seen in passing:** every request that writes something flushed the change
+  log by reading the whole parties, staff and invites tables (about 480 rows per
+  join on staging after many test parties). Fixed on the owner's request by
+  `migrations/0015_unlogged_indexes.sql` (below).
 
-**Vercel standby:** the owner decided to decide after this test. The test shows
-the owner's peak fits on Cloudflare Free with room to spare; a second system
+**Vercel standby: no (owner decision, 2026-10-08, after this test).** The
+owner's peak fits on Cloudflare Free with room to spare, and a second system
 could not share the single-redemption guarantee (it lives in one D1 statement)
-unless it used the same database, so a standby would be a "can't verify"
-fallback at best. Recommendation to the owner: no Vercel standby.
+unless it used the same database.
+
+**Change-log flush reads (owner request, migrations/0015_unlogged_indexes.sql).**
+A partial index `WHERE rev > logged_rev` on parties, staff, invites,
+platform_admins, organisers and organiser_invites (ticket_types has one from
+0014): a flush reads only the rows still pending. Measured locally: a party edit
+reads 21 rows, and still 21 after 30 more logged parties with their staff and
+invitations (109 without the indexes). Cost, measured: +1 row written per
+changed row of those tables (door invite 11 -> 13, join 7 -> 8, pause 3 -> 4,
+test party 15 -> 18, platform party create 10 -> 12, enable 3 -> 4). Tickets are
+not indexed this way on purpose: an admission bumps the ticket's rev without
+updating logged_rev, so it would cost every admission a row; an admission still
+writes 2 + 1 rows.
 
 ## Ticket types and registration rules (owner request, 2026-10-08)
 
@@ -1709,9 +1719,8 @@ index `tickets_party_email` (tickets without an email write nothing to it).
 **Change-log flush:** every flush asks each small table for rows with
 `rev > logged_rev`. For `ticket_types` a partial index holds only those rows, so a
 flush reads none of the logged types however many parties add them (tested:
-15 more types, same rows read). Parties, staff and invites are still read whole
-on each flush, as before; the same index would fix that (open question for the
-owner, as it adds one index row per change of those tables).
+15 more types, same rows read). Parties, staff and invites got the same index in
+migrations/0015 (see "Load test result on staging").
 
 **Rows written (measured locally):** a guest sign-up is now 8 rows (the new email
 index), 9 with a type (its index); approving a typed ticket 5. The limits comment

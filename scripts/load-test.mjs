@@ -90,13 +90,15 @@ const BURST = P.phase !== "steady";
 // ---------------------------------------------------------------- estimate
 
 // Rows per request [main read, main written, ledger read, ledger written], measured
-// locally (workerd + local D1, test/loadtest.test.ts "rows per request"). Reads of
-// requests that flush the change log grow with the parties/staff/invites tables
-// (Db.unlogged reads them whole); --staging-table-rows adds that per flush.
+// locally (workerd + local D1, test/loadtest.test.ts "rows per request"). Before
+// migrations/0015 a change-log flush read the parties/staff/invites tables whole;
+// since then it reads only the rows still pending (partial indexes, +1 row written
+// per changed row). --staging-table-rows is still added per flush, which keeps the
+// estimate on the safe side (and right for a database without 0015).
 const COST = {
-  join: [21, 7, 0, 1, true],
-  test_party: [34, 15, 0, 3, true],
-  door_invite: [24, 11, 0, 2, true],
+  join: [21, 8, 0, 1, true],
+  test_party: [34, 18, 0, 3, true],
+  door_invite: [24, 13, 0, 2, true],
   tickets_20: [153, 80, 0, 20, true],
   tickets_2: [70, 8, 0, 2, true],
   admission_get: [4, 0, 1, 0, false],
@@ -105,7 +107,7 @@ const COST = {
   scan_retry: [14, 0, 2, 0, false],
   scan_not_released: [13, 1, 1, 0, false],
   scan_wrong_party: [8, 0, 1, 0, false],
-  pause: [24, 3, 2, 2, true],
+  pause: [24, 4, 2, 2, true],
   logout: [4, 1, 0, 0, false],
 };
 const LIMITS = { written: 100_000, read: 5_000_000, requests: 100_000 };
@@ -159,7 +161,7 @@ function estimate(pl) {
   t.requests += P.parties * 3;
   t.main_read += P.parties * (scansAll + ticketsAll + 5 * pl.ticketsPerParty + 300 + P.tableRows);
   t.ledger_read += P.parties * 2 * changeLogAll;
-  t.main_written += P.parties * (5 + 3 * P.scanners);
+  t.main_written += P.parties * (6 + 3 * P.scanners);
   t.ledger_written += P.parties * (1 + P.scanners);
   t.main_read = Math.round(t.main_read * READ_MARGIN);
   t.ledger_read = Math.round(t.ledger_read * READ_MARGIN);

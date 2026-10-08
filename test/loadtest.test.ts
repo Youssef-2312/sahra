@@ -41,7 +41,7 @@ describe("POST /api/test/party (staging only)", () => {
     expect(r.status).toBe(200);
     const m = lastReq();
     // Rows per call, used by the load test's estimate (docs/DECISIONS.md, workstream H).
-    expect({ written: m.rows_written, ledger_written: m.ledger_rows_written }).toEqual({ written: 15, ledger_written: 3 });
+    expect({ written: m.rows_written, ledger_written: m.ledger_rows_written }).toEqual({ written: 18, ledger_written: 3 });
     const party = body.party_id!;
     expect(party).toMatch(/^lt-[0-9a-f]{16}$/);
     expect(body.admission).toBe("open");
@@ -211,8 +211,8 @@ describe("rows per request for the load test's estimate (local, D1 meta)", () =>
     const written = Object.fromEntries(Object.entries(out).map(([k, v]) => [k, [v[2], v[4]]]));
     expect(written).toEqual({
       tickets_20: [80, 20], tickets_1: [4, 1], scan_admit: [2, 1], scan_retry_same_id: [0, 0], scan_used: [1, 0],
-      scan_not_released: [1, 0], scan_wrong_party: [0, 0], door_invite: [11, 2], join: [7, 1], ledger_check: [0, 0],
-      admission_get: [0, 0], revoke_door_access: [5, 1], pause: [3, 2], logout: [1, 0],
+      scan_not_released: [1, 0], scan_wrong_party: [0, 0], door_invite: [13, 2], join: [8, 1], ledger_check: [0, 0],
+      admission_get: [0, 0], revoke_door_access: [6, 1], pause: [4, 2], logout: [1, 0],
     });
     expect(out.scan_admit).toEqual([1, 18, 2, 2, 1]);
   });

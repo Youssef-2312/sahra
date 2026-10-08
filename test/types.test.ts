@@ -125,6 +125,29 @@ describe("ticket types", () => {
     expect(await editReads("Two")).toBe(before);
   });
 
+  it("the flush does not read logged parties, staff or invites either (migrations/0015)", async () => {
+    const h = await harness();
+    const { os } = await guestParty(h);
+    const editReads = async (name: string) => {
+      logs = [];
+      expect((await h.req("/api/party/details", api(os, { name }))).status).toBe(200);
+      return (JSON.parse(logs.filter((x) => x.startsWith('{"evt":"req"')).at(-1)!) as { rows_read: number }).rows_read;
+    };
+    const before = await editReads("One");
+    // 30 more parties, each with a staff member and an invitation, all already logged.
+    const stmts: D1PreparedStatement[] = [];
+    for (let i = 0; i < 30; i++) {
+      const p = `x${newId().slice(0, 8)}`;
+      const st = newId();
+      stmts.push(env.DB.prepare("INSERT INTO parties (id, name, capacity, created_at, rev, logged_rev) VALUES (?, 'X', 10, 1, 1, 1)").bind(p));
+      stmts.push(env.DB.prepare("INSERT INTO staff (id, party_id, name, role, created_at, rev, logged_rev) VALUES (?, ?, 'S', 'door', 1, 1, 1)").bind(st, p));
+      stmts.push(env.DB.prepare("INSERT INTO invites (id, party_id, staff_id, kind, role, token_hash, created_at, expires_at, rev, logged_rev) VALUES (?, ?, ?, 'door', 'door', ?, 1, 2, 1, 1)")
+        .bind(newId(), p, st, newId()));
+    }
+    await env.DB.batch(stmts);
+    expect(await editReads("Two")).toBe(before);
+  });
+
   it("door staff cannot manage types", async () => {
     const h = await harness();
     const { party } = await guestParty(h);

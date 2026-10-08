@@ -557,10 +557,10 @@ describe("rows per request (measured locally)", () => {
     if (DUMP) throw new Error(`ROWS ${JSON.stringify(out)}`);
     // Numbers are recorded in docs/DECISIONS.md (Workstream B). Pin the write counts.
     const w = (k: string) => (out[k] as { rows_written: number }).rows_written;
-    expect(w("POST /api/platform/parties (create)")).toBe(10);
+    expect(w("POST /api/platform/parties (create)")).toBe(12);
     expect(w("callback, later sign-in")).toBe(3);
     expect(w("GET /api/platform/site-owners")).toBe(0);
-    expect(w("POST /api/platform/parties/:id/enable")).toBe(3);
+    expect(w("POST /api/platform/parties/:id/enable")).toBe(4);
     expect(w("GET /api/platform/me")).toBe(0);
     expect(w("POST /api/auth/platform/start")).toBe(0);
     expect(w("GET /api/platform/parties (counts, whole test database)")).toBe(0);
