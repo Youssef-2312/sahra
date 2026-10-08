@@ -1101,3 +1101,151 @@ cannot bind parameters), which is not built.
 4. Only one files database (`FILES`) is exported; when `sahra-files-2` exists,
    the export and restore need its binding added to the table list.
 5. Trashed Drive folders count against the Drive quota for 30 days.
+
+## Workstream H: peak-load test script (Phase 4)
+
+Built on branch `claude/p4-h-loadtest` (base 8fdfecc). The script is meant to be
+RUN later on staging by the coordinator; here it was only rehearsed against a
+local `wrangler dev --env staging` (nothing ran against Cloudflare).
+
+**What was built**
+
+- `scripts/load-test.mjs`: the owner's load test (section "Load test" above).
+  Staging-only host check (`sahra-staging.*`; `SAHRA_LIVE_CHECK_LOCAL=1` allows
+  127.0.0.1/localhost, nothing else), same CSRF/cookie client as
+  `live-check.mjs`. Phases: setup, steady, burst, correctness, cleanup, report.
+- `scripts/lib/req-log.mjs`: collects the Worker's own request log line
+  (`{"evt":"req",...}`) from `wrangler tail --env staging --format json` (live:
+  also Cloudflare's CPU time per request; needs `CLOUDFLARE_API_TOKEN` with
+  Workers Tail Read) or from a local `wrangler dev` output file (rows only, no
+  CPU). Same parsing and cold/first/warm split as `measure-cpu.mjs`.
+- **`POST /api/test/party`** (`src/routes/testing.ts`, 404 unless
+  `ENABLE_TEST_TICKETS = "1"`): creates a test party (id `lt-<16 hex>`), an
+  owner staff row and an owner session for it, and opens admission, in one call.
+  Needs any valid staff session (the door session from an invitation link is
+  enough). The party, owner and session are ONE batch whose first statement
+  requires the caller's session (`sessionValid`), the others require the rows
+  this op inserted; the caller chooses the new session's value (like door join),
+  and the party id is derived from it, so a retry with the same body returns the
+  same party and writes nothing (tested, also 6 at once). Opening reuses
+  `setAdmission` (main first) then `setControl` (ledger); a concurrent retry that
+  finds the control object already open is fine. Changes are confirmed only after
+  `flushChangeLog` (503 pending otherwise; a retry finishes, tested). The session
+  is kind `google` (the table allows only `google`/`door`; an owner needs a
+  non-door kind for logout semantics), expires after 3 hours, and the script logs
+  it out at the end. Rows: 15 main + 3 ledger written per new party, 0 on a retry.
+- `POST /api/test/tickets` accepts `released: false` (approved, QR not sent yet)
+  for the "not released" denials: `TicketDb.createTestTickets` got an optional
+  `released` argument (test-only method; the scan path is unchanged).
+- `src/app.ts`: the request log line also carries `ledger_rows_read` (it had only
+  the ledger's rows written), so live runs can report reads of both databases.
+- Tests: `test/loadtest.test.ts` (10: end to end on a created party incl. tickets,
+  door join, admit, used, ledger check, cleanup, logout; door session may create;
+  idempotent retry; 6 at once; no/revoked/malformed session writes nothing; 404 in
+  production; ledger down -> pending, retry completes; main database down -> 503,
+  retry creates; not-released tickets; rows per request) + 1 case in
+  `test/unauth.test.ts`.
+
+**How to run it (staging, a day with no ticket sales)**
+
+1. Deploy this branch to staging (the endpoint must exist; the script says so if not).
+2. Create a NEW door invitation (1 hour) for any staging party on the dashboard.
+3. `node scripts/load-test.mjs --invite "<link>"` prints the plan and the
+   estimate and sends nothing. Add today's usage from the Cloudflare dashboard
+   with `--already-written N --already-read N --already-requests N`.
+4. `node scripts/load-test.mjs --invite "<link>" --yes --tail` runs it (about 40
+   minutes: setup about 1-2 min, 30 min steady, 5 min burst, checks, cleanup).
+   Without `--tail` (no API token) rows are estimated and no CPU is reported.
+   Ctrl+C stops gracefully (in-flight scans finish, then checks and cleanup).
+5. It writes `load-test-report-<time>.json` (no cookies, links or tokens).
+
+**What it does**
+
+- Setup (sequential, so no other change is pending when tickets are logged): one
+  join with the invitation, then per party: `POST /api/test/party`, 4 door
+  invitations + joins (one session per scanner = one phone), tickets in batches
+  of 20, 2 tickets not released, admission checked open.
+- Steady: each scanner works through its own share of the party's tickets, one
+  scan at a time, spread evenly over 30 minutes with +-0.4 interval jitter (think
+  time). Repeat scans (5% of admissions: a ticket already admitted at the same
+  party, new scan id, must say "used") and denied scans (3%: alternately a ticket
+  of another party, "ticket is for another party", and a ticket of this party not
+  released, "QR not sent yet") are mixed in. About 2.4 scans/s overall.
+- Burst: 8 scans/s for 5 minutes, fixed slots (each scanner every 5 s, staggered
+  by 1/8 s): 50% new admissions, 25% repeats, 15% same-ID retries (the scanner's
+  previous scan id again: must give the stored outcome, never a second
+  redemption), 10% denied (`--burst-mix` changes it).
+- Every scan: one retry with the same body on a network error. "recording" or
+  "can't verify" on a first scan are retried with the SAME scan id (up to 3), as a
+  phone would. Scans whose answer never arrived are re-sent with the same id
+  before the checks (the stored outcome). Only "admit" counts as an admission.
+- Correctness: a second "admit" for one ticket, an "admit" on a repeat or denied
+  scan, or an "admit" with an HTTP error is a violation; then per party
+  `/api/test/ledger-check` must show admissions == ledger records == the script's
+  own count == tickets used, nothing missing, nothing reopened.
+- Cleanup per party: `revoke-door-access` (repeated while pending), admission
+  paused, the test owner logged out; the bootstrap door session logged out.
+- Stops early (gracefully) when the running count of requests, rows written or
+  rows read (the larger of the estimate from what was sent and the request log)
+  plus a reserve for checks/cleanup would pass the budget, or when half of the
+  last 100 scans got no answer or an HTTP error (quota used up, outage). If the
+  Worker does not answer at the end, it prints the test party ids (a site owner
+  can switch them off) and exits; sessions expire by themselves (3 h / 16 h).
+
+**Row estimate (before anything is written; refuses past 50% of the daily limits)**
+
+Per request, measured locally (`test/loadtest.test.ts`, D1 meta; [main read,
+main written, ledger read, ledger written]): join [21, 7, 0, 1]; test party
+[34, 15, 0, 3]; door invitation [24, 11, 0, 2]; 20 tickets [153, 80, 0, 20]
+(4 + 1 per ticket); scan admit [18, 2, 2, 1]; scan used [14, 1, 1, 0]; same-ID
+retry [14, 0, 2, 0]; not released [13, 1, 1, 0]; wrong party [8, 0, 1, 0];
+admission state [4, 0, 1, 0]; pause [24, 3, 2, 2]; logout [4, 1, 0, 0].
+Writes are fixed; reads grow with table sizes: every change-log flush (join, test
+party, invitation, tickets, pause, cleanup) reads the parties/staff/invites tables
+in full (`Db.unlogged`), and the ledger check reads all scans and tickets plus
+the WHOLE ledger change log twice (no party index there). The script adds
+`--staging-table-rows` (default 1,000) per flush and 2 x (`--staging-ledger-rows`,
+default 10,000, + the run's own entries) per ledger check, and multiplies reads by
+1.5. With `--tail` it measures both after the first join (the join's rows read,
+and a read-only ledger check of the invitation's party) and checks the estimate
+again before anything else is written. Written: + 5% for retries; cleanup 5 + 3
+per scanner main, 1 + 1 per scanner ledger, per party.
+
+**Full run (defaults), estimate:** 7,460 Worker requests (budget 50,000), about
+44,800 rows written (main 33,900 + ledger 10,900; budget 50,000), about 1.67
+million rows read (main 1.04 M + ledger 0.64 M with the assumed table sizes;
+budget 2.5 M). Rows written are dominated by the tickets themselves (5,220 x 5 =
+26,100) and the admissions (5,200 x 3 = 15,600). **This is close to the 50%
+budget (90%)**: if the day's other usage is more than about 5,000 rows written,
+the script refuses; lower `--tickets` or the burst then.
+
+LOCAL_REHEARSAL_PLACEHOLDER
+
+**What it proves, and what it cannot**
+
+- Proves (on staging): the scan path under the owner's peak load from 40 sessions,
+  every admission confirmed in the ledger, no second redemption under repeats and
+  same-ID retries, the real rows per request (with `--tail`) and Cloudflare's CPU
+  per endpoint, cold/first/warm.
+- Cannot prove: production behaviour (staging is a separate Worker and databases,
+  with higher rate limits: RL_SCAN 1,000/60 s instead of 120); real phones (the
+  client is one machine: its network, location and the cloud session's proxy are
+  in every latency number; real door Wi-Fi/mobile data is slower and less
+  reliable); camera/QR reading time; 40 independent client IPs (RL_AUTH is per IP,
+  scans are per session); D1 behaviour with production-sized tables; the hourly
+  backup or health cron running at the same moment (they run on their own
+  schedule and are not counted in the estimate). `wrangler tail` may sample under
+  load; the report shows how many log lines it saw against requests sent and
+  falls back to the estimate.
+
+**Open questions**
+
+1. The burst's new admissions (1,200 tickets) cost about 9,600 rows written of
+   the 44,800. If the owner agrees that the burst may reuse the steady phase's
+   tickets for its repeats and only admit fewer new ones, the run fits more
+   comfortably; today it follows the brief literally.
+2. Test parties stay in the staging database after the run (paused, no sessions);
+   nothing deletes them. They count in the parties table that every change-log
+   flush reads (10 rows per run).
+3. Ledger check reads the whole change log (no `party_id` index in the ledger);
+   fine for staging-only use, but it is the largest read cost of the run.
