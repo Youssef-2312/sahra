@@ -1590,6 +1590,49 @@ Cloudflare):** fresh local databases, one seeded party with a door invitation,
 3. Ledger check reads the whole change log (no `party_id` index in the ledger);
    fine for staging-only use, but it is the largest read cost of the run.
 
+## Load test result on staging (2026-10-08)
+
+Run by the owner from their own computer (setup.bat step 15, `--tail`), on the
+deployed Phase 4 code (staging `5da3921`), default numbers: 10 parties x 4
+scanners, steady 4,000 admissions in 30 minutes, then a burst of 8 scans/s for 5
+minutes. (An earlier run from the cloud sandbox was stopped by the owner after
+3.5 minutes: 490 admitted, 0 errors; its test parties stay on staging, paused by
+nobody, with sessions only that program held.)
+
+- **Correctness:** steady 4,000/4,000 and burst 1,200/1,200 admitted; 6,720
+  scans (800 repeats, 360 denied, 360 same-ID retries), **0 errors**, 0 second
+  admits, 0 violations. Ledger check on all 10 parties: admissions = ledger
+  records = the test's own admits, nothing missing, nothing reopened.
+- **Rate held:** steady 2.39 scans/s over 1,804.6 s; burst 8.0 scans/s over 300.1 s.
+- **Client round trip per scan** (owner's machine to Cloudflare, includes their
+  network): p50 268 ms, p95 393 ms, p99 456 ms, max 1,151 ms (n = 6,720).
+  Repeats and same-ID retries p50 224 ms.
+- **CPU per scan** (wrangler tail, warm, n = 3,774): p50 2 ms, p95 4 ms, p99 6 ms,
+  max 12 ms. Every one of them answered 200: the single slowest went past the
+  nominal 10 ms once and was still served. Cold start 3-5 ms.
+- **Rows:** tail delivered 3,918 log lines for 7,136 requests, so its totals are a
+  lower bound (main written 13,922, ledger written 5,022, main read 232,100,
+  ledger read 132,155). Per warm scan: 17.3 main rows read, 1.83 written; 1.89
+  ledger read, 0.87 written. These per-request numbers match the local
+  measurement, so the pre-run estimate (44,818 rows written, mostly the 5,200
+  test tickets created in one day) is the better total. Requests: 7,136 of an
+  estimated 7,460.
+- **What a real party night costs:** an admission writes 2 main rows + 1 ledger
+  row, so 4,000 admissions are about 12,000 rows written (12% of the free daily
+  100,000) and about 4,300 requests (4% of 100,000). Tickets are created over the
+  days before, not on the night.
+- **Seen in passing:** every request that writes something flushes the change
+  log, which today reads the whole parties, staff and invites tables (about 480
+  rows per join on staging after many test parties). Production starts small; a
+  partial index per table (as done for ticket_types) removes it. Open, owner's
+  call.
+
+**Vercel standby:** the owner decided to decide after this test. The test shows
+the owner's peak fits on Cloudflare Free with room to spare; a second system
+could not share the single-redemption guarantee (it lives in one D1 statement)
+unless it used the same database, so a standby would be a "can't verify"
+fallback at best. Recommendation to the owner: no Vercel standby.
+
 ## Ticket types and registration rules (owner request, 2026-10-08)
 
 Built together with the small quality-of-life set. One migration,
