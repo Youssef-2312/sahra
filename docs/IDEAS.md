@@ -343,3 +343,14 @@ coordinator's session. Status: agreed, rejected or open.
 - Free-tier cost: none (static pages; no chart library)
 - Rule conflicts: none; colour kept for meaning only (green good, red bad, amber uncertain).
 - Which one: owner says "its dashboard 2" (the efferd block numbered dashboard 2 on efferd.com/blocks/dashboard; dashboards 1 to 5 are listed as free, but the licence terms were not visible, so the coordinator must check them before using anything beyond the look; inspiration only).
+
+## 26. Dashboard 3 also liked: soft rounded cards and a few charts
+
+- Status: agreed as a visual reference only (inspiration, static HTML, idea 22)
+- Owner's words: "3 is also nice" (screenshot of efferd dashboard 3: dark rounded cards, a line chart with a "Last 30 days" dropdown, a donut chart split by channel, vertical bar columns, a line of dots with labelled values)
+- What to take: the softer rounded cards, the "last 30 days" style dropdown on a chart, a donut for shares, small labelled values on charts.
+- Possible Sahra charts (only if the owner wants them, phone first, idea 12 applies): sign-ups per day (line); ticket-type split (donut); on party night, arrivals per 15 minutes (bars) so the organiser can see the door queue building.
+- Needs: chart screens drawn with inline SVG or plain CSS, no chart library; the server provides small pre-counted numbers (per day, per type, per 15 minutes) rather than scanning every ticket on each page view.
+- Effort: medium (small per chart)
+- Free-tier cost: counts should be computed with a few cheap grouped reads and cached for a minute or so, so a busy dashboard does not burn the 5M rows read per day. Do not refresh charts in a tight loop.
+- Rule conflicts: none. Charts must never be the only way to see a number (the tiles from idea 10 stay).
