@@ -39,6 +39,7 @@ import { inList, sql, type Sql } from "../db/sql";
 import { D1Ledger } from "../ledger";
 import { newId } from "../lib/crypto";
 import { ACCOUNT_DAILY_WRITES, BUDGET_STOP_AT, dayOf, DAY_MS } from "../limits";
+import { schedule } from "../backup/export";
 import { outboxInsert } from "../outbox";
 import { PLATFORM } from "../platform/db";
 import { bothTimes, deliverDiscord, DISCORD, discordInsert, discordStatus, discordView, type DiscordReport, type DiscordStatus } from "./discord";
@@ -74,6 +75,8 @@ export const HEALTH = {
   sizeWarn: 0.7,
   /** The backup is daily (workstream E); alert when the last one is older than this. */
   backupMaxAgeMs: 26 * HOUR,
+  /** While backups are hourly: alert when the last (hourly or full) one is older than this. */
+  hourlyBackupMaxAgeMs: 3 * HOUR,
   /** The daily part runs in the first run at or after this UTC hour. */
   dailyHourUtc: 6,
   /** Rows written per counted event, for the daily estimate (see DECISIONS "Workstream F"). */
@@ -128,6 +131,7 @@ export interface HealthReport {
 
 interface State {
   last_backup_at: number | null;
+  last_hourly_backup_at: number | null;
   last_backup_note: string | null;
   admissions_to: number | null;
   audit_seen_id: number | null;
@@ -168,7 +172,7 @@ export async function runHealth(deps: HealthDeps): Promise<HealthReport> {
   // 1. Lease (and the state, in the same statement).
   const leased = await main.all<State>(sql`UPDATE health_state SET lease_until = ${now + HEALTH.leaseMs}, lease_op = ${op}
     WHERE id = 'main' AND lease_until <= ${now}
-    RETURNING last_backup_at, last_backup_note, admissions_to, audit_seen_id, outbox_seen_at, usage_day, usage_base, daily_day`);
+    RETURNING last_backup_at, last_hourly_backup_at, last_backup_note, admissions_to, audit_seen_id, outbox_seen_at, usage_day, usage_base, daily_day`);
   const state = leased.results[0];
   if (!state) return { ...report(), skipped: "busy" };
 
@@ -194,7 +198,16 @@ export async function runHealth(deps: HealthDeps): Promise<HealthReport> {
   });
   await guarded("outbox", () => checkOutbox(main, now, deps.emailConfigured));
   await guarded("db_size", () => checkSizes(deps));
-  results.push(checkBackup(state, now));
+  // Is the backup schedule hourly right now? Asked only when the latest backup is
+  // older than the hourly threshold, so a normal run costs no extra query.
+  let hourly = false;
+  const latest = Math.max(state.last_hourly_backup_at ?? 0, state.last_backup_at ?? 0);
+  if (state.last_backup_at != null && now - latest > HEALTH.hourlyBackupMaxAgeMs) {
+    try {
+      hourly = (await schedule(main, now)).frequency === "hourly";
+    } catch { /* schedule unknown: judge by the full backup only */ }
+  }
+  results.push(checkBackup(state, now, hourly));
 
   // Daily write estimate (cheap aggregates; see DECISIONS "Workstream F").
   const est = await estimateUsage(main, state, now, admissions.checked);
@@ -463,13 +476,22 @@ async function checkSizes(deps: HealthDeps): Promise<CheckResult> {
 
 const mb = (b: number) => `${(b / 1e6).toFixed(1)} MB`;
 
-function checkBackup(state: State, now: number): CheckResult {
+export function checkBackup(state: Pick<State, "last_backup_at" | "last_hourly_backup_at" | "last_backup_note">, now: number, hourlyMode: boolean): CheckResult {
   if (state.last_backup_at == null) return { id: "backup", status: "unknown", summary: "No backup recorded yet (the backup job is not set up)." };
   const age = now - state.last_backup_at;
-  const detail = { last_backup_at: state.last_backup_at, note: state.last_backup_note };
-  return age > HEALTH.backupMaxAgeMs
-    ? { id: "backup", status: "problem", summary: `The last successful backup was ${Math.floor(age / HOUR)} hours ago (${when(state.last_backup_at)}); it should be daily.`, detail }
-    : { id: "backup", status: "ok", summary: `Last successful backup ${when(state.last_backup_at)}.`, detail };
+  const detail = { last_backup_at: state.last_backup_at, last_hourly_backup_at: state.last_hourly_backup_at, note: state.last_backup_note, hourly_mode: hourlyMode };
+  if (age > HEALTH.backupMaxAgeMs) {
+    return { id: "backup", status: "problem", summary: `The last full backup was ${Math.floor(age / HOUR)} hours ago (${when(state.last_backup_at)}); it should be daily.`, detail };
+  }
+  // While a party sells tickets or on a party night, backups are hourly (workstream E):
+  // missed hourly backups alert on their own threshold, not only after 26 hours.
+  if (hourlyMode) {
+    const lastHourly = Math.max(state.last_hourly_backup_at ?? 0, state.last_backup_at);
+    if (now - lastHourly > HEALTH.hourlyBackupMaxAgeMs) {
+      return { id: "backup", status: "problem", summary: `Hourly backups are due (tickets on sale or a party night), but the last one was ${Math.floor((now - lastHourly) / HOUR)} hours ago (${when(lastHourly)}).`, detail };
+    }
+  }
+  return { id: "backup", status: "ok", summary: `Last full backup ${when(state.last_backup_at)}${state.last_hourly_backup_at ? `; last hourly ${when(state.last_hourly_backup_at)}` : ""}.`, detail };
 }
 
 /**

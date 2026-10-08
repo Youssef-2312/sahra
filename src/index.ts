@@ -5,6 +5,7 @@ import { scheduledSend } from "./email/sender";
 import { cfConnect } from "./email/socket";
 import type { Env } from "./env";
 import { dbSizes, isHealthMinute, runHealth } from "./health";
+import { resyncReleaseEmails } from "./recovery/resync";
 import { warmUp } from "./warmup";
 
 const fetcher = (input: string, init?: RequestInit) => fetch(input, init);
@@ -26,6 +27,8 @@ export default {
         maintenance: env.MAINTENANCE === "1", emailConfigured: !!((env.GMAIL_ADDRESS && env.GMAIL_APP_PASSWORD) || (env.BREVO_API_KEY && env.BREVO_SENDER)),
         origin: env.PUBLIC_ORIGIN, discordUrl: env.DISCORD_WEBHOOK_URL, fetch: fetcher,
       }));
+      // After a controlled recovery: rebuild "your ticket" emails lost with the restore.
+      ctx.waitUntil(resyncReleaseEmails(env as unknown as Record<string, unknown> & { PUBLIC_ORIGIN: string }, new D1Driver(env.DB), Date.now()).catch(() => null));
     }
   },
 } satisfies ExportedHandler<Env>;

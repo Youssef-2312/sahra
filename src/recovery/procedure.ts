@@ -3,6 +3,7 @@
 // everything else is here. Safe to run again after a stop.
 
 import type { SqlDriver } from "../db/driver";
+import { sql } from "../db/sql";
 import { applyHolds, flushAll, holdsFromIntents, pauseAll, reopenedTickets, replay, revokeAccess, syncPause, verify, type Hold } from "./index";
 
 export interface RecoveryReport {
@@ -24,8 +25,12 @@ export async function recover(o: {
   main: SqlDriver;
   ledger: SqlDriver;
   now: () => number;
-  /** Restores the main database (owner's credential). Runs after the ledger is complete. */
-  restore: () => Promise<void>;
+  /**
+   * Restores the main database (owner's credential). Runs after the ledger is
+   * complete. Resolves to the restore point (ms) when known, so emails lost with
+   * the restore can be rebuilt (src/recovery/resync.ts).
+   */
+  restore: () => Promise<number | null | void>;
   log?: (line: string) => void;
 }): Promise<RecoveryReport> {
   const log = o.log ?? (() => {});
@@ -57,7 +62,7 @@ export async function recover(o: {
   }
 
   // 3. Restore (owner).
-  await o.restore();
+  const restoredTo = await o.restore();
   log("3. main database restored");
 
   // 4. Replay: newest rev per entity wins.
@@ -74,6 +79,17 @@ export async function recover(o: {
   // 6. The database's pause_number matches each control object; parties stay paused.
   const synced = await syncPause(o.main, o.ledger, o.now(), op);
   log(`6. ${synced} part${synced === 1 ? "y" : "ies"} set to the control object's pause_number (still paused; reopen from the dashboard)`);
+
+  // Emails created after the restore point were lost with it: the health run
+  // rebuilds the "your ticket" email for tickets released after that point.
+  if (typeof restoredTo === "number") {
+    try {
+      await o.main.batch([sql`UPDATE health_state SET resync_after = ${restoredTo}, resync_cursor = NULL WHERE id = 'main'`]);
+      log(`   "your ticket" emails for tickets released after the restore point will be rebuilt by the next health run`);
+    } catch {
+      log(`   (could not schedule the email rebuild; guests whose email was lost can use "resend my ticket link")`);
+    }
+  }
 
   // Record this procedure's own changes. Then replay once more: a request that was
   // still running when maintenance began may have reached the ledger after the

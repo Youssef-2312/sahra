@@ -15,7 +15,9 @@ import { csrfFor, newId, newToken, parseToken, sha256hex } from "../src/lib/cryp
 import { D1Ledger } from "../src/ledger";
 import { flushAll, newestByEntity, ledgerEntries, reopenedTickets, replay, verify } from "../src/recovery";
 import { recover } from "../src/recovery/procedure";
-import { api, FlakyLedger, harness, openParty, scan, seedDoor, seedOwner, seedSession, testTickets, type Harness } from "./helpers";
+import { resyncReleaseEmails } from "../src/recovery/resync";
+import { checkBackup } from "../src/health";
+import { api, FlakyLedger, guestParty, harness, openParty, scan, seedDoor, seedOwner, seedSession, signup, testTickets, type Harness } from "./helpers";
 
 const TABLES = ["platform_admins", "organisers", "organiser_invites", "platform_sessions",
   "parties", "staff", "invites", "sessions", "audit", "tickets", "scans", "outbox"];
@@ -344,6 +346,55 @@ describe("admission invariant: replay never clears an admission", () => {
       expect((await scan(h, d2, t[2]!.qr)).verdict).not.toBe("admit");
     });
   }
+});
+
+
+describe("emails lost with a restore are rebuilt (audit #5)", () => {
+  it("a ticket released after the restore point gets its 'your ticket' email again, once", async () => {
+    const h = await harness();
+    const { party, os } = await guestParty(h);
+    const before = await signup(h, party, { email: "before@example.com" });
+    const after = await signup(h, party, { email: "after@example.com" });
+    for (const id of [before.body.ticket_id!, after.body.ticket_id!]) {
+      expect((await h.req("/api/tickets/approve", api(os, { ids: [id] }))).status).toBe(200);
+    }
+    expect((await h.req("/api/tickets/release", api(os, { ids: [before.body.ticket_id] }))).status).toBe(200);
+    await complete();
+    const snap = await snapshot();
+    const restorePoint = h.clock.now();
+    h.clock.advance(60_000);
+    expect((await h.req("/api/tickets/release", api(os, { ids: [after.body.ticket_id] }))).status).toBe(200);
+    const emailsFor = async (id: string) => Number(await env.DB.prepare("SELECT COUNT(*) AS n FROM outbox WHERE kind = 'ticket_released' AND ticket_id = ?").bind(id).first("n"));
+    expect(await emailsFor(after.body.ticket_id!)).toBe(1);
+    h.clock.advance(60_000);
+
+    const report = await recover({ main: mainDriver(), ledger: ledgerDriver(), now: h.clock.now, restore: async () => { await restore(snap); return restorePoint; } });
+    expect(report.finalOk).toBe(true);
+    // The release came back through replay; its email row did not.
+    expect(await env.DB.prepare("SELECT released_at IS NOT NULL AS r FROM tickets WHERE id = ?").bind(after.body.ticket_id).first("r")).toBe(1);
+    expect(await emailsFor(after.body.ticket_id!)).toBe(0);
+
+    const env2 = env as unknown as Record<string, unknown> & { PUBLIC_ORIGIN: string };
+    expect(await resyncReleaseEmails(env2, mainDriver(), h.clock.now())).toMatchObject({ done: true });
+    expect(await emailsFor(after.body.ticket_id!)).toBe(1);
+    expect(await emailsFor(before.body.ticket_id!)).toBe(1); // released before the point: its row was restored
+    const body = await env.DB.prepare("SELECT body_text FROM outbox WHERE kind = 'ticket_released' AND ticket_id = ?").bind(after.body.ticket_id).first<string>("body_text");
+    expect(body).toMatch(/#t=T1\./);
+    // Cleared: a second run does nothing.
+    expect(await resyncReleaseEmails(env2, mainDriver(), h.clock.now())).toBeNull();
+    expect(await emailsFor(after.body.ticket_id!)).toBe(1);
+  });
+});
+
+describe("hourly backups have their own freshness threshold", () => {
+  const H = 3600_000;
+  const now = Date.UTC(2026, 9, 31, 22, 0, 0);
+  it("while backups are hourly, a missed hourly backup alerts even if the nightly is recent", () => {
+    expect(checkBackup({ last_backup_at: now - 5 * H, last_hourly_backup_at: now - 4 * H, last_backup_note: null }, now, true).status).toBe("problem");
+    expect(checkBackup({ last_backup_at: now - 5 * H, last_hourly_backup_at: now - 1 * H, last_backup_note: null }, now, true).status).toBe("ok");
+    expect(checkBackup({ last_backup_at: now - 5 * H, last_hourly_backup_at: null, last_backup_note: null }, now, false).status).toBe("ok");
+    expect(checkBackup({ last_backup_at: now - 27 * H, last_hourly_backup_at: now - 1 * H, last_backup_note: null }, now, true).status).toBe("problem");
+  });
 });
 
 describe("site-level records (site owners, organisers)", () => {

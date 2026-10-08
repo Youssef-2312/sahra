@@ -1169,3 +1169,56 @@ cannot bind parameters), which is not built.
 5. Hourly reports also move `last_backup_at`, so F's 26 h check stays green
    while hourly backups succeed even if the nightly fails; the script itself
    emails the owner when the last FULL backup is over 30 hours old.
+
+## External audit follow-ups (2026-10-08)
+
+An architecture review of `docs/SYSTEM-SUMMARY.md`. Findings and what was done:
+
+- **Replay could clear an admission?** Not through normal paths (cancel, reissue
+  and transfer refuse a used ticket in the statement; every logged state carries the
+  used fields; only the owner's logged admission reset clears them). Guard added
+  anyway: once a ticket has an admission record newer than its last reset, replay
+  never applies a state without it; the ticket is held instead (cannot be admitted)
+  and an owner checks it. Holds take a rev above both the database's and the
+  ledger's. Tests: admission after the backup point with party edits and a refused
+  transfer; reset honoured; anomalous states in either log order (removing the
+  guard makes them fail).
+- **Requests still running when maintenance starts:** the script waits 60 s after
+  maintenance is confirmed before copying anything; after the procedure's own
+  changes it replays once more (newest state wins) and the final check also requires
+  that no ticket the change log says is used is unused in the database ("nothing
+  reopened"; held tickets cannot be admitted, so they do not count). Note: a change
+  is only ever confirmed to a user after its change-log entry is written, so a
+  request lost mid-flight was never shown as done.
+- **Emails lost with a restore:** a recovery records its restore point; the next
+  health run rebuilds the "your ticket" email for every ticket released after that
+  point that has none (bounded, resumable, cleared when done; a guest may get it
+  twice, same link). Restoring to a bookmark (no readable time) skips this; guests
+  use "resend my ticket link". Party notices lost with a restore must be sent again
+  by the party owner.
+- **Hourly backups:** `last_hourly_backup_at` (migration 0010) has its own 3-hour
+  threshold while backups are hourly; `last_backup_at` stays the latest full backup
+  (26 hours).
+- **Session cap race:** the "10 sessions per hour" count runs inside the same
+  transaction as the session insert, and D1 executes write transactions one at a
+  time, so concurrent joins cannot pass it together.
+- **Browser session values:** generated with `crypto.getRandomValues` (256 bits),
+  accepted only as the canonical 43-character base64url form, stored as SHA-256 (the
+  primary key, unique); an invitation link alone cannot take over a joined session.
+- **Rows written** in our numbers come from D1's own `meta.rows_written`, which
+  includes index writes.
+- **Region:** D1 location is a hint; staging's responses report
+  `served_by_region: EEUR` (verified). Production to be checked the same way.
+- **Static assets** are served without invoking the Worker (`assets` without
+  `run_worker_first`); the request stream shows only `/api/*`.
+- **Wording:** "the door is never limited" means exempt from Sahra's own per-party
+  limits, not protected from Cloudflare's account limits.
+- **Staging shares the account's quotas** with production: load tests run outside
+  party hours, with their full cost (setup, retries, cleanup) estimated first.
+- **Vercel standby** stays off the launch path.
+- In progress elsewhere: screenshot capacity (several files databases, browser
+  compression, a lower size cap, retention), authority loss on already-open
+  sessions, bulk cleanup of old pending requests, group tickets made explicit (one
+  QR admits the whole group together; owner decision).
+- Still to measure live: Phase 4 endpoint CPU and the cron jobs (10 ms each on the
+  Free plan).

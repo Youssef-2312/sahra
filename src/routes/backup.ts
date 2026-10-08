@@ -177,7 +177,8 @@ backupRoutes.post("/done", async (c) => {
   const r = kind === "nightly"
     ? await c.var.db.driver.all(sql`UPDATE health_state SET last_backup_at = ${at}, last_backup_note = ${note}
         WHERE id = 'main' AND (last_backup_at IS NULL OR last_backup_at <= ${at})`)
-    : await c.var.db.driver.all(sql`UPDATE health_state SET last_backup_note = ${note} WHERE id = 'main'`);
+    : await c.var.db.driver.all(sql`UPDATE health_state SET last_backup_note = ${note}, last_hourly_backup_at = ${at}
+        WHERE id = 'main' AND (last_hourly_backup_at IS NULL OR last_hourly_backup_at <= ${at})`);
   logUsage(c, null);
   return json(c, 200, { recorded: r.meta.changes === 1, last_backup_at: kind === "nightly" ? at : null });
 });

@@ -130,6 +130,11 @@ async function main() {
     const flag = /^[0-9a-f-]{20,}$/i.test(at) && !/T/.test(at) ? `--bookmark=${at}` : `--timestamp=${at}`;
     const r = await wranglerOnce(["d1", "time-travel", "restore", "DB", ...env, flag], { interactive: true });
     if (r.code !== 0) throw new Error("Time Travel restore failed; maintenance is still on; run again");
+    // The restore point, so emails created after it can be rebuilt. A bookmark has no
+    // readable time: then guests whose email was lost use "resend my ticket link".
+    const ms = flag.startsWith("--timestamp=") ? Date.parse(at) : NaN;
+    if (Number.isNaN(ms)) console.log("   (restored to a bookmark: emails created after it are not rebuilt; guests can use 'resend my ticket link')");
+    return Number.isNaN(ms) ? null : ms;
   };
 
   const report = await recover({ main: d("DB"), ledger: d("LEDGER"), now: () => Date.now(), restore, log: (l) => console.log(`${l.match(/^\d\./) ? "\n" : "   "}${l}`) });
