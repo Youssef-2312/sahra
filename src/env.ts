@@ -31,6 +31,8 @@ export interface Env {
   BREVO_SENDER?: string;
   /** Backup export (src/routes/backup.ts): HMAC key shared with the owner's Apps Script (secret; base64url, at least 32 bytes). Missing: 503. */
   BACKUP_KEY?: string;
+  /** Optional: health alerts also go to a Discord channel through this webhook (secret, set by the owner). */
+  DISCORD_WEBHOOK_URL?: string;
 }
 
 export const CONFIG = {

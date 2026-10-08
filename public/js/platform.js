@@ -53,6 +53,10 @@
       h.checks.forEach(function (c) { t += (c.status === "problem" ? "PROBLEM  " : c.status === "ok" ? "ok       " : "not set  ") + c.title + ": " + c.summary + "\n"; });
       t += "\nRows written today (estimate): " + h.usage.estimated_rows_written_today + " of " + h.usage.daily_allowance
         + "; guest notices, email approvals and exports stop at " + h.usage.non_essential_stop_at + "\n";
+      var d = h.discord || {};
+      t += "\nDiscord: " + (d.status === "configured" ? "configured" : d.status === "invalid" ? "NOT USED (DISCORD_WEBHOOK_URL is not a Discord webhook URL)" : "not set")
+        + (d.latest ? "; latest message " + new Date(d.latest.created_at).toISOString() + " " + d.latest.status + (d.latest.last_error ? " (" + d.latest.last_error + ")" : "") : "")
+        + (d.messages && d.messages.pending ? "; " + d.messages.pending + " waiting to be posted" : "") + "\n";
       t += "\nRecent alerts:\n";
       h.alerts.forEach(function (a) { t += "  " + new Date(a.at).toISOString() + "  " + a.subject + "  " + JSON.stringify(a.statuses) + "\n"; });
       t += "\nPer-party counters today (limits per party per UTC day):\n";

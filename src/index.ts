@@ -24,7 +24,7 @@ export default {
       ctx.waitUntil(runHealth({
         main: new D1Driver(env.DB), ledger: new D1Driver(env.LEDGER), now: () => Date.now(), sizes: () => dbSizes(env),
         maintenance: env.MAINTENANCE === "1", emailConfigured: !!((env.GMAIL_ADDRESS && env.GMAIL_APP_PASSWORD) || (env.BREVO_API_KEY && env.BREVO_SENDER)),
-        origin: env.PUBLIC_ORIGIN,
+        origin: env.PUBLIC_ORIGIN, discordUrl: env.DISCORD_WEBHOOK_URL, fetch: fetcher,
       }));
     }
   },

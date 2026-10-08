@@ -5,6 +5,7 @@ import { createExecutionContext, createScheduledController, env, waitOnExecution
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { D1Driver, type SqlDriver } from "../src/db/driver";
 import { dbSizes, HEALTH, runHealth, type HealthDeps } from "../src/health";
+import { discordStatus, discordText } from "../src/health/discord";
 import { newId } from "../src/lib/crypto";
 import { BUDGET_STOP_AT, charge, dayOf, DAY_MS, LIMITS } from "../src/limits";
 import {
@@ -90,7 +91,13 @@ describe("health checks", () => {
     clock.advance(15 * 60_000);
     const r2 = await run();
     expect([r2.main.rows_written, r2.ledger.rows_written]).toEqual([2, 0]);
-    console.error(JSON.stringify({ evt: "measure", what: "health_run_idle_local", first: { main: r.main, ledger: r.ledger }, steady: { main: r2.main, ledger: r2.ledger } }));
+    // Same, with a Discord webhook configured and nothing to post: one more read.
+    clock.advance(15 * 60_000);
+    const r3 = await run({ discordUrl: "https://discord.com/api/webhooks/1/test-only", fetch: async () => new Response(null, { status: 204 }) });
+    expect(r3.discord).toEqual({ sent: 0, retry: 0, gave_up: 0 });
+    expect(r3.main.queries).toBe(r2.main.queries + 1);
+    expect(r3.main.rows_written).toBe(2);
+    console.error(JSON.stringify({ evt: "measure", what: "health_run_idle_local", first: { main: r.main, ledger: r.ledger }, steady: { main: r2.main, ledger: r2.ledger }, steady_discord: { main: r3.main, ledger: r3.ledger } }));
   });
 
   it("change log: pending rows are flushed; when the ledger refuses, the owners are told once, and again when it clears", async () => {
@@ -447,5 +454,153 @@ describe("per-party limits", () => {
     const m = lastReq();
     expect([m.rows_written, m.ledger_rows_written]).toEqual([2, 1]);
     expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM party_usage WHERE party_id = ?").bind(party).first("n")).toBe(0);
+  });
+});
+
+// ------------------------------------------------------------------ Discord
+
+/** Stands in for Discord's webhook endpoint. */
+class FakeDiscord {
+  posts: { url: string; body: { content: string; allowed_mentions: unknown } }[] = [];
+  /** Answers in order; when empty, 204. */
+  answers: (number | { status: 429; retry_after: number } | "network")[] = [];
+  fetch = async (url: string, init?: RequestInit) => {
+    const a = this.answers.shift() ?? 204;
+    if (a === "network") throw new TypeError("network down");
+    this.posts.push({ url, body: JSON.parse(String(init?.body)) });
+    if (typeof a === "object") return Response.json({ message: "You are being rate limited.", retry_after: a.retry_after, global: false }, { status: 429 });
+    return new Response(a === 204 ? null : "error", { status: a });
+  };
+}
+const HOOK = "https://discord.com/api/webhooks/123456/test-only-token";
+
+describe("Discord (extra channel for health messages)", () => {
+  let dc: FakeDiscord;
+  beforeEach(async () => {
+    dc = new FakeDiscord();
+    await env.DB.prepare("DELETE FROM health_discord").run();
+  });
+  const drun = (over: Partial<HealthDeps> = {}) => run({ discordUrl: HOOK, fetch: dc.fetch, ...over });
+  const rows = async () => (await env.DB.prepare("SELECT id, status, attempts, last_error, content FROM health_discord ORDER BY created_at, id").all<{
+    id: string; status: string; attempts: number; last_error: string | null; content: string }>()).results;
+
+  it("posts an alert and its resolved message, plain text, no mentions, UTC and Cairo time; same 6-hour rule as email", async () => {
+    sizes.main = 400e6;
+    const r = await drun();
+    expect(r.discord).toEqual({ sent: 1, retry: 0, gave_up: 0 });
+    expect(dc.posts).toHaveLength(1);
+    const p = dc.posts[0]!;
+    expect(p.url).toBe(HOOK);
+    expect(p.body.allowed_mentions).toEqual({ parse: [] });
+    expect(p.body.content).toBe(`Sahra health: PROBLEM - Database size\nPast 70%: main 400.0 MB of 500.0 MB.\n2026-10-01 18:00 UTC / 2026-10-01 21:00 Cairo\n${ORIGIN}/platform`);
+    for (let i = 0; i < 4; i++) { clock.advance(15 * 60_000); await drun(); }
+    const sizePosts = () => dc.posts.map((x) => x.body.content.split("\n")[0]).filter((x) => x!.includes("Database size"));
+    expect(sizePosts()).toHaveLength(1);
+    sizes.main = 2e6;
+    clock.advance(15 * 60_000);
+    await drun();
+    expect(sizePosts()).toEqual(["Sahra health: PROBLEM - Database size", "Sahra health: resolved - Database size"]);
+    expect((await rows()).every((x) => x.status === "sent")).toBe(true);
+  });
+
+  it("a 5xx or network failure stays pending and is posted by the next run", async () => {
+    sizes.main = 400e6;
+    dc.answers = [503];
+    expect((await drun()).discord).toEqual({ sent: 0, retry: 1, gave_up: 0 });
+    expect(await rows()).toMatchObject([{ status: "pending", attempts: 1, last_error: "HTTP 503" }]);
+    dc.answers = ["network"];
+    clock.advance(15 * 60_000);
+    expect((await drun()).discord).toEqual({ sent: 0, retry: 1, gave_up: 0 });
+    expect((await rows())[0]!.last_error).toBe("network error: TypeError");
+    clock.advance(15 * 60_000);
+    expect((await drun()).discord).toEqual({ sent: 1, retry: 0, gave_up: 0 });
+    expect(await rows()).toMatchObject([{ status: "sent", attempts: 3, last_error: null }]);
+  });
+
+  it("a 429 waits for retry_after; a message still failing after 24 hours is given up and recorded", async () => {
+    sizes.main = 400e6;
+    dc.answers = [{ status: 429, retry_after: 3600 }];
+    await drun();
+    clock.advance(15 * 60_000);
+    await drun(); // not due yet: no post
+    expect(dc.posts).toHaveLength(1);
+    clock.advance(46 * 60_000);
+    await drun();
+    expect(dc.posts.filter((x) => x.body.content.includes("Database size"))).toHaveLength(2);
+    expect((await rows())[0]!.status).toBe("sent");
+
+    // Still failing 24 hours after it was created: given up and recorded; a younger one stays pending.
+    await env.DB.prepare("DELETE FROM health_discord").run();
+    const add = (id: string, at: number) => env.DB.prepare("INSERT INTO health_discord (id, created_at, content, status, next_attempt_at) VALUES (?, ?, 'x', 'pending', ?)").bind(id, at, at).run();
+    await add("old", clock.now() - 24 * 3600_000 + 30_000);
+    await add("young", clock.now() - 3600_000);
+    dc.answers = [500, 500];
+    sizes.main = 2e6;
+    clock.advance(15 * 60_000);
+    const r = await drun();
+    expect(r.discord).toMatchObject({ gave_up: 1, retry: 1 });
+    expect((await rows()).filter((x) => x.id === "old" || x.id === "young").map((x) => [x.id, x.status, x.last_error])).toEqual([["old", "gave_up", "HTTP 500"], ["young", "pending", "HTTP 500"]]);
+  });
+
+  it("a 4xx other than 429 (webhook deleted) gives up at once", async () => {
+    sizes.main = 400e6;
+    dc.answers = [404];
+    expect((await drun()).discord).toEqual({ sent: 0, retry: 0, gave_up: 1 });
+    expect(await rows()).toMatchObject([{ status: "gave_up", last_error: "HTTP 404" }]);
+  });
+
+  it("at most 3 posts per run; bounded queries", async () => {
+    for (let i = 0; i < 5; i++) {
+      await env.DB.prepare("INSERT INTO health_discord (id, created_at, content, status, next_attempt_at) VALUES (?, ?, 'x', 'pending', ?)").bind(`t${i}`, clock.now() + i, clock.now()).run();
+    }
+    const r = await drun();
+    expect(r.discord).toEqual({ sent: 3, retry: 0, gave_up: 0 });
+    console.error(JSON.stringify({ evt: "measure", what: "health_run_discord_3_posts_local", main: r.main, ledger: r.ledger }));
+    clock.advance(15 * 60_000);
+    const r2 = await drun();
+    expect(r2.discord).toEqual({ sent: 2, retry: 0, gave_up: 0 });
+    clock.advance(15 * 60_000);
+    const r3 = await drun();
+    expect(r3.discord).toEqual({ sent: 0, retry: 0, gave_up: 0 });
+    console.error(JSON.stringify({ evt: "measure", what: "health_run_discord_idle_local", main: r3.main, ledger: r3.ledger }));
+    expect(r3.main.queries).toBeLessThanOrEqual(7);
+  });
+
+  it("the daily summary is posted once", async () => {
+    await env.DB.prepare("UPDATE health_state SET daily_day = 0 WHERE id = 'main'").run();
+    await drun();
+    clock.advance(15 * 60_000);
+    await drun();
+    expect(dc.posts).toHaveLength(1);
+    expect(dc.posts[0]!.body.content).toMatch(/^Sahra daily check: all ok\n2026-10-01 18:00 UTC \/ 2026-10-01 21:00 Cairo\n- Change log/);
+  });
+
+  it("a URL that is not a Discord webhook is ignored and shown as not used; MAINTENANCE posts nothing", async () => {
+    sizes.main = 400e6;
+    for (const url of ["https://evil.example/api/webhooks/1/x", "http://discord.com/api/webhooks/1/x", "https://discord.com.evil.example/api/webhooks/1/x", "https://discord.com/api/webhooks/1/x?wait=1#"]) {
+      const r = await drun({ discordUrl: url });
+      expect(r.discord, url).toBe("not_configured");
+    }
+    expect(dc.posts).toHaveLength(0);
+    expect(await rows()).toEqual([]);
+    expect((await drun({ maintenance: true })).skipped).toBe("maintenance");
+    expect(dc.posts).toHaveLength(0);
+    expect(discordStatus("https://discordapp.com/api/webhooks/1/abc_-")).toBe("configured");
+    expect(discordStatus(undefined)).toBe("not_set");
+
+    const h = await harness({ clock, env: { DISCORD_WEBHOOK_URL: "https://evil.example/hook" } as never });
+    const so = await seedSiteOwner();
+    const res = await h.req("/api/platform/health", papi(await seedPlatformSession(so.sub, clock), undefined, "GET"));
+    const text = await res.text();
+    expect(JSON.parse(text).discord.status).toBe("invalid");
+    expect(text).not.toContain("evil.example");
+  });
+
+  it("text for Discord: no emojis, no mass mentions, at most 1,900 characters", () => {
+    const t = discordText(`@everyone party \u{1F389} @here ${"x".repeat(3000)}`);
+    expect(t.length).toBeLessThanOrEqual(1900);
+    expect(t).not.toMatch(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}]/u);
+    expect(t).not.toMatch(/@(everyone|here)/);
+    expect(t.endsWith("...")).toBe(true);
   });
 });
