@@ -3,6 +3,7 @@ import { json, requireAuth, type AppEnv, type Ctx } from "../context";
 import { authUrl, canAutoLink, exchangeCode, normalizeEmail, pkceChallenge, verifyIdToken, AuthError } from "../auth/google";
 import { flushChangeLog } from "../changelog";
 import { CONFIG } from "../env";
+import { platformCallback } from "../platform/auth";
 import { newId, newToken, parseToken, seal, sha256hex, timingSafeEqualStr, unseal } from "../lib/crypto";
 import {
   COOKIE_LOGIN,
@@ -42,14 +43,17 @@ const PICK_PURPOSE = "party-pick";
 // Step 1: our sign-in page POSTs here (a form). Nothing is written to the database:
 // state, nonce and the PKCE verifier travel in a sealed (AES-GCM, key id, expiry),
 // short-lived Lax cookie, and the browser goes to Google.
-authRoutes.post("/google/start", async (c) => {
+async function startSignIn(c: Ctx, platform: boolean) {
   if (!sameOrigin(c, c.env.PUBLIC_ORIGIN)) return json(c, 403, { error: "bad_origin" });
   if (await rateLimited(c.env.RL_AUTH, `login:${clientIp(c)}`)) return json(c, 429, { error: "rate_limited" });
   const now = c.var.deps.now();
   const state = newToken();
   const nonce = newToken();
   const codeVerifier = newToken();
-  const sealed = await seal(envRecord(c), LOGIN_PURPOSE, { s: state, n: nonce, v: codeVerifier }, now + CONFIG.loginAttemptMs);
+  // `p` marks a platform (admin/organiser) sign-in; it is sealed, so it cannot be changed on the way.
+  const attempt: Record<string, unknown> = { s: state, n: nonce, v: codeVerifier };
+  if (platform) attempt.p = 1;
+  const sealed = await seal(envRecord(c), LOGIN_PURPOSE, attempt, now + CONFIG.loginAttemptMs);
   const url = authUrl({
     clientId: c.env.GOOGLE_CLIENT_ID,
     redirectUri: redirectUri(c),
@@ -61,7 +65,11 @@ authRoutes.post("/google/start", async (c) => {
   // Lax so it is sent on Google's top-level redirect back to us.
   res.headers.append("set-cookie", cookie(COOKIE_LOGIN, sealed, { maxAgeS: CONFIG.loginAttemptMs / 1000, sameSite: "Lax" }));
   return res;
-});
+}
+
+authRoutes.post("/google/start", (c) => startSignIn(c, false));
+// Site owners and organisers: the same Google flow and callback, a separate session (src/platform/auth.ts).
+authRoutes.post("/platform/start", (c) => startSignIn(c, true));
 
 // Step 2: Google redirects back here. The sealed cookie must exist, be genuine and
 // unexpired, and hold the same state as the URL (this binds the sign-in to the
@@ -112,6 +120,7 @@ authRoutes.get("/google/callback", async (c) => {
 
   // From here on the request carries a verified Google identity. Writes happen
   // only if that identity matches a pending invitation or is active staff.
+  if (attempt.p === 1) return platformCallback(c, claims, clear);
   const db = c.var.db;
   const email = claims.email ? normalizeEmail(claims.email) : null;
   const linked = email && canAutoLink(claims) ? await db.linkGoogleInvites(claims.sub, email, now, newId()) : 0;

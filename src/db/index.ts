@@ -7,6 +7,7 @@
 import type { SqlDriver } from "./driver";
 import { inList, sql, type Sql } from "./sql";
 import { CONFIG } from "../env";
+import { PLATFORM } from "../platform/db";
 
 /**
  * True while the staff member has created fewer than the hourly cap of sessions.
@@ -61,7 +62,7 @@ export function audit(
     SELECT party_id, ${now}, ${actor}, ${action}, ${entityType}, id, rev, ${detail} FROM (${from})`;
 }
 
-export type LogEntity = "party" | "staff" | "invite" | "ticket";
+export type LogEntity = "party" | "staff" | "invite" | "ticket" | "platform_admin" | "organiser" | "organiser_invite";
 export interface UnloggedRow {
   entity: LogEntity;
   id: string;
@@ -129,7 +130,7 @@ export class Db {
     const r = await this.driver.all<{ staff_id: string; party_id: string; party_name: string; role: Role; name: string }>(
       sql`SELECT st.id AS staff_id, st.party_id, p.name AS party_name, st.role, st.name
         FROM staff st JOIN parties p ON p.id = st.party_id
-        WHERE st.google_sub = ${sub} AND st.disabled_at IS NULL AND st.role IN ('owner', 'admin')
+        WHERE st.google_sub = ${sub} AND st.disabled_at IS NULL AND st.role IN ('owner', 'admin') AND p.disabled_at IS NULL
         ORDER BY p.name`,
     );
     return r.results;
@@ -145,7 +146,8 @@ export class Db {
       sql`INSERT INTO sessions (id_hash, kind, party_id, staff_id, role, created_at, expires_at)
         SELECT ${a.hash}, 'google', party_id, id, role, ${a.now}, ${a.expiresAt} FROM staff
         WHERE id = ${a.staffId} AND party_id = ${a.partyId} AND google_sub = ${a.sub} AND disabled_at IS NULL
-          AND role IN ('owner', 'admin') AND ${underSessionCap(a.staffId, a.now)}`,
+          AND role IN ('owner', 'admin') AND ${underSessionCap(a.staffId, a.now)}
+          AND NOT EXISTS (SELECT 1 FROM parties dp WHERE dp.id = staff.party_id AND dp.disabled_at IS NOT NULL)`,
       sql`INSERT INTO audit (party_id, at, actor_staff_id, action, entity_type, entity_id, entity_rev, detail)
         SELECT party_id, ${a.now}, staff_id, 'login_google', 'staff', staff_id, NULL, NULL FROM sessions WHERE id_hash = ${a.hash}`,
       sql`SELECT ${underSessionCap(a.staffId, a.now)} AS under_cap`,
@@ -412,6 +414,9 @@ export class Db {
       ticketIds.length
         ? sql`SELECT * FROM tickets WHERE id IN (${inList(ticketIds)}) AND rev > logged_rev LIMIT ${limit}`
         : sql`SELECT 1 WHERE 0`,
+      sql`SELECT * FROM platform_admins WHERE rev > logged_rev LIMIT ${limit}`,
+      sql`SELECT * FROM organisers WHERE rev > logged_rev LIMIT ${limit}`,
+      sql`SELECT * FROM organiser_invites WHERE rev > logged_rev LIMIT ${limit}`,
     ]);
     const out: UnloggedRow[] = [];
     const add = (entity: LogEntity, rows: Record<string, unknown>[]) => {
@@ -420,7 +425,7 @@ export class Db {
         out.push({
           entity,
           id: String(r.id),
-          party_id: String(entity === "party" ? r.id : r.party_id),
+          party_id: String(entity === "party" ? r.id : (r.party_id ?? PLATFORM)),
           rev: Number(r.rev),
           state,
         });
@@ -430,12 +435,16 @@ export class Db {
     add("staff", rs[1]!.results);
     add("invite", rs[2]!.results);
     add("ticket", rs[3]!.results);
+    add("platform_admin", rs[4]!.results);
+    add("organiser", rs[5]!.results);
+    add("organiser_invite", rs[6]!.results);
     return out;
   }
 
   async markLogged(rows: { entity: LogEntity; id: string; rev: number }[]): Promise<void> {
     if (rows.length === 0) return;
-    const table = { party: "parties", staff: "staff", invite: "invites", ticket: "tickets" } as const;
+    const table = { party: "parties", staff: "staff", invite: "invites", ticket: "tickets",
+      platform_admin: "platform_admins", organiser: "organisers", organiser_invite: "organiser_invites" } as const;
     await this.driver.batch(
       rows.map((r) => {
         const t = table[r.entity];

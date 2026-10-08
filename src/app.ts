@@ -18,6 +18,7 @@ import { partyRoutes } from "./routes/party";
 import { outboxRoutes } from "./routes/outbox";
 import { guestRoutes } from "./routes/guests";
 import { ticketRoutes } from "./routes/tickets";
+import { platformRoutes } from "./routes/platform";
 
 export type { Deps } from "./context";
 
@@ -127,6 +128,7 @@ export function createApp(deps: Deps) {
   app.route("/api/outbox", outboxRoutes);
   app.route("/api/guest", guestRoutes);
   app.route("/api/tickets", ticketRoutes);
+  app.route("/api/platform", platformRoutes);
 
   app.get("/api/me", requireAuth(["owner", "admin", "door"]), async (c) => {
     const a = c.var.auth;

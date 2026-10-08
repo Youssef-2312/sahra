@@ -6,7 +6,7 @@
 import { env } from "cloudflare:test";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { newId, newToken } from "../src/lib/crypto";
-import { googleLogin, harness, ORIGIN, seedParty, signupInit, type Harness } from "./helpers";
+import { googleLogin, harness, ORIGIN, platformLogin, seedParty, signupInit, type Harness } from "./helpers";
 
 let logs: string[] = [];
 beforeEach(() => {
@@ -22,6 +22,7 @@ function lastReq() {
 
 const JSON_H = { origin: ORIGIN, "sec-fetch-site": "same-origin", "content-type": "application/json" };
 const junkCookie = { "__Host-sahra_s": newToken() };
+const junkPlatform = { "__Host-sahra_p": newToken() };
 const id = newId();
 
 // Read-only public pages that answer 200 without a session (still zero writes).
@@ -109,6 +110,30 @@ const cases: Case[] = [
   ["reissue, junk session", "POST", "/api/tickets/:id/reissue", (h) => h.req(`/api/tickets/${tid}/reissue`, { method: "POST", headers: JSON_H, cookies: junkCookie, body: JSON.stringify({ op: newId() }) })],
   ["transfer, junk session", "POST", "/api/tickets/:id/transfer", (h) => h.req(`/api/tickets/${tid}/transfer`, { method: "POST", headers: JSON_H, cookies: junkCookie, body: JSON.stringify({ op: newId(), name: "X" }) })],
   ["approve, no session", "POST", "/api/tickets/approve", (h) => h.req("/api/tickets/approve", { method: "POST", headers: JSON_H, body: JSON.stringify({ ids: [tid] }) })],
+  ["platform sign-in start, wrong origin", "POST", "/api/auth/platform/start", (h) => h.req("/api/auth/platform/start", { method: "POST", headers: { origin: "https://evil.example" } })],
+  ["platform sign-in start", "POST", "/api/auth/platform/start", (h) => h.req("/api/auth/platform/start", { method: "POST", headers: { origin: ORIGIN } })],
+  ["platform callback, verified Google account that is not admin or organiser", "GET", "/api/auth/google/callback", async (h) => { h.google.identity = { sub: `stranger-${newId()}`, email: "stranger2@gmail.com" }; return (await platformLogin(h)).res; }],
+  ["platform callback, not Gmail/Workspace", "GET", "/api/auth/google/callback", async (h) => { h.google.identity = { sub: `stranger-${newId()}`, email: "x@example.org" }; return (await platformLogin(h)).res; }],
+  ["platform me, no session", "GET", "/api/platform/me", (h) => h.req("/api/platform/me")],
+  ["platform me, junk session", "GET", "/api/platform/me", (h) => h.req("/api/platform/me", { cookies: junkPlatform })],
+  ["platform logout, junk session", "POST", "/api/platform/logout", (h) => h.req("/api/platform/logout", { method: "POST", headers: JSON_H, cookies: junkPlatform })],
+  ["organiser list, junk session", "GET", "/api/platform/organisers", (h) => h.req("/api/platform/organisers", { cookies: junkPlatform })],
+  ["organiser invite, junk session", "POST", "/api/platform/organisers", (h) => h.req("/api/platform/organisers", { method: "POST", headers: JSON_H, cookies: junkPlatform, body: JSON.stringify({ organiser_id: newId(), invite_id: newId(), name: "x", email: "x@gmail.com" }) })],
+  ["organiser invite, staff cookie", "POST", "/api/platform/organisers", (h) => h.req("/api/platform/organisers", { method: "POST", headers: JSON_H, cookies: junkCookie, body: JSON.stringify({ organiser_id: newId(), invite_id: newId(), name: "x", email: "x@gmail.com" }) })],
+  ["organiser disable, junk session", "POST", "/api/platform/organisers/:id/disable", (h) => h.req(`/api/platform/organisers/${id}/disable`, { method: "POST", headers: JSON_H, cookies: junkPlatform })],
+  ["party counts, junk session", "GET", "/api/platform/parties", (h) => h.req("/api/platform/parties", { cookies: junkPlatform })],
+  ["party disable, junk session", "POST", "/api/platform/parties/:id/disable", (h) => h.req("/api/platform/parties/some-party/disable", { method: "POST", headers: JSON_H, cookies: junkPlatform })],
+  ["party disable, no session", "POST", "/api/platform/parties/:id/disable", (h) => h.req("/api/platform/parties/some-party/disable", { method: "POST", headers: JSON_H })],
+  ["my parties, junk session", "GET", "/api/platform/my-parties", (h) => h.req("/api/platform/my-parties", { cookies: junkPlatform })],
+  ["create party, junk session", "POST", "/api/platform/parties", (h) => h.req("/api/platform/parties", { method: "POST", headers: JSON_H, cookies: junkPlatform, body: JSON.stringify({ id: "new-party", name: "x", capacity: 10, staff_id: newId() }) })],
+  ["create party, no session", "POST", "/api/platform/parties", (h) => h.req("/api/platform/parties", { method: "POST", headers: JSON_H, body: JSON.stringify({ id: "new-party", name: "x", capacity: 10, staff_id: newId() }) })],
+  ["party enable, junk session", "POST", "/api/platform/parties/:id/enable", (h) => h.req("/api/platform/parties/some-party/enable", { method: "POST", headers: JSON_H, cookies: junkPlatform })],
+  ["party enable, staff cookie", "POST", "/api/platform/parties/:id/enable", (h) => h.req("/api/platform/parties/some-party/enable", { method: "POST", headers: JSON_H, cookies: junkCookie })],
+  ["party limit, junk session", "POST", "/api/platform/organisers/:id/party-limit", (h) => h.req(`/api/platform/organisers/${id}/party-limit`, { method: "POST", headers: JSON_H, cookies: junkPlatform, body: JSON.stringify({ limit: 5 }) })],
+  ["party limit, no session", "POST", "/api/platform/organisers/:id/party-limit", (h) => h.req(`/api/platform/organisers/${id}/party-limit`, { method: "POST", headers: JSON_H, body: JSON.stringify({ limit: 5 }) })],
+  ["site owner list, junk session", "GET", "/api/platform/site-owners", (h) => h.req("/api/platform/site-owners", { cookies: junkPlatform })],
+  ["site owner remove, junk session", "POST", "/api/platform/site-owners/:id/remove", (h) => h.req(`/api/platform/site-owners/${id}/remove`, { method: "POST", headers: JSON_H, cookies: junkPlatform })],
+  ["site owner remove, no session", "POST", "/api/platform/site-owners/:id/remove", (h) => h.req(`/api/platform/site-owners/${id}/remove`, { method: "POST", headers: JSON_H })],
   ["unknown API path", "GET", "/api/*", (h) => h.req("/api/nothing-here")],
 ];
 
@@ -143,7 +168,8 @@ describe("endpoints without a session write nothing", () => {
 });
 
 async function counts() {
-  const tables = ["parties", "staff", "invites", "sessions", "audit", "tickets", "scans", "outbox", "email_quota"];
+  const tables = ["parties", "staff", "invites", "sessions", "audit", "tickets", "scans", "outbox", "email_quota",
+    "platform_admins", "organisers", "organiser_invites", "platform_sessions"];
   const out: Record<string, unknown> = {};
   for (const t of tables) out[t] = await env.DB.prepare(`SELECT COUNT(*) AS n, COALESCE(SUM(rev), 0) AS r FROM ${t}`).first().catch(async () => env.DB.prepare(`SELECT COUNT(*) AS n FROM ${t}`).first());
   out.outbox_status = await env.DB.prepare("SELECT status, COUNT(*) AS n FROM outbox GROUP BY status ORDER BY status").all().then((r) => r.results);

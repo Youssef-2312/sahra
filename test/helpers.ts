@@ -422,3 +422,56 @@ export async function viewTicket(h: Harness, link: string) {
   const r = await h.req("/api/guest/ticket", { headers: { "x-sahra-ticket": token } });
   return { status: r.status, body: (await r.json()) as { ticket?: { status: string; qr: string | null; reject_reason: string | null; on_hold: boolean; guest_name: string }; party?: unknown; error?: string } };
 }
+
+// ------------------------------------------------------------- platform
+
+/** Full platform (admin/organiser) Google sign-in through the app. */
+export async function platformLogin(h: Harness, mutateBeforeCallback?: (ctx: { state: string; nonce: string; attempt: string; code: string }) => void | Promise<void>) {
+  const start = await h.req("/api/auth/platform/start", { method: "POST", headers: { origin: ORIGIN, "sec-fetch-site": "same-origin" } });
+  if (start.status !== 303) throw new Error(`platform start failed ${start.status}`);
+  const loc = new URL(start.headers.get("location")!);
+  const state = loc.searchParams.get("state")!;
+  const nonce = loc.searchParams.get("nonce")!;
+  const attempt = setCookies(start)["__Host-sahra_login"]!.value;
+  h.google.nonceFor = nonce;
+  const code = `code-${newId()}`;
+  h.google.codes.set(code, loc.searchParams.get("code_challenge")!);
+  const ctx = { state, nonce, attempt, code };
+  await mutateBeforeCallback?.(ctx);
+  const res = await h.req(`/api/auth/google/callback?state=${encodeURIComponent(ctx.state)}&code=${encodeURIComponent(ctx.code)}`, {
+    cookies: ctx.attempt ? { "__Host-sahra_login": ctx.attempt } : {},
+  });
+  return { res, cookies: setCookies(res), html: await res.clone().text() };
+}
+
+/** A linked, active site owner. */
+export async function seedSiteOwner(sub = `pa-${newId()}`) {
+  const id = newId();
+  await env.DB.prepare(
+    "INSERT INTO platform_admins (id, name, email, google_sub, invite_expires_at, created_at, logged_rev) VALUES (?, ?, ?, ?, 0, 0, 1)",
+  ).bind(id, `Admin ${id.slice(0, 4)}`, `${sub}@gmail.com`, sub).run();
+  return { id, sub };
+}
+
+/** A linked, active organiser. */
+export async function seedOrganiser(sub = `org-${newId()}`) {
+  const id = newId();
+  await env.DB.prepare(
+    "INSERT INTO organisers (id, name, email, google_sub, created_at, logged_rev) VALUES (?, ?, ?, ?, 0, 1)",
+  ).bind(id, `Organiser ${id.slice(0, 4)}`, `${sub}@gmail.com`, sub).run();
+  return { id, sub };
+}
+
+/** A platform session row for a Google account; cookie + CSRF for API calls. */
+export async function seedPlatformSession(sub: string, clock: Clock, ttlMs = 3600_000) {
+  const token = newToken();
+  await env.DB.prepare("INSERT INTO platform_sessions (id_hash, google_sub, created_at, expires_at) VALUES (?, ?, ?, ?)")
+    .bind(await sha256hex(token), sub, clock.now(), clock.now() + ttlMs).run();
+  return { token, hash: await sha256hex(token), csrf: await csrfFor(parseToken(token)!) };
+}
+
+/** Like `api`, with the platform session cookie. */
+export function papi(sess: { token: string; csrf: string }, body?: unknown, method = "POST"): RequestInit & { cookies: Record<string, string> } {
+  const r = api(sess, body, method);
+  return { ...r, cookies: { "__Host-sahra_p": sess.token } };
+}
