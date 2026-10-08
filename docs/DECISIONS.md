@@ -797,7 +797,7 @@ table `platform_admins` (change-log entity `platform_admin`), the route prefix
   (audited). Removing the site owner disables all their marked rows in the same
   batch (sessions revoked, intents "staff_disabled" first, audit "site owner
   removed"), so their access ends on the next request. New migration
-  `migrations/0010_site_owner_access.sql` (ADD COLUMN `staff.site_owner_id`),
+  `migrations/0012_site_owner_access.sql` (ADD COLUMN `staff.site_owner_id`),
   apply before deploying.
 
 **Storage (migration `migrations/0006_organisers.sql`, additive; not applied
