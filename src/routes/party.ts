@@ -144,7 +144,7 @@ partyRoutes.get("/stats", requireAuth(["owner", "admin", "door"]), async (c) => 
   const s = await new GuestDb(c.var.db.driver).stats({ hash: a.hash, partyId: a.info.party_id }, now, ["owner", "admin", "door"]);
   if (s.byType.length === 0) return json(c, 401, { error: "not_signed_in" });
   const capacity = s.byType[0]!.capacity;
-  const sum = (k: "tickets" | "pending" | "approved" | "released" | "admitted" | "admitted_tickets" | "money_approved" | "money_pending") =>
+  const sum = (k: "tickets" | "pending" | "pending_tickets" | "approved" | "released" | "admitted" | "admitted_tickets" | "money_approved" | "money_pending") =>
     s.byType.reduce((n, r) => n + Number(r[k] ?? 0), 0);
   const held = sum("pending") + sum("approved");
   const names = new Map(s.types.map((t) => [t.id, t]));
@@ -181,6 +181,7 @@ partyRoutes.get("/stats", requireAuth(["owner", "admin", "door"]), async (c) => 
     held,
     places_left: Math.max(0, capacity - held),
     pending: sum("pending"),
+    pending_requests: sum("pending_tickets"),
     approved: sum("approved"),
     released: sum("released"),
     inside: sum("admitted"),

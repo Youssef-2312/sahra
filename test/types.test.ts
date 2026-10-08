@@ -380,7 +380,7 @@ describe("search, resend, announcements, stats", () => {
     const s = (await r.json()) as Record<string, unknown> & { by_type: unknown[]; check_ins_per_15_min: unknown[]; by_scanner: unknown[]; requests_per_hour: unknown[] };
     const cap = Number(await env.DB.prepare("SELECT capacity FROM parties WHERE id = ?").bind(party).first("capacity"));
     expect(s).toMatchObject({ capacity: cap, held: 3, places_left: cap - 3, pending: 1, approved: 2, released: 2, inside: 2, admitted_tickets: 1,
-      money_expected: 600, money_pending: 300 });
+      money_expected: 600, money_pending: 300, pending_requests: 1 });
     expect(s.by_type).toEqual([{ type_id: vip, name: "VIP", quantity: 5, pending: 1, approved: 2, released: 2, admitted: 2, places_left: 2 }]);
     expect(s.check_ins_per_15_min).toEqual([{ at: Math.floor(h.clock.now() / 900_000) * 900_000, tickets: 1, people: 2 }]);
     expect(s.requests_per_hour).toEqual([{ at: Math.floor(h.clock.now() / 3_600_000) * 3_600_000, requests: 2, people: 3 }]);

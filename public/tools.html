@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Sahra team and test tools</title></head>
+<body>
+<header><span id="account"><a href="/">Sign in</a></span> | <a href="https://nova.example/" id="nova" rel="noopener">Made by Nova</a></header>
+<main>
+<h1>Team and test tools</h1>
+<p><a href="/dashboard.html">Back to the dashboard</a></p>
+<p><a href="/party.html">Party details and ticket types</a> | <a href="/queue.html">Approval queue</a> | <a href="/guests.html">Guests and live numbers</a> | <a href="/outbox.html">Outbox</a></p>
+<pre id="me">Loading...</pre>
+<button id="logout" type="button">Sign out</button>
+
+<section id="owner" hidden>
+<h2>Staff</h2>
+<pre id="staff"></pre>
+<h3>Invite owner/admin (Google)</h3>
+<form id="ginvite"><input name="name" placeholder="Name" required> <input name="email" type="email" placeholder="Gmail address" required>
+<select name="role"><option value="admin">admin</option><option value="owner">owner</option></select> <button>Invite</button></form>
+<h3>Invite door staff</h3>
+<form id="dinvite"><input name="name" placeholder="Name (new person)"> or existing door staff id <input name="staff_id" placeholder="staff id"> <input name="hours" type="number" min="1" max="336" value="72"> hours <button>Create link</button></form>
+<pre id="link"></pre>
+<h3>Change staff</h3>
+<form id="change"><input name="id" placeholder="staff id or invite id" required>
+<select name="action"><option value="disable">disable staff</option><option value="role:admin">role admin</option><option value="role:owner">role owner</option><option value="revoke">revoke invite</option></select> <button>Apply</button></form>
+</section>
+
+<section id="door">
+<h2>Admission</h2>
+<pre id="admission"></pre>
+<span id="admission-buttons" hidden><button id="open" type="button">Open admission</button> <button id="pause" type="button">Pause admission</button></span>
+<h2>Scan (test page)</h2>
+<p>NO GREEN, NO ENTRY.</p>
+<form id="scan"><input name="qr" placeholder="QR text" size="80" required> <button>Scan</button></form>
+<pre id="verdict" role="status"></pre>
+<h3>Test tickets (staging only)</h3>
+<form id="mktickets"><input name="count" type="number" min="1" max="20" value="1"> tickets of <input name="people" type="number" min="1" max="10" value="1"> people <button>Create</button></form>
+<pre id="tickets"></pre>
+</section>
+<pre id="out" role="status"></pre>
+</main>
+<script src="/js/common.js"></script>
+<script src="/js/tools.js"></script>
+</body>
+</html>

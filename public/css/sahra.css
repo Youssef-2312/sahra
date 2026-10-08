@@ -235,3 +235,15 @@ details > summary::-webkit-details-marker { display: none; }
 .nova .credit img { width: 28px; height: 28px; border-radius: 7px; }
 .icon-link { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 999px; border: 1px solid var(--line); color: var(--text); }
 .icon-link svg { width: 20px; height: 20px; }
+
+/* Organiser dashboard (piece 6): number tiles, two per row on a phone. */
+.tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: var(--gap) 0; }
+.tile { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; min-width: 0; }
+.tile .label { color: var(--muted); font-size: 0.85rem; }
+.tile .big { font-size: 1.7rem; font-weight: 800; line-height: 1.15; margin-top: 4px; overflow-wrap: anywhere; }
+.tile .sub { color: var(--muted); font-size: 0.85rem; margin-top: 2px; }
+.tile.wide { grid-column: 1 / -1; }
+.chart svg { display: block; width: 100%; height: auto; }
+.chart svg.donut { width: 160px; max-width: 60%; margin: 8px auto; }
+.chart .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 0.85rem; color: var(--muted); margin-top: 8px; }
+.chart .dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-inline-end: 6px; vertical-align: middle; }

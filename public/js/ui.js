@@ -90,11 +90,13 @@ var Sahra = (function () {
     return t("error_generic");
   }
 
-  function money(n) {
-    if (!n) return t("free");
-    try { return new Intl.NumberFormat(locale(), { style: "currency", currency: "EGP", maximumFractionDigits: 0 }).format(n); }
-    catch (e) { return "EGP " + n; }
+  /** Whole Egyptian pounds, zero included: "EGP 1,250". */
+  function amount(n) {
+    try { return new Intl.NumberFormat(locale(), { style: "currency", currency: "EGP", maximumFractionDigits: 0 }).format(n || 0); }
+    catch (e) { return "EGP " + (n || 0); }
   }
+  /** A price: "Free" for zero. */
+  function money(n) { return n ? amount(n) : t("free"); }
 
   /** A moment in the party's own time zone: "Sat 31 Oct, 22:00". */
   function when(ms, tz) {
@@ -194,6 +196,6 @@ var Sahra = (function () {
     return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
   }
 
-  return { t: t, el: el, clear: clear, api: api, errorText: errorText, money: money, when: when, time: time, rel: rel,
+  return { t: t, el: el, clear: clear, api: api, errorText: errorText, money: money, amount: amount, when: when, time: time, rel: rel,
     lang: lang, boot: boot, store: store, token: token };
 })();

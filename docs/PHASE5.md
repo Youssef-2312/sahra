@@ -54,7 +54,7 @@ the `staging` branch; a finished piece the owner should try is pushed there too.
 | 3 | Guest ticket page (`/ticket.html#t=`): big QR, name/type/group, party, address or countdown | done |
 | 4 | Home page: party cards with the guest's own status; "Find my tickets" (needs backend) | waiting for the owner (brief vs idea 4) |
 | 5 | Door scanner: camera, full-screen verdicts, sound and vibration | done (first version) |
-| 6 | Organiser dashboard: top numbers and big buttons | |
+| 6 | Organiser dashboard: top numbers and big buttons | done (first version) |
 | 7 | Approval queue: one card per request, "Approve and send QR" | |
 | 8 | Party settings: details, ticket types, sign-up questions | |
 | 9 | Guests: find, resend, add a cash guest, CSV import (needs backend) | |
@@ -113,6 +113,21 @@ the `staging` branch; a finished piece the owner should try is pushed there too.
   Chromium has no BarcodeDetector). Real phones still to be tried by the owner
   (two-phone rehearsal).
 
+- Piece 6: `public/dashboard.html` + `public/js/dashboard.js` + `public/js/charts.js`
+  (inline SVG, no library). Tiles: approved of capacity, waiting requests,
+  money expected (+ waiting), countdown or inside now. Buttons: Review (when
+  any wait), open / pause the doors (pause asks first), scanner, guests, party
+  settings, emails, team and tools (owner). Charts: arrivals per 15 minutes
+  (once anyone is in), requests per day (14 days, party's time zone), tickets
+  by type (donut + legend with numbers). Refreshes once a minute while
+  visible. `GET /api/party/stats` gained money_expected, money_pending,
+  pending_requests, requests_per_hour (30 days); arrivals are per 15 minutes.
+  The old test dashboard moved to `public/tools.html` (`js/tools.js`): team
+  invitations and the staging test tools, until a Team page exists.
+- Local staff-page check: sign in as the local test party's owner by setting
+  the cookie from a page on `http://localhost:8799` (`document.cookie`, Secure
+  is allowed on localhost; CDP refuses it), scratchpad `as-owner.mjs`.
+
 ## Open questions for the owner
 
 - Privacy and Terms drafts: approve or change the wording (then remove the
@@ -125,7 +140,8 @@ the `staging` branch; a finished piece the owner should try is pushed there too.
 
 ## Next
 
-Piece 6 (organiser dashboard) unless the owner answers piece 4 first.
+Piece 7 (approval queue cards, "Approve and send QR") unless the owner answers
+piece 4 first.
 
 Piece 4, the home page. The original brief says "the website homepage is the
 staff login"; the brainstorm (idea 4) agreed party cards as the hero with the

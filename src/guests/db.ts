@@ -449,6 +449,7 @@ export class GuestDb {
       sql`SELECT p.capacity, t.type_id, ty.name AS type_name, ty.quantity, ty.archived_at, ty.staff_only,
           COUNT(t.id) AS tickets,
           COALESCE(SUM(CASE WHEN t.status = 'pending' THEN t.people END), 0) AS pending,
+          COALESCE(SUM(CASE WHEN t.status = 'pending' THEN 1 END), 0) AS pending_tickets,
           COALESCE(SUM(CASE WHEN t.status = 'approved' THEN t.people END), 0) AS approved,
           COALESCE(SUM(CASE WHEN t.status = 'approved' AND t.released_at IS NOT NULL THEN t.people END), 0) AS released,
           COALESCE(SUM(CASE WHEN t.used_at IS NOT NULL THEN t.people END), 0) AS admitted,
@@ -470,7 +471,7 @@ export class GuestDb {
     ]);
     return {
       byType: rs[0]!.results as { capacity: number; type_id: string | null; type_name: string | null; quantity: number | null;
-        tickets: number; pending: number; approved: number; released: number; admitted: number; admitted_tickets: number;
+        tickets: number; pending: number; pending_tickets: number; approved: number; released: number; admitted: number; admitted_tickets: number;
         money_approved: number; money_pending: number }[],
       slots: rs[1]!.results as { slot: number; used_by: string | null; scanner: string | null; tickets: number; people: number }[],
       types: rs[2]!.results as { id: string; name: string; quantity: number | null; archived_at: number | null; staff_only: number }[],
