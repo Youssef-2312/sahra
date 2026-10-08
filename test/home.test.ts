@@ -9,7 +9,7 @@ beforeEach(() => clearPartyListCache());
 async function list(h: Awaited<ReturnType<typeof harness>>) {
   const r = await h.req("/api/guest/parties");
   expect(r.headers.get("cache-control")).toBe("public, max-age=60");
-  return ((await r.json()) as { parties: { id: string; name: string; state: string; from_price: number | null; places_left: number }[] }).parties;
+  return ((await r.json()) as { parties: { id: string; name: string; state: string; from_price: number | null; price_count: number; places_left: number }[] }).parties;
 }
 
 describe("home page party list", () => {
@@ -34,6 +34,8 @@ describe("home page party list", () => {
     const mine = (await list(h)).filter((p) => [a.party, b.party, off.party, over.party, undated.party].includes(p.id));
     expect(mine.map((p) => p.id)).toEqual([b.party, a.party]);
     expect(mine[1]).toMatchObject({ state: "open", from_price: 250, places_left: 8 });
+    expect(mine[1]!.price_count).toBe(2); // 250 and 400: the card says "From EGP 250"
+    expect(mine[0]).toMatchObject({ from_price: null, price_count: 0 }); // no ticket types: the card shows no price
     expect(JSON.stringify(mine)).not.toContain("Secret street");
     // Full and registration rules show as the card's state.
     await set(b.party, "capacity = 0");

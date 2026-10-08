@@ -120,7 +120,7 @@ guestRoutes.get("/parties", async (c) => {
       const left = Math.max(0, p.capacity - p.held);
       return {
         id: p.id, name: p.name, starts_at: p.starts_at, ends_at: p.ends_at, time_zone: p.time_zone,
-        from_price: p.from_price, places_left: left,
+        from_price: p.from_price, price_count: p.price_count, places_left: left,
         state: left === 0 ? "full" : notYet ? "not_open_yet" : over ? "closed" : "open",
         opens_at: notYet ? p.registration_opens_at : null,
       };

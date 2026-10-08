@@ -165,18 +165,24 @@ export class GuestDb {
   /**
    * The home page's list: parties with a start time, not switched off, and not
    * over (their end, or 12 hours after the start). Public data only (name, times,
-   * places left, the lowest public price); never the place.
+   * places left, the lowest public price and how many prices); never the place.
    */
   async listedParties(now: number) {
     const r = await this.driver.all<{ id: string; name: string; starts_at: number; ends_at: number | null; time_zone: string | null;
-      capacity: number; held: number; registration_opens_at: number | null; registration_closes_at: number | null; from_price: number | null }>(
+      capacity: number; held: number; registration_opens_at: number | null; registration_closes_at: number | null; prices: string }>(
+      // One pass over the public types gives both the lowest price and how many different prices there are
+      // (the card says "EGP 350" for one price, "From EGP 350" for several).
       sql`SELECT p.id, p.name, p.starts_at, p.ends_at, p.time_zone, p.capacity, ${held(sql`p.id`)} AS held,
           p.registration_opens_at, p.registration_closes_at,
-          (SELECT MIN(tt.price) FROM ticket_types tt WHERE tt.party_id = p.id AND tt.archived_at IS NULL AND tt.staff_only = 0) AS from_price
+          (SELECT json_array(MIN(tt.price), COUNT(DISTINCT tt.price)) FROM ticket_types tt
+            WHERE tt.party_id = p.id AND tt.archived_at IS NULL AND tt.staff_only = 0) AS prices
         FROM parties p
         WHERE p.disabled_at IS NULL AND p.starts_at IS NOT NULL AND COALESCE(p.ends_at, p.starts_at + 43200000) > ${now}
         ORDER BY p.starts_at, p.id LIMIT 50`);
-    return r.results;
+    return r.results.map(({ prices, ...p }) => {
+      const [low, count] = JSON.parse(prices) as [number | null, number];
+      return { ...p, from_price: low, price_count: count };
+    });
   }
 
   /** Several tickets named by verified links (the home page's remembered tickets), with their party's name. */

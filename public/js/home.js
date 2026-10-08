@@ -1,13 +1,13 @@
-// Home page (owner decisions): a full-width hero with the party photos in a grid
-// behind the heading and the "Discover parties" button, then the upcoming parties as a grid of cards, then
-// a short "About Sahra", then the footer; sign-in for organisers and staff sits
-// at the top right. A party card shows this browser's own ticket for that party
-// when it remembers one (brainstorm idea 4): the links saved by the sign-up and
-// ticket pages (localStorage sahra_tickets), checked in one call.
-//
-// Photos live in /img/hero (hero-1.jpg ... hero-9.jpg), compressed and slightly
-// blurred before they are added; all nine sit behind the hero, 6-9 also on cards. A photo that is missing is removed and the
-// tile keeps its gradient, so the page never shows a broken image.
+// Home page (owner decisions): a full-width hero (the party photos behind the
+// heading, "Discover parties" and "How it works"), the upcoming parties as a
+// sideways row of cards (flyers on the start side, then date and time, name,
+// price, availability, action; arrows only when the row overflows), "How
+// tickets work" in three plain columns, the organiser sign-in row, the footer.
+// Sign-in for organisers and staff sits at the top right. A card shows this
+// browser's own ticket for that party when it remembers one (brainstorm idea 4):
+// the links saved by the sign-up and ticket pages (localStorage sahra_tickets),
+// checked in one call. Prices are only ever the real ones: "EGP 350" for one
+// price, "From EGP 350" for several, nothing when unknown.
 "use strict";
 (function () {
   var t = Sahra.t, el = Sahra.el;
@@ -54,15 +54,13 @@
     return el("section", { class: "hero" },
       el("div", { class: "hero-bg", attrs: { "aria-hidden": "true" } }, HERO.map(function (n, i) { return el("div", { class: "ph" }, photo(n, i < 5)); })),
       el("div", { class: "copy" },
-        el("span", { class: "kicker", text: t("h_kicker") }),
         el("h1", null, heading(t("h_title_a"), t("h_title_em"), t("h_title_b"))),
         el("p", { text: t("h_sub") }),
         el("div", { class: "hero-actions" },
           el("a", { class: "btn primary", text: t("h_discover"), attrs: { href: "#parties" } }),
           shown.length
             ? el("a", { class: "btn", text: t("h_your_tickets"), attrs: { href: "#mine" } })
-            : el("a", { class: "btn", text: t("h_how"), attrs: { href: "#about" } })),
-        el("ul", { class: "facts-strip" }, [t("h_fact_1"), t("h_fact_2"), t("h_fact_3")].map(function (x) { return el("li", { text: x }); }))));
+            : el("a", { class: "btn", text: t("h_how"), attrs: { href: "#how" } }))));
   }
 
   // A party card (owner's reference: an events row with the flyer and the details
@@ -87,27 +85,36 @@
     return box;
   }
 
-  function priceLine(p, my) {
+  /** The real price only: "EGP 350" for one price, "From EGP 350" for several, nothing when unknown. */
+  function priceText(p) {
+    if (p.from_price === null || p.from_price === undefined) return null;
+    if (p.from_price === 0 && p.price_count <= 1) return t("free");
+    return p.price_count > 1 ? t("h_from", { amount: Sahra.amount(p.from_price) }) : Sahra.amount(p.from_price);
+  }
+  function availability(p, my) {
     if (my) return el("span", { class: "tags" }, myPill(my.status));
     var cls = p.state === "open" ? "yes" : p.state === "full" ? "no" : "off";
     var text = p.state === "full" ? t("h_state_full")
       : p.state === "not_open_yet" ? t("h_state_not_open_yet", { rel: Sahra.rel(p.opens_at) })
-      : p.state === "closed" ? t("h_state_closed")
-      : p.from_price ? t("h_from", { amount: Sahra.amount(p.from_price) }) : t("h_state_open");
+      : p.state === "closed" ? t("h_state_closed") : t("h_state_open");
     return el("span", { class: "status " + cls }, el("span", { class: "dot", attrs: { "aria-hidden": "true" } }), el("span", { text: text }));
   }
 
+  // Date and time, name, price, availability, action (owner's order). The action
+  // sits at the bottom of the card without a fixed height, so long names wrap.
   function card(p) {
     var my = mine.filter(function (m) { return m.party_id === p.id && m.status !== "invalid"; })[0];
     var href = my ? my.link : "/signup.html?party=" + encodeURIComponent(p.id);
-    var day = datePart(p.starts_at, p.time_zone, { weekday: "short", day: "numeric", month: "short" });
+    var price = priceText(p);
+    var action = my ? t("h_view_ticket") : p.state === "open" ? t("h_request") : t("h_details");
     return el("a", { class: "party-card", attrs: { href: href } },
       flyers(p),
       el("div", { class: "info" },
-        el("span", { class: "when" }, el("span", { text: day }), el("span", { class: "sep", attrs: { "aria-hidden": "true" } }), el("span", { text: Sahra.time(p.starts_at, p.time_zone) })),
+        el("span", { class: "when", text: Sahra.when(p.starts_at, p.time_zone) }),
         el("span", { class: "name", text: p.name, attrs: { dir: "auto" } }),
-        priceLine(p, my),
-        el("span", { class: "go", text: my ? t("h_view_ticket") : t("h_request") })));
+        price ? el("span", { class: "price-line", text: price }) : null,
+        availability(p, my),
+        el("span", { class: "go", text: action })));
   }
 
   function chevron(next) {
@@ -126,6 +133,7 @@
     return svg;
   }
 
+  var railWatch = null;
   function partiesSection() {
     var rail = el("div", { class: "rail", attrs: { tabindex: "0", "aria-label": t("h_upcoming") } });
     function step(next) {
@@ -134,15 +142,19 @@
       var rtl = document.documentElement.dir === "rtl";
       rail.scrollBy({ left: (next ? 1 : -1) * (rtl ? -w : w), behavior: "smooth" });
     }
-    var nav = parties && parties.length > 1 ? el("div", { class: "rail-nav" },
+    var nav = el("div", { class: "rail-nav", hidden: true },
       el("button", { class: "round", attrs: { type: "button", "aria-label": t("h_prev") }, on: { click: function () { step(false); } } }, chevron(false)),
-      el("button", { class: "round", attrs: { type: "button", "aria-label": t("h_next") }, on: { click: function () { step(true); } } }, chevron(true))) : null;
-    var list = [el("div", { class: "section-head", attrs: { id: "parties" } },
-      el("div", null, el("span", { class: "kicker", text: t("h_upcoming_kicker") }), el("h2", { text: t("h_upcoming") })), nav)];
+      el("button", { class: "round", attrs: { type: "button", "aria-label": t("h_next") }, on: { click: function () { step(true); } } }, chevron(true)));
+    // Arrows only when the cards do not all fit; checked again whenever the row changes size.
+    function fit() { nav.hidden = !(rail.scrollWidth > rail.clientWidth + 1); }
+    if (railWatch) railWatch.disconnect();
+    if ("ResizeObserver" in window) { railWatch = new ResizeObserver(fit); railWatch.observe(rail); }
+    else window.addEventListener("resize", fit);
+    var list = [el("div", { class: "section-head", attrs: { id: "parties" } }, el("h2", { text: t("h_upcoming") }), nav)];
     if (failed) list.push(el("p", { class: "notice no", text: failed }));
     else if (!parties) list.push(el("p", { class: "muted", text: t("loading") }));
     else if (!parties.length) list.push(el("p", { class: "empty", text: t("h_none") }));
-    else { parties.forEach(function (p) { rail.appendChild(card(p)); }); list.push(rail); }
+    else { parties.forEach(function (p) { rail.appendChild(card(p)); }); list.push(rail); requestAnimationFrame(fit); }
     return list;
   }
 
@@ -158,20 +170,16 @@
       }))];
   }
 
-  function about() {
-    var steps = [1, 2, 3].map(function (n) {
-      var step = el("div", { class: "step" },
-        el("span", { class: "num", text: "0" + n }),
-        el("h3", { text: t("h_step" + n + "_t") }),
-        el("p", { text: t("h_step" + n + "_p") }));
-      return step;
-    });
-    return el("section", { class: "about", attrs: { id: "about" } },
-      el("span", { class: "corner tl" }), el("span", { class: "corner tr" }), el("span", { class: "corner bl" }), el("span", { class: "corner br" }),
-      el("span", { class: "kicker", text: t("h_about_kicker") }),
-      el("h2", null, heading(t("h_about_title_a"), t("h_about_title_em"), "")),
-      el("p", { text: t("h_about_text") }),
-      el("div", { class: "steps" }, steps),
+  // How tickets work: plain text in three columns, then the organiser sign-in row.
+  function how() {
+    return el("section", { class: "how", attrs: { id: "how" } },
+      el("div", { class: "section-head" }, el("h2", { text: t("h_how_title") })),
+      el("div", { class: "steps" }, [1, 2, 3].map(function (n) {
+        return el("div", { class: "step" },
+          el("span", { class: "num", text: "0" + n }),
+          el("h3", { text: t("h_step" + n + "_t") }),
+          el("p", { text: t("h_step" + n + "_p") }));
+      })),
       el("div", { class: "host" },
         el("div", null, el("h3", { text: t("h_host_t") }), el("p", { class: "muted", text: t("h_host_p") })),
         el("a", { class: "btn", text: t("sign_in"), attrs: { href: "/signin.html" } })));
@@ -184,7 +192,7 @@
     var m = mineSection();
     if (m) m.forEach(function (n) { app.appendChild(n); });
     partiesSection().forEach(function (n) { app.appendChild(n); });
-    app.appendChild(about());
+    app.appendChild(how());
   }
 
   async function load() {

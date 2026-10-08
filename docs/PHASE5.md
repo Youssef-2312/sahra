@@ -102,6 +102,17 @@ the `staging` branch; a finished piece the owner should try is pushed there too.
     price, Request a ticket). No flyers yet: a plain date tile, never stock
     photos. The flyer backend (upload, public read, list field `flyers`) is
     being built on branch claude/p5-flyers.
+- Home cleanup (owner spec, 2026-10-08): no pills on the home page except the
+  header controls and hero buttons; the hero keeps its collage with one flat
+  veil, a solid blue "Discover parties" and an outlined "How it works", and no
+  line under the buttons; cards with 12px corners and one border, details in
+  the order date and time, name, price ("EGP 350" for one price, "From EGP 350"
+  for several: the party list now also returns `price_count`, from the same
+  subquery, no extra reads), availability, action ("Request a ticket", or
+  "View details" when sold out or not open); arrows only when the row overflows
+  (ResizeObserver); "How tickets work" as three plain columns with the owner's
+  copy; the organiser sign-in row under one rule; 16px minimum text, 20px phone
+  gutters, 44px tap targets, about 72px / 40px between sections.
 - Hero photos: the owner has permission to use them; they are compressed
   (about 150 KB each) and slightly blurred before they go in public/img/hero.
 
