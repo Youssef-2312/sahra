@@ -34,7 +34,9 @@ var Sahra = (function () {
   function locale() { return lang() === "ar" ? "ar-EG-u-nu-latn" : "en-GB"; }
 
   function t(key, vars) {
-    var s = (SahraText[lang()] && SahraText[lang()][key]) || SahraText.en[key] || key;
+    var own = SahraText[lang()] || {};
+    // An empty string is a real translation (a word order that needs no tail), not a gap.
+    var s = typeof own[key] === "string" ? own[key] : typeof SahraText.en[key] === "string" ? SahraText.en[key] : key;
     if (vars) s = s.replace(/\{([a-z_]+)\}/g, function (m, k) { return k in vars ? String(vars[k]) : m; });
     return s;
   }
@@ -153,7 +155,7 @@ var Sahra = (function () {
       if (renderFn) renderFn();
     });
     label();
-    document.body.insertBefore(el("header", { class: "topbar" }, brand, el("span", { class: "topbar-end" }, sw, account)), document.body.firstChild);
+    document.body.insertBefore(el("div", { class: "topbar-shell" }, el("header", { class: "topbar" }, brand, el("span", { class: "topbar-end" }, sw, account))), document.body.firstChild);
     // The door scanner shows only the camera and the result (brainstorm idea 12): no footer there.
     if (!opts || opts.footer !== false) document.body.appendChild(foot);
     if (renderFn) renderFn();

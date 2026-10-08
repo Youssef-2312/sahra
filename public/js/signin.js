@@ -14,11 +14,18 @@
         el("button", { class: "btn primary", text: t("si_google"), attrs: { type: "submit" } })));
   }
 
+  // One of the home page's party photos behind the panel; when it is missing the panel keeps its gradient.
+  function photo() {
+    var img = el("img", { attrs: { src: "/img/hero/hero-3.jpg", alt: "", decoding: "async" } });
+    img.addEventListener("error", function () { img.remove(); });
+    return img;
+  }
+
   function render() {
     Sahra.clear(app);
     document.title = t("si_title") + " - Sahra";
     app.appendChild(el("div", { class: "signin-wrap" },
-      el("div", { class: "signin-panel" }, el("h1", { text: t("si_head") }), el("p", { text: t("si_text") })),
+      el("div", { class: "signin-panel" }, photo(), el("span", { class: "kicker", text: t("si_title") }), el("h1", { text: t("si_head") }), el("p", { text: t("si_text") })),
       el("div", null,
         option(t("si_staff"), t("si_staff_hint"), "/api/auth/google/start"),
         option(t("si_org"), t("si_org_hint"), "/api/auth/platform/start"),

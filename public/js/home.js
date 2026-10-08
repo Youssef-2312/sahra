@@ -1,13 +1,21 @@
-// Home page (owner decision): all upcoming parties, with sign-in for organisers
-// and staff at the top right. A party card shows this browser's own ticket for
-// that party when it remembers one (brainstorm idea 4): the links saved by the
-// sign-up and ticket pages (localStorage sahra_tickets), checked in one call.
+// Home page (owner decisions): a hero that is a grid of party photos with a
+// "Discover parties" button, then the upcoming parties as a grid of cards, then
+// a short "About Sahra", then the footer; sign-in for organisers and staff sits
+// at the top right. A party card shows this browser's own ticket for that party
+// when it remembers one (brainstorm idea 4): the links saved by the sign-up and
+// ticket pages (localStorage sahra_tickets), checked in one call.
+//
+// Photos live in /img/hero (hero-1.jpg ... hero-9.jpg), compressed and slightly
+// blurred before they are added. A photo that is missing is removed and the
+// tile keeps its gradient, so the page never shows a broken image.
 "use strict";
 (function () {
   var t = Sahra.t, el = Sahra.el;
   var app = document.getElementById("app");
   var parties = null, failed = null;
   var mine = [];          // [{ link, status, party_id, party_name, starts_at, time_zone }]
+  var HERO = [1, 2, 3, 4, 5];          // the mosaic
+  var COVERS = [6, 7, 8, 9];           // party cards, in turn, until parties have their own flyers
 
   function remembered() {
     try {
@@ -22,6 +30,12 @@
     try { return new Intl.DateTimeFormat(loc, Object.assign({ timeZone: tz || undefined }, opt)).format(ms); } catch (e) { return ""; }
   }
 
+  function photo(n, eager) {
+    var img = el("img", { attrs: { src: "/img/hero/hero-" + n + ".jpg", alt: "", decoding: "async", loading: eager ? "eager" : "lazy" } });
+    img.addEventListener("error", function () { img.remove(); });
+    return img;
+  }
+
   function statePill(p) {
     if (p.state === "full") return el("span", { class: "pill no", text: t("h_state_full") });
     if (p.state === "not_open_yet") return el("span", { class: "pill", text: t("h_state_not_open_yet", { rel: Sahra.rel(p.opens_at) }) });
@@ -33,13 +47,33 @@
     return el("span", { class: "pill " + cls, text: t("h_your_ticket", { status: t("my_" + status) }) });
   }
 
-  function card(p) {
+  function heading(a, em, b) { return [a, el("span", { class: "serif", text: em }), b]; }
+
+  function hero() {
+    var shown = mine.filter(function (m) { return m.status !== "invalid"; });
+    return el("section", { class: "hero blueprint" },
+      el("div", { class: "mosaic", attrs: { "aria-hidden": "true" } }, HERO.map(function (n, i) { return el("div", { class: "ph" }, photo(n, i < 3)); })),
+      el("div", { class: "copy" },
+        el("span", { class: "kicker", text: t("h_kicker") }),
+        el("h1", null, heading(t("h_title_a"), t("h_title_em"), t("h_title_b"))),
+        el("p", { text: t("h_sub") }),
+        el("div", { class: "hero-actions" },
+          el("a", { class: "btn primary", text: t("h_discover"), attrs: { href: "#parties" } }),
+          shown.length
+            ? el("a", { class: "btn", text: t("h_your_tickets"), attrs: { href: "#mine" } })
+            : el("a", { class: "btn", text: t("h_how"), attrs: { href: "#about" } })),
+        el("ul", { class: "facts-strip" }, [t("h_fact_1"), t("h_fact_2"), t("h_fact_3")].map(function (x) { return el("li", { text: x }); }))));
+  }
+
+  function card(p, i) {
     var my = mine.filter(function (m) { return m.party_id === p.id && m.status !== "invalid"; })[0];
     var href = my ? my.link : "/signup.html?party=" + encodeURIComponent(p.id);
     return el("a", { class: "party-card", attrs: { href: href } },
-      el("div", { class: "date-block" },
-        el("span", { class: "day", text: datePart(p.starts_at, p.time_zone, { day: "numeric" }) }),
-        el("span", { class: "mon", text: datePart(p.starts_at, p.time_zone, { month: "short" }) })),
+      el("div", { class: "cover" },
+        photo(COVERS[i % COVERS.length], false),
+        el("div", { class: "date-block" },
+          el("span", { class: "day", text: datePart(p.starts_at, p.time_zone, { day: "numeric" }) }),
+          el("span", { class: "mon", text: datePart(p.starts_at, p.time_zone, { month: "short" }) }))),
       el("div", { class: "grow" },
         el("span", { class: "name", text: p.name, attrs: { dir: "auto" } }),
         el("span", { class: "meta", text: Sahra.when(p.starts_at, p.time_zone) }),
@@ -47,24 +81,55 @@
         el("span", { class: "tags" }, my ? myPill(my.status) : statePill(p))));
   }
 
-  function render() {
-    Sahra.clear(app);
-    app.appendChild(el("section", { class: "hero" }, el("h1", { text: t("h_title") }), el("p", { text: t("h_sub") })));
+  function partiesSection() {
+    var list = [el("div", { class: "section-head", attrs: { id: "parties" } },
+      el("div", null, el("span", { class: "kicker", text: t("h_upcoming_kicker") }), el("h2", { text: t("h_upcoming") })),
+      parties && parties.length ? el("span", { class: "small muted", text: t("h_count", { n: parties.length }) }) : null)];
+    if (failed) list.push(el("p", { class: "notice no", text: failed }));
+    else if (!parties) list.push(el("p", { class: "muted", text: t("loading") }));
+    else if (!parties.length) list.push(el("p", { class: "empty", text: t("h_none") }));
+    else list.push(el("div", { class: "parties" }, parties.map(card)));
+    return list;
+  }
+
+  function mineSection() {
     var shown = mine.filter(function (m) { return m.status !== "invalid"; });
-    if (shown.length) {
-      app.appendChild(el("h2", { text: t("h_your_tickets") }));
-      app.appendChild(el("div", { class: "mine" }, shown.slice(0, 6).map(function (m) {
+    if (!shown.length) return null;
+    return [el("div", { class: "section-head", attrs: { id: "mine" } }, el("h2", { text: t("h_your_tickets") })),
+      el("div", { class: "mine" }, shown.slice(0, 6).map(function (m) {
         return el("a", { attrs: { href: m.link } },
           el("span", null, el("strong", { text: m.party_name, attrs: { dir: "auto" } }), el("br"),
             el("span", { class: "small muted", text: m.starts_at ? Sahra.when(m.starts_at, m.time_zone) : "" })),
           myPill(m.status));
-      })));
-    }
-    app.appendChild(el("h2", { text: t("h_upcoming") }));
-    if (failed) { app.appendChild(el("p", { class: "notice no", text: failed })); return; }
-    if (!parties) { app.appendChild(el("p", { class: "muted", text: t("loading") })); return; }
-    if (!parties.length) { app.appendChild(el("p", { class: "empty", text: t("h_none") })); return; }
-    app.appendChild(el("div", { class: "parties" }, parties.map(card)));
+      }))];
+  }
+
+  function about() {
+    var steps = [1, 2, 3].map(function (n) {
+      return el("div", { class: "step" },
+        el("span", { class: "num", text: "0" + n }),
+        el("h3", { text: t("h_step" + n + "_t") }),
+        el("p", { text: t("h_step" + n + "_p") }));
+    });
+    return el("section", { class: "about", attrs: { id: "about" } },
+      el("span", { class: "corner tl" }), el("span", { class: "corner tr" }), el("span", { class: "corner bl" }), el("span", { class: "corner br" }),
+      el("span", { class: "kicker", text: t("h_about_kicker") }),
+      el("h2", null, heading(t("h_about_title_a"), t("h_about_title_em"), "")),
+      el("p", { text: t("h_about_text") }),
+      el("div", { class: "steps" }, steps),
+      el("div", { class: "host" },
+        el("div", null, el("h3", { text: t("h_host_t") }), el("p", { class: "muted", text: t("h_host_p") })),
+        el("a", { class: "btn", text: t("sign_in"), attrs: { href: "/signin.html" } })));
+  }
+
+  function render() {
+    Sahra.clear(app);
+    document.title = "Sahra";
+    app.appendChild(hero());
+    var m = mineSection();
+    if (m) m.forEach(function (n) { app.appendChild(n); });
+    partiesSection().forEach(function (n) { app.appendChild(n); });
+    app.appendChild(about());
   }
 
   async function load() {

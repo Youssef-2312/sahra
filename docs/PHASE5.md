@@ -46,6 +46,16 @@ the `staging` branch; a finished piece the owner should try is pushed there too.
 - Privacy and Terms: approved as written ("Draft" line removed).
 - Production waits until the whole frontend is finished.
 - Order: home page first, then the rest through the approval queue cards.
+- "Too bland": the look follows Nova's site (https://bynova.vercel.app/):
+  Space Grotesk headlines, Inter text, an Instrument Serif italic accent word,
+  small monospace labels, a faint grid with corner marks, a frosted top bar,
+  pill buttons, Nova blue as the one accent. Fonts are self-hosted
+  (public/fonts, SIL OFL; `font-src 'self'` added to the page policy).
+- Home layout: a hero that is a grid of party photos with a "Discover parties"
+  button, then the parties as a grid of cards, then "About Sahra", then the
+  footer; also good on phones.
+- Hero photos: the owner has permission to use them; they are compressed
+  (about 150 KB each) and slightly blurred before they go in public/img/hero.
 
 ## Shared pieces
 
@@ -158,19 +168,24 @@ the `staging` branch; a finished piece the owner should try is pushed there too.
   on the way: the sign-up page threw when a party had no rules (an empty
   section was appended).
 
+- Nova-style redesign: sahra.css rewritten; home rebuilt (photo mosaic hero,
+  Discover button to #parties, card grid with photo covers and date blocks,
+  About Sahra with three steps and an organiser sign-in line); sign-in panel
+  with a photo and a gradient; top bar frosted (`.topbar-shell`). Fixed on the
+  way: an empty translation fell back to English (Arabic heading showed "for").
+
 ## Open questions for the owner
 
-- Hero photos (idea 20) and the sign-in page look (idea 27): photos still to be
-  handed over.
+- Hero photos: sent in chat, which cannot be saved into the project. Waiting
+  for the owner to upload them to public/img/hero (any names); then they are
+  compressed, blurred a little and renamed hero-1.jpg ... hero-9.jpg
+  (1-5 the home mosaic, 6-9 party card covers in turn, 3 also the sign-in
+  panel). Until then every tile shows its gradient.
+- Ticket waves (asked 2026-10-08): not built. Ticket types have their own
+  sales windows and places, but one does not open when the previous sells
+  out. Offered: up to 5 waves that open in turn.
 
 ## Next
 
-Piece 7: approval queue cards with one-tap "Approve and send QR".
-
-Piece 4, the home page. The original brief says "the website homepage is the
-staff login"; the brainstorm (idea 4) agreed party cards as the hero with the
-guest's own status on each card, and "Find my tickets". Ask the owner which
-wins (or: party cards on "/" with a clear "Organiser sign-in" button). Needs
-backend: a public list of open parties (name, date, flyer later) and a batched
-status read for the remembered tickets; "Find my tickets" = one email with all
-the address's ticket links across parties, rate limited, same answer either way.
+Piece 7: approval queue cards with one-tap "Approve and send QR"
+(public/queue.html exists; public/js/queue.js next).
