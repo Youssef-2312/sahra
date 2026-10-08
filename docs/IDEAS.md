@@ -370,7 +370,7 @@ coordinator's session. Status: agreed, rejected or open.
 
 ## 28. Site footer: Instagram, "Built by Nova" credit with Nova's logo in the middle
 
-- Status: agreed in principle; details needed from the owner (see "Needs from the owner")
+- Status: agreed (Instagram link confirmed, Privacy and Terms pages agreed; the logo file still has to reach the coordinator)
 - Owner's words: "the footer aswell with the instagram and a website showcasing it was built by nova and novas logo in the middle" and then "I meant corner" (screenshot of efferd footer-5: a dark multi-column footer, round social icons, app-store buttons, a copyright line)
 - Footer for Sahra, simple and uncluttered (idea 12):
   - Nova's logo in a corner of the footer (owner correction: "I meant corner", not the middle) with "Built by Nova", linking to Nova's website; on a phone, where there are no corners, it sits at the bottom, small and left-aligned or right-aligned;
@@ -386,3 +386,5 @@ coordinator's session. Status: agreed, rejected or open.
 - Owner supplied Nova's website: https://bynova.vercel.app/ (Nova, a web design studio). The page lists Nova's Instagram as https://www.instagram.com/nova.dev26/ (read from the page; owner to confirm it is the right account). The logo on that site is a file called favicon.svg, shown beside the text "Nova"; the owner should hand the logo file to the coordinator (a copy stored in the Sahra project, not loaded from Nova's site at run time).
 - Still needed from the owner: confirm the Instagram link, supply the logo file, and say yes or no to the Privacy and Terms pages.
 - Note: Nova's site is a separate project on Vercel and is only linked to from the footer. Sahra reads nothing from it and touches nothing on it (and nothing of Halloween-26).
+- Owner confirmations: "yes its correct" (Nova's Instagram https://www.instagram.com/nova.dev26/) and "yes on the privacy and terms page ofc" (the Privacy and Terms pages are agreed; coordinator drafts the text from what the system really stores, owner approves it).
+- Logo: the owner shared Nova's logo image in the chat (a heavy black letter N with a blue dot at its lower right, on a white square). It is only in the owner's chat, not in the repository, so the owner must hand the file to the coordinator. On the dark charcoal footer (idea 24) the black N would be almost invisible; the footer needs a light version (white N, blue dot unchanged) or the logo on a small white rounded tile. Ask Nova for an SVG; do not recolour or redraw Nova's logo without the owner's say.
