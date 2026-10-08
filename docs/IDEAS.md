@@ -366,3 +366,4 @@ coordinator's session. Status: agreed, rejected or open.
   - a line under the button that sign-in is by invitation only, so nobody expects to create their own account (decided: organisers join by invitation);
   - separate sign-in pages for organisers and for the site owner stay separate (separate cookie, already built).
 - Needs: one static page per sign-in type. Effort: small. Free-tier cost: none. Rule conflicts: none (no passwords; Google sign-in as already built).
+- Owner decision on charts: "yes all three". The organiser dashboard gets all three charts below the number tiles: sign-ups per day (line), ticket-type split (donut), and arrivals per 15 minutes (bars). Suggested placement: sign-ups and ticket types before the party; the arrivals chart appears once doors open. Tiles stay at the top (idea 10), and each chart sits below on a phone as a single full-width card.
