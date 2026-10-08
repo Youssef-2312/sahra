@@ -104,6 +104,7 @@ const steps = {
     await confirmProd(name, "database migrations");
     await wrangler(["d1", "migrations", "apply", "DB", "--remote", ...e]);
     await wrangler(["d1", "migrations", "apply", "LEDGER", "--remote", ...e]);
+    await wrangler(["d1", "migrations", "apply", "FILES", "--remote", ...e]);
     if (name === "staging") {
       // Every staging-only SQL file, in name order; each is safe to run again.
       for (const [db, dir] of [["DB", "migrations-staging/main"], ["LEDGER", "migrations-staging/ledger"]]) {
@@ -118,7 +119,7 @@ const steps = {
   async status(only) {
     let pending = false;
     for (const name of only ? [only] : ["staging", "prod"]) {
-      for (const db of ["DB", "LEDGER"]) {
+      for (const db of ["DB", "LEDGER", "FILES"]) {
         console.log(`\n== ${name} ${db}`);
         const r = await wrangler(["d1", "migrations", "list", db, "--remote", ...ENVS[name]]);
         if (!/No migrations to apply/i.test(r.out)) pending = true;
