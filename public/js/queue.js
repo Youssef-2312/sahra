@@ -231,7 +231,7 @@
       app.appendChild(el("div", { class: "reqs" }, rows.map(card)));
     }
     if (next) app.appendChild(el("button", { class: "btn", text: t("q_more"), attrs: { type: "button", disabled: busy }, on: { click: function () { load(true); } } }));
-    app.appendChild(el("div", { class: "stack buttons" },
+    app.appendChild(el("div", { class: "stack buttons page-tools" },
       el("button", { class: "btn", text: t("q_export"), attrs: { type: "button" }, on: { click: exportCsv } }),
       el("a", { class: "btn", text: t("q_tools"), attrs: { href: "/queue-tools.html" } })));
     var bar = bulkbar();

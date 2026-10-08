@@ -1,12 +1,12 @@
-// Home page (owner decisions): a hero that is a grid of party photos with a
-// "Discover parties" button, then the upcoming parties as a grid of cards, then
+// Home page (owner decisions): a full-width hero with the party photos in a grid
+// behind the heading and the "Discover parties" button, then the upcoming parties as a grid of cards, then
 // a short "About Sahra", then the footer; sign-in for organisers and staff sits
 // at the top right. A party card shows this browser's own ticket for that party
 // when it remembers one (brainstorm idea 4): the links saved by the sign-up and
 // ticket pages (localStorage sahra_tickets), checked in one call.
 //
 // Photos live in /img/hero (hero-1.jpg ... hero-9.jpg), compressed and slightly
-// blurred before they are added. A photo that is missing is removed and the
+// blurred before they are added; all nine sit behind the hero, 6-9 also on cards. A photo that is missing is removed and the
 // tile keeps its gradient, so the page never shows a broken image.
 "use strict";
 (function () {
@@ -14,7 +14,8 @@
   var app = document.getElementById("app");
   var parties = null, failed = null;
   var mine = [];          // [{ link, status, party_id, party_name, starts_at, time_zone }]
-  var HERO = [1, 2, 3, 4, 5];          // the mosaic
+  var heroBox = document.getElementById("hero");
+  var HERO = [1, 2, 3, 4, 5, 6, 7, 8, 9]; // the grid behind the hero (the first tile is large)
   var COVERS = [6, 7, 8, 9];           // party cards, in turn, until parties have their own flyers
 
   function remembered() {
@@ -51,8 +52,8 @@
 
   function hero() {
     var shown = mine.filter(function (m) { return m.status !== "invalid"; });
-    return el("section", { class: "hero blueprint" },
-      el("div", { class: "mosaic", attrs: { "aria-hidden": "true" } }, HERO.map(function (n, i) { return el("div", { class: "ph" }, photo(n, i < 3)); })),
+    return el("section", { class: "hero" },
+      el("div", { class: "hero-bg", attrs: { "aria-hidden": "true" } }, HERO.map(function (n, i) { return el("div", { class: "ph" }, photo(n, i < 5)); })),
       el("div", { class: "copy" },
         el("span", { class: "kicker", text: t("h_kicker") }),
         el("h1", null, heading(t("h_title_a"), t("h_title_em"), t("h_title_b"))),
@@ -125,7 +126,7 @@
   function render() {
     Sahra.clear(app);
     document.title = "Sahra";
-    app.appendChild(hero());
+    Sahra.clear(heroBox).appendChild(hero());
     var m = mineSection();
     if (m) m.forEach(function (n) { app.appendChild(n); });
     partiesSection().forEach(function (n) { app.appendChild(n); });
