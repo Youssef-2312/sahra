@@ -50,6 +50,7 @@ export const EXCLUDED: readonly { db: BackupDb; table: string; reason: string }[
   { db: "main", table: "platform_sessions", reason: "site owner / organiser sessions: same as sessions" },
   { db: "main", table: "health_checks", reason: "health check state (workstream F): recomputed by the next check run" },
   { db: "main", table: "health_state", reason: "health cursors and the last backup time: rebuilt by the next runs" },
+  { db: "main", table: "health_discord", reason: "pending Discord copies of health alerts: the next check run raises any alert that still applies" },
   { db: "main", table: "party_usage", reason: "per-party daily counters: losing them only resets that day's count" },
   { db: "main", table: "outbox", reason: "email bodies carry guests' signed ticket links (anyone holding one sees the QR); a restore from Drive sends nothing again, guests use 'resend my ticket link'" },
   { db: "main", table: "d1_migrations", reason: "recreated by applying migrations to the fresh database; the names are in the manifest" },
