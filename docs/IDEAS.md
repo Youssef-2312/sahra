@@ -50,7 +50,7 @@ coordinator's session. Status: agreed, rejected or open.
 
 ## 4. Home page: party cards with the guest's own status on the card
 
-- Status: open (waiting for the owner to confirm the "same browser only" limit)
+- Status: agreed (with the "Find my tickets" box below; full email accounts were considered and declined for now)
 - Owner's words: "let them get a status page but that status is displayed under the party they signed up for example ... Consider this the hero ... Party A Party B Party C ... I sign up at party A ... Party A Party B Party C awaiting"
 - Meaning: the home page shows the parties side by side as the hero. After a guest signs up to a party, that party's card shows the guest's status (awaiting, approved, ticket ready, rejected with the organiser's reason). Other cards are unchanged.
 - How it would work without accounts or passwords: the browser remembers each ticket link (the signed link already used for the guest ticket page) and asks the server for the status of each. The guest cannot see status on another device except through the emailed link or "resend my ticket link".
@@ -58,3 +58,6 @@ coordinator's session. Status: agreed, rejected or open.
 - Effort: medium
 - Free-tier cost: one read per remembered ticket per visit; keep the status request batched and cached briefly so a busy page does not burn the 100K requests/day
 - Rule conflicts: none (no passwords, no accounts; the hidden address must still not appear on cards before reveal)
+- Owner decision on devices: "alright the middle". Status shows on the party card in the browser that signed up. On any other device the guest uses a "Find my tickets" box on the home page: they type their email and get ONE email with the links to all their tickets across all parties. Answer is the same whether or not the email exists. No accounts, no sign-in.
+- Extra needs for "Find my tickets": one email template (no emojis), a cross-party lookup by email, and a per-email send limit so nobody can use it to spam an inbox. Effort small, on top of the existing "resend my ticket link". Counts against the daily email cap (Gmail), so keep the limit tight.
+- Declined for now: full guest accounts with email sign-in link or code (large effort, more email volume, more door-budget traffic). Can be revisited.
