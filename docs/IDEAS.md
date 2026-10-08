@@ -77,3 +77,19 @@ coordinator's session. Status: agreed, rejected or open.
 - Effort: small to medium
 - Free-tier cost: one read per page view; static page itself is free
 - Rule conflicts: none. Hidden address stays hidden until the server reveals it.
+
+## 6. Mobile first for every screen
+
+- Status: agreed (owner asks that this be added to the decisions; I can only edit this file, so the coordinator should copy it into `docs/DECISIONS.md` when the owner confirms there)
+- Owner's words: "add to the decisions that mobil is the biggest necessity since most traffic is going to e from mobile numbers"
+- Meaning: design every screen for a phone first (guest pages, ticket page, door scanner, and also the organiser dashboard and site-owner panel); desktop is a bonus, not the main target.
+- Practical effects to carry into the Phase 5 build:
+  - one-column layouts, large tap targets, text readable without zooming;
+  - forms usable with a thumb, with the right keyboard per field (email, number);
+  - payment screenshot upload straight from the phone camera or gallery, with the photo shrunk in the browser before upload where possible (smaller upload, fewer failures on weak mobile data);
+  - light pages that load fast on mobile data (no heavy images or libraries);
+  - the QR and scanner results readable in sunlight and in a dark room;
+  - test on small and old phones, not only on a desktop browser.
+- Needs: a rule for the whole build, no new data. Effort: no extra screens, but it shapes the effort of all of them.
+- Free-tier cost: lighter pages help; static assets do not count as Worker requests
+- Rule conflicts: none
