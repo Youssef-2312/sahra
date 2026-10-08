@@ -17,8 +17,8 @@ export async function resyncReleaseEmails(env: Record<string, unknown> & { PUBLI
   const st = (await main.all<{ resync_after: number | null; resync_cursor: string | null }>(
     sql`SELECT resync_after, resync_cursor FROM health_state WHERE id = 'main'`)).results[0];
   if (!st || st.resync_after == null) return null;
-  const tickets = (await main.all<{ id: string; party_id: string; guest_email: string; guest_name: string | null; link_version: number; party_name: string }>(
-    sql`SELECT t.id, t.party_id, t.guest_email, t.guest_name, t.link_version, p.name AS party_name
+  const tickets = (await main.all<{ id: string; party_id: string; guest_email: string; guest_name: string | null; people: number; link_version: number; party_name: string }>(
+    sql`SELECT t.id, t.party_id, t.guest_email, t.guest_name, t.people, t.link_version, p.name AS party_name
       FROM tickets t JOIN parties p ON p.id = t.party_id
       WHERE t.released_at > ${st.resync_after} AND t.status = 'approved' AND t.hold_at IS NULL AND t.guest_email IS NOT NULL
         AND t.id > ${st.resync_cursor ?? ""}
@@ -33,7 +33,7 @@ export async function resyncReleaseEmails(env: Record<string, unknown> & { PUBLI
     const link = await signLink(env, { partyId: t.party_id, ticketId: t.id, version: t.link_version });
     writes.push(outboxInsert(releasedEmail({
       origin: env.PUBLIC_ORIGIN, partyId: t.party_id, partyName: t.party_name, ticketId: t.id, to: t.guest_email,
-      guestName: t.guest_name, link, now, actor: "recovery",
+      guestName: t.guest_name, people: t.people, link, now, actor: "recovery",
     }), sql`1`));
   }
   const done = tickets.length < BATCH;

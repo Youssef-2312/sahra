@@ -274,7 +274,8 @@ describe("manifest", () => {
     logs = [];
     await backupGet(h, "/api/backup/manifest");
     const cheap = parsed("backup").at(-1)!;
-    expect(Number(cheap.main_rows_read)).toBeLessThan(80);
+    // Listing the schema (tables, migrations) only: grows with the number of tables, not with data.
+    expect(Number(cheap.main_rows_read)).toBeLessThan(150);
   });
 
   it("without the files database the manifest says so and the export skips screenshots", async () => {
