@@ -197,7 +197,7 @@ describe("health checks", () => {
     console.error(JSON.stringify({ evt: "measure", what: "health_run_200_admissions_local", main: r1.main, ledger: r1.ledger }));
     expect(r1.main.queries).toBeLessThanOrEqual(9);
     expect(r1.ledger.queries).toBeLessThanOrEqual(3);
-  });
+  }, 30_000); // creates hundreds of admissions: slower than the 5 s default on a busy machine
 
   it("outbox: failed, late and stuck emails alert; the check clears when none remain", async () => {
     const p = await seedParty();
