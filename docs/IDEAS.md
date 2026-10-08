@@ -296,7 +296,7 @@ coordinator's session. Status: agreed, rejected or open.
 
 ## 22. Building blocks for the screens: newform and efferd (part of idea 20)
 
-- Status: open (the owner must confirm free use; coordinator must check the build setup)
+- Status: agreed (inspiration only, plain static HTML; newform still unseen)
 - Owner's words: "https://www.newform.com/  https://efferd.com/blocks/dashboard"
 - Checked by the brainstorm session:
   - newform.com: the page could not be opened from here (404 on both www and the bare address), so what it offers, its licence and its price are NOT confirmed. Owner to say what block or page on it they like, or paste a screenshot.
@@ -307,3 +307,6 @@ coordinator's session. Status: agreed, rejected or open.
   - Nothing loads from the sites at run time; copy what is used into the project.
   - Phone first, right-to-left Arabic, and clean and uncluttered rules (ideas 6 and 12) apply to every block. A dashboard block is desktop-minded by default; the organiser dashboard must still be designed for a phone first.
 - Recommendation (not yet agreed): use the free dashboard blocks as inspiration for the organiser dashboard and site-owner panel, and keep the guest pages and door scanner as small custom pages, because they are the most phone-critical and need the least code weight.
+- Owner decision: "as inspiriation not react I woudl rather it being written in static hmtl". The blocks are inspiration only. All frontend pages are written as plain static HTML, CSS and a little JavaScript. No React and no build framework. No block is copied from a paid or unclear-licence source.
+- Why this fits: static pages are Workers static assets (not counted as requests), load fast on mobile data and have no outside dependency at the door.
+- The open question about newform remains: the owner is to show what they like on it (screenshot or description).
