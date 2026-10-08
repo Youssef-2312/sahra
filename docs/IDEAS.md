@@ -371,9 +371,9 @@ coordinator's session. Status: agreed, rejected or open.
 ## 28. Site footer: Instagram, "Built by Nova" credit with Nova's logo in the middle
 
 - Status: agreed in principle; details needed from the owner (see "Needs from the owner")
-- Owner's words: "the footer aswell with the instagram and a website showcasing it was built by nova and novas logo in the middle" (screenshot of efferd footer-5: a dark multi-column footer, round social icons, app-store buttons, a copyright line)
+- Owner's words: "the footer aswell with the instagram and a website showcasing it was built by nova and novas logo in the middle" and then "I meant corner" (screenshot of efferd footer-5: a dark multi-column footer, round social icons, app-store buttons, a copyright line)
 - Footer for Sahra, simple and uncluttered (idea 12):
-  - Nova's logo in the middle with "Built by Nova", linking to Nova's website;
+  - Nova's logo in a corner of the footer (owner correction: "I meant corner", not the middle) with "Built by Nova", linking to Nova's website; on a phone, where there are no corners, it sits at the bottom, small and left-aligned or right-aligned;
   - an Instagram icon linking to Sahra's Instagram;
   - a very short row of links: Privacy and Terms (see below);
   - a copyright line;
