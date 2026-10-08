@@ -50,8 +50,8 @@ the `staging` branch; a finished piece the owner should try is pushed there too.
 |---|-------|--------|
 | 1 | Foundation: stylesheet, wording (EN/AR), helpers, language switch | done |
 | 2 | Guest sign-up page (`/signup.html?party=`): party, address status, ticket types, short form | done |
-| 2b | Privacy and Terms pages (agreed, idea 28; text from what Sahra really stores; owner approves) | next |
-| 3 | Guest ticket page (`/ticket.html#t=`): big QR, name/type/group, party, address or countdown | |
+| 2b | Privacy and Terms pages (agreed, idea 28; text from what Sahra really stores; owner approves) | done (drafts) |
+| 3 | Guest ticket page (`/ticket.html#t=`): big QR, name/type/group, party, address or countdown | next |
 | 4 | Home page: party cards with the guest's own status; "Find my tickets" (needs backend) | |
 | 5 | Door scanner: camera, full-screen verdicts, sound and vibration | |
 | 6 | Organiser dashboard: top numbers and big buttons | |
@@ -82,8 +82,14 @@ the `staging` branch; a finished piece the owner should try is pushed there too.
   party, screenshots with Playwright (installed in the scratchpad, not the
   project) at 390x844, English and Arabic.
 
+- Piece 2b: `public/privacy.html`, `public/terms.html` (both languages in the
+  HTML, `public/js/doc.js` shows the chosen one), marked "Draft, to be approved
+  by the site owner".
+
 ## Open questions for the owner
 
+- Privacy and Terms drafts: approve or change the wording (then remove the
+  "Draft" line). A contact for the site owner may be wanted on both pages.
 - Nova logo: the site's favicon.svg has a dark navy dot (hard to see on the
   dark footer); the owner's image has a bright blue dot. Use as is, brighten
   the dot (owner's OK needed), or the owner supplies the PNG/SVG.
@@ -92,8 +98,12 @@ the `staging` branch; a finished piece the owner should try is pushed there too.
 
 ## Next
 
-Piece 2b: `public/privacy.html` and `public/terms.html`, short plain text from
-what the system stores (name, email, people, answers, payment screenshot
-deleted 30 days after the party, ticket and scan records), who sees it (the
-party's owner/admins; door staff see name, people and type only), that Sahra
-handles no money, and the organiser is the contact. Then piece 3 (ticket page).
+Piece 3, the guest ticket page (`/ticket.html#t=<signed link>`; the link goes
+to `GET /api/guest/ticket` in the `x-sahra-ticket` header):
+1. A QR generator copied into `public/vendor/` with its licence (no run-time
+   download): qrcode-generator (MIT).
+2. Order (idea 5): very large QR on white + "turn your brightness up"; name,
+   type, "Group of N"; party name, date, entry-from time; the address or the
+   countdown to its reveal. Not released / pending / rejected (with reason) /
+   cancelled / on hold / used: a plain message instead of the QR (fail closed).
+3. "Save QR code" (download a PNG drawn on a canvas), Refresh.
