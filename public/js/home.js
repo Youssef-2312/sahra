@@ -15,7 +15,7 @@
   var parties = null, failed = null;
   var mine = [];          // [{ link, status, party_id, party_name, starts_at, time_zone }]
   var heroBox = document.getElementById("hero");
-  var HERO = [1, 2, 3, 4, 5, 6, 7, 8, 9]; // the grid behind the hero (the first tile is large)
+  var HERO = [1, 2, 3, 4, 5, 6, 7]; // the owner's seven photos behind the hero (the first tile is large), no repeats
 
   function remembered() {
     try {

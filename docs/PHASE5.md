@@ -246,11 +246,11 @@ the `staging` branch; a finished piece the owner should try is pushed there too.
 
 ## Open questions for the owner
 
-- Hero photos: sent in chat, which cannot be saved into the project. Waiting
-  for the owner to upload them to public/img/hero (any names); then they are
-  compressed, blurred a little and renamed hero-1.jpg ... hero-9.jpg
-  (1-5 the home mosaic, 6-9 party card covers in turn, 3 also the sign-in
-  panel). Until then every tile shows its gradient.
+- Hero photos: done. The owner uploaded seven photos (and a blank PNG, left
+  out); they are resized to 1000 px at most, blurred a little, stripped of
+  metadata (no location data) and saved as public/img/hero/hero-1.jpg ...
+  hero-7.jpg (35 to 70 KB each). The collage uses all seven once (one large,
+  one tall, one wide). hero-3 is also the sign-in panel photo.
 - Ticket waves (asked 2026-10-08): not built. Ticket types have their own
   sales windows and places, but one does not open when the previous sells
   out. Offered: up to 5 waves that open in turn.
