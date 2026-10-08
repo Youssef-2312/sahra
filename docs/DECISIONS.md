@@ -297,6 +297,15 @@ Chosen extras (numbers from the brainstorm):
   with fixed placeholders; the guest's link is required in the text. Empty = the
   default text. (migrations/0013_email_templates.sql)
 - **No waitlist** (removed from the list).
+- **Mobile first for every screen** (owner: "mobile is the biggest necessity since
+  most traffic is going to be from mobile"). Guest pages, ticket page, door
+  scanner, organiser dashboard and site-owner panel are designed for a phone
+  first; desktop is a bonus. One column, large tap targets, text readable without
+  zooming, the right keyboard per field, screenshot upload straight from the
+  camera or gallery (shrunk in the browser first), light pages that load fast on
+  mobile data, QR and scanner results readable in sunlight and in a dark room,
+  tested on small and old phones. (Brainstorm idea 6, docs/IDEAS.md on
+  claude/brainstorm.)
 - **Ticket types**, including "Early": what Early means is the owner's decision,
   per party (an early-bird sales window, an earlier entry time, or both). See
   "Ticket types and registration rules" below.
