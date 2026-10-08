@@ -72,3 +72,20 @@ CREATE TABLE party_usage (
   n INTEGER NOT NULL,
   PRIMARY KEY (party_id, kind, day)
 ) STRICT, WITHOUT ROWID;
+
+-- Health messages for the site owners' Discord channel (optional webhook,
+-- secret DISCORD_WEBHOOK_URL). Email through the outbox stays the primary
+-- channel; this is extra. A row is added in the same batch that decides the alert
+-- (same 6-hour rule), then each health run posts at most 3 due rows. Failed posts
+-- (network, 5xx, 429) are retried on later runs until 24 hours after creation,
+-- then marked gave_up. Rows older than 8 days (not pending) are deleted daily.
+CREATE TABLE health_discord (
+  id TEXT PRIMARY KEY,
+  created_at INTEGER NOT NULL,
+  content TEXT NOT NULL,            -- plain text, at most 1,900 characters, no emojis
+  status TEXT NOT NULL CHECK (status IN ('pending', 'sent', 'gave_up')),
+  attempts INTEGER NOT NULL DEFAULT 0,
+  next_attempt_at INTEGER NOT NULL,
+  last_error TEXT,
+  sent_at INTEGER
+) STRICT, WITHOUT ROWID;

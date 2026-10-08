@@ -23,6 +23,7 @@ import { csrfFor, isUuid, newId } from "../lib/crypto";
 import { COOKIE_PLATFORM, requirePlatform, type PCtx, type PlatformEnv } from "../platform/auth";
 import { MAX_PARTY_LIMIT, PLATFORM, siteOwnerValid } from "../platform/db";
 import { healthView } from "../health";
+import { discordStatus } from "../health/discord";
 import { LIMITS } from "../limits";
 
 export const platformRoutes = new Hono<PlatformEnv>();
@@ -109,7 +110,7 @@ platformRoutes.get("/parties", requirePlatform(["site_owner"]), async (c) => {
 platformRoutes.get("/health", requirePlatform(["site_owner"]), async (c) => {
   const p = c.var.platform;
   const now = c.var.deps.now();
-  const view = await healthView(c.var.db.driver, siteOwnerValid(p.hash, p.info.site_owner_id!, now), now);
+  const view = await healthView(c.var.db.driver, siteOwnerValid(p.hash, p.info.site_owner_id!, now), now, discordStatus(c.env.DISCORD_WEBHOOK_URL));
   return j(c, 200, { ...view, limits: LIMITS });
 });
 

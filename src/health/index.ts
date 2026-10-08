@@ -41,6 +41,7 @@ import { newId } from "../lib/crypto";
 import { ACCOUNT_DAILY_WRITES, BUDGET_STOP_AT, dayOf, DAY_MS } from "../limits";
 import { outboxInsert } from "../outbox";
 import { PLATFORM } from "../platform/db";
+import { bothTimes, deliverDiscord, DISCORD, discordInsert, discordStatus, discordView, type DiscordReport, type DiscordStatus } from "./discord";
 
 const MIN = 60_000;
 const HOUR = 3600_000;
@@ -108,6 +109,9 @@ export interface HealthDeps {
   /** An email provider is configured (only changes the wording of the outbox check). */
   emailConfigured: boolean;
   origin: string;
+  /** Optional Discord webhook (secret); used only if discordStatus() says "configured". */
+  discordUrl?: string;
+  fetch?: (input: string, init?: RequestInit) => Promise<Response>;
 }
 
 export interface HealthReport {
@@ -117,6 +121,7 @@ export interface HealthReport {
   alerts?: number;
   admissions_checked?: number;
   usage_est?: number;
+  discord?: DiscordReport | "not_configured" | "error";
   main: { queries: number; rows_read: number; rows_written: number };
   ledger: { queries: number; rows_read: number; rows_written: number };
 }
@@ -202,6 +207,7 @@ export async function runHealth(deps: HealthDeps): Promise<HealthReport> {
   const owners = changes.length || daily
     ? (await main.all<{ id: string; email: string }>(sql`SELECT id, email FROM platform_admins WHERE disabled_at IS NULL`)).results
     : [];
+  const discord = discordStatus(deps.discordUrl) === "configured" && !!deps.fetch;
   const writes: Sql[] = [];
   for (const r of results) {
     // A check whose state is unchanged writes nothing (the page shows the run time from health_state).
@@ -209,6 +215,11 @@ export async function runHealth(deps: HealthDeps): Promise<HealthReport> {
     const same = p && p.status === r.status && p.summary === r.summary && p.detail === (r.detail ? JSON.stringify(r.detail) : null);
     if (same && !changes.includes(r)) continue;
     writes.push(upsertCheck(r, now, op));
+    // After the check's row: the guard needs this run's alert_op (same 6-hour rule as the email).
+    if (discord && changes.includes(r)) {
+      writes.push(discordInsert(`discord:${op}:${r.id}`, discordMessage(r, prev.get(r.id), now, deps.origin), now,
+        sql`EXISTS (SELECT 1 FROM health_checks WHERE id = ${r.id} AND alert_op = ${op})`));
+    }
     for (const o of owners) {
       if (!changes.includes(r)) continue;
       const msg = message(r, prev.get(r.id), deps.origin);
@@ -228,6 +239,11 @@ export async function runHealth(deps: HealthDeps): Promise<HealthReport> {
       }, sql`NOT EXISTS (SELECT 1 FROM outbox WHERE id = ${id})`));
     }
     writes.push(sql`DELETE FROM party_usage WHERE day < ${today - HEALTH.usageKeepDays}`);
+    writes.push(sql`DELETE FROM health_discord WHERE status != 'pending' AND created_at < ${now - DISCORD.keepDays * DAY_MS}`);
+    if (discord) {
+      writes.push(discordInsert(`discord-daily:${today}`, `${msg.subject}\n${bothTimes(now)}\n${msg.lines.join("\n")}\n`
+        + `Estimated rows written today: ${est.usage_est} of ${ACCOUNT_DAILY_WRITES}.\n${deps.origin}/platform`, now, sql`1`));
+    }
   }
   const runReport = {
     checks: Object.fromEntries(results.map((r) => [r.id, r.status])),
@@ -242,9 +258,20 @@ export async function runHealth(deps: HealthDeps): Promise<HealthReport> {
     WHERE id = 'main' AND lease_op = ${op}`);
   await main.batch(writes);
 
+  // Discord (extra channel): at most 3 posts per run, after the state is saved.
+  let discordReport: HealthReport["discord"] = "not_configured";
+  if (discord) {
+    try {
+      discordReport = await deliverDiscord(main, deps.discordUrl!.trim(), deps.fetch!, now);
+    } catch (e) {
+      discordReport = "error";
+      console.error(JSON.stringify({ evt: "health_discord_error", message: errText(e) }));
+    }
+  }
+
   const out: HealthReport = {
     ...report(), daily, checks: runReport.checks, alerts: changes.length * owners.length,
-    admissions_checked: admissions.checked, usage_est: est.usage_est,
+    admissions_checked: admissions.checked, usage_est: est.usage_est, discord: discordReport,
   };
   console.log(JSON.stringify({ evt: "health", ...out }));
   return out;
@@ -304,11 +331,21 @@ function message(r: CheckResult, prev: CheckRow | undefined, origin: string) {
   };
 }
 
+/** The Discord text of an alert or "resolved" message: check, state, short detail, time in UTC and Cairo. */
+function discordMessage(r: CheckResult, prev: CheckRow | undefined, now: number, origin: string): string {
+  const title = CHECK_TITLES[r.id];
+  const head = r.status === "problem"
+    ? `Sahra health: PROBLEM - ${title}${prev?.status === "problem" ? ` (still, since ${bothTimes(prev.since)})` : ""}`
+    : `Sahra health: resolved - ${title}`;
+  return `${head}\n${r.summary}\n${bothTimes(now)}\n${origin}/platform`;
+}
+
 function dailySummary(results: CheckResult[], usageEst: number, now: number, origin: string) {
   const problems = results.filter((r) => r.status === "problem");
   const lines = results.map((r) => `- ${CHECK_TITLES[r.id]}: ${r.status === "ok" ? "ok" : r.status === "unknown" ? "not set up" : "PROBLEM"}. ${r.summary}`);
   return {
     subject: problems.length ? `Sahra daily check: ${problems.length} problem${problems.length > 1 ? "s" : ""}` : "Sahra daily check: all ok",
+    lines,
     body: `Daily summary of the automatic checks, ${when(now)}.\n\n${lines.join("\n")}\n\nEstimated rows written today so far: ${usageEst} of ${ACCOUNT_DAILY_WRITES} (an estimate; the exact figure is in the Cloudflare dashboard).\n\nThis message comes once a day. If it stops coming, the checks themselves are not running.\n\nAll checks: ${origin}/platform\n`,
   };
 }
@@ -471,12 +508,13 @@ async function estimateUsage(main: SqlDriver, state: State, now: number, admissi
 // --------------------------------------------------------------- site owner
 
 /** The site owner page: checks, last run, recent alerts, today's per-party counters. Read-only. */
-export async function healthView(main: SqlDriver, ok: Sql, now: number) {
+export async function healthView(main: SqlDriver, ok: Sql, now: number, discord: DiscordStatus) {
   const rs = await main.batch([
     sql`SELECT id, status, summary, detail, since, checked_at, alerted_at FROM health_checks WHERE ${ok} ORDER BY id`,
     sql`SELECT last_run_at, last_run_report, last_backup_at, last_backup_note, usage_day, usage_est FROM health_state WHERE id = 'main' AND ${ok}`,
     sql`SELECT created_at, kind, subject, status FROM outbox WHERE party_id = ${PLATFORM} AND ${ok} ORDER BY created_at DESC LIMIT 40`,
     sql`SELECT party_id, kind, n FROM party_usage WHERE day = ${dayOf(now)} AND ${ok} ORDER BY party_id, kind`,
+    ...discordView(ok),
   ]);
   const st = rs[1]!.results[0] as undefined | Record<string, unknown>;
   // One alert goes to every site owner: show it once, with its recipients' states.
@@ -500,6 +538,12 @@ export async function healthView(main: SqlDriver, ok: Sql, now: number) {
     },
     alerts,
     party_usage_today: rs[3]!.results,
+    // Never the webhook URL: only whether it is set and valid, and the latest delivery.
+    discord: {
+      status: discord,
+      messages: Object.fromEntries((rs[4]!.results as { status: string; n: number }[]).map((r) => [r.status, Number(r.n)])),
+      latest: rs[5]!.results[0] ?? null,
+    },
   };
 }
 

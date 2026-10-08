@@ -29,6 +29,8 @@ export interface Env {
   /** Email fallback: Brevo API key (secret) and its verified sender address (var). */
   BREVO_API_KEY?: string;
   BREVO_SENDER?: string;
+  /** Optional: health alerts also go to a Discord channel through this webhook (secret, set by the owner). */
+  DISCORD_WEBHOOK_URL?: string;
 }
 
 export const CONFIG = {

@@ -788,7 +788,7 @@ local D1 in `npx vitest run`); nothing ran against Cloudflare. Code: `src/health
 (checks, alerts, estimate, site owner view), `src/limits/` (per-party counters),
 the cron hook in `src/index.ts`, `GET /api/platform/health`, a "Health checks"
 section on `public/platform.html`. Migration `migrations/0009_health.sql`. Tests:
-`test/health.test.ts` (19) + 3 cases in `test/unauth.test.ts`.
+`test/health.test.ts` (27) + 3 cases in `test/unauth.test.ts`.
 
 **Checks and cadence.** The existing once-a-minute cron runs the checks on every
 minute divisible by 15 (`ctrl.scheduledTime`), in their own `waitUntil` next to
@@ -826,6 +826,40 @@ is hidden from the site owner's party list, and its first change-log flush
 records it like any party. **If the alert emails cannot be sent** (no provider
 configured, provider down), the outbox check itself goes red, but only the page
 shows it: an email alert cannot report that email is broken.
+
+**Discord (optional, extra channel).** The same alert, "resolved" and daily
+summary messages are also posted to a Discord channel when the secret
+`DISCORD_WEBHOOK_URL` is set; email through the outbox stays the primary
+channel. Only `https://discord.com/api/webhooks/<id>/<token>` or the same on
+`discordapp.com` is used; anything else counts as not configured and the page says
+"NOT USED". The URL is never stored, logged, returned or shown (errors record only
+"HTTP 503" or "network error: TypeError"). A message is a row in `health_discord`
+(migration 0009), added in the same batch and under the same guard as the email
+(so the same 6-hour rule), and posted after the batch: JSON `{"content": ...,
+"allowed_mentions": {"parse": []}}`, plain text, no emojis, "@everyone"/"@here"
+defused, at most 1,900 characters, with the check, its state, the summary, the time
+in UTC and Africa/Cairo, and the page link (never guest, session or secret data).
+At most 3 posts per run, oldest first. Network errors, 5xx and 429 stay pending
+for the next run (a 429's `retry_after` is respected); a 4xx other than 429/408
+(webhook deleted) or a message still failing 24 hours after it was created is
+marked `gave_up` with its last error. Sent and given-up rows older than 8 days are
+deleted by the daily run. Nothing is posted during MAINTENANCE. The page shows
+"configured / not set / NOT USED", the latest message's state and how many wait.
+Measured locally: a run with Discord configured and nothing to post makes one more
+query (7 main queries, 27 rows read, 2 written, against 6 / 25 / 2 without); a run
+posting 3 messages, 8 main queries, and each message writes 2 rows (insert +
+result). Tests: success, 5xx and network error retried next run, 429 waits for
+retry_after, given up after 24 hours, 404 given up at once, at most 3 per run,
+invalid URLs ignored, no mentions, no emojis, length cap, daily summary once.
+
+How the owner sets it (staging first, never a worker): in Discord, channel
+settings -> Integrations -> Webhooks -> New Webhook -> Copy Webhook URL; then on
+your own computer `npx wrangler secret put DISCORD_WEBHOOK_URL --env staging` and
+paste it when asked. Check the platform page shows "Discord: configured" and that
+the next daily summary (06:00 UTC) arrives in the channel; then the same for
+production with `npx wrangler secret put DISCORD_WEBHOOK_URL`. Anyone holding the
+URL can post to that channel: if it leaks, delete the webhook in Discord and set a
+new one. To stop posting: `npx wrangler secret delete DISCORD_WEBHOOK_URL`.
 
 **Per-party limits** (`src/limits/`, table `party_usage`, one row per party per
 kind per UTC day). The counter is one UPSERT whose WHERE holds the cap (and, for
@@ -909,8 +943,7 @@ the section id is `site_owner`, so the site owner section never showed),
 
 **Open questions.**
 1. The reserved `_platform` party row (needed for the outbox foreign key) is data
-   in a migration; the alternative is a separate alert table with its own sender,
-   which would bypass the outbox. Coordinator to confirm.
+   in a migration; accepted by the coordinator.
 2. The caps and the 26-hour backup age are first guesses; the owner may change
    them in `src/limits/index.ts` and `src/health/index.ts` (`HEALTH`).
 3. Recovery (`src/recovery/`) does not know `health_state`/`party_usage`; a restore
