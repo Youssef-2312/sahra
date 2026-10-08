@@ -222,12 +222,13 @@ export class Db {
           AND NOT EXISTS (SELECT 1 FROM invites WHERE id = ${a.inviteId})`,
       audit(a.now, actor, "staff_added", "staff", sql`SELECT party_id, id, rev FROM staff WHERE id = ${a.staffId} AND last_op = ${a.op}`),
       audit(a.now, actor, "invite_created", "invite", sql`SELECT party_id, id, rev FROM invites WHERE id = ${a.inviteId} AND last_op = ${a.op}`),
-      sql`SELECT st.id, st.party_id, st.invited_email, st.role, i.id AS invite_id, i.party_id AS invite_party
+      sql`SELECT st.id, st.party_id, st.invited_email, st.role, i.id AS invite_id, i.party_id AS invite_party, ${ok} AS ok
         FROM staff st LEFT JOIN invites i ON i.id = ${a.inviteId} AND i.staff_id = st.id WHERE st.id = ${a.staffId}`,
     ]);
-    const row = rs[4]!.results[0] as undefined | { party_id: string; invited_email: string; role: string; invite_id: string | null };
+    const row = rs[4]!.results[0] as undefined | { party_id: string; invited_email: string; role: string; invite_id: string | null; ok: number };
     if (rs[0]!.meta.changes === 1) return "created" as const;
-    if (row && row.party_id === p && row.invited_email === a.email && row.role === a.role && row.invite_id) return "already" as const;
+    // A retry is answered "already" only while the session still holds the authority.
+    if (row && Number(row.ok) === 1 && row.party_id === p && row.invited_email === a.email && row.role === a.role && row.invite_id) return "already" as const;
     return "rejected" as const;
   }
 
@@ -254,10 +255,10 @@ export class Db {
       audit(a.now, actor, "invite_revoked", "invite",
         sql`SELECT party_id, id, rev FROM invites WHERE staff_id = ${a.staffId} AND last_op = ${a.op} AND last_action = 'invite_revoked'`),
       audit(a.now, actor, "invite_created", "invite", sql`SELECT party_id, id, rev FROM invites WHERE id = ${a.inviteId} AND last_op = ${a.op}`),
-      sql`SELECT party_id, staff_id, token_hash FROM invites WHERE id = ${a.inviteId}`,
+      sql`SELECT party_id, staff_id, token_hash, ${ok} AS ok FROM invites WHERE id = ${a.inviteId}`,
     ]);
-    const row = rs[6]!.results[0] as undefined | { party_id: string; staff_id: string; token_hash: string };
-    if (row && row.party_id === p && row.staff_id === a.staffId && row.token_hash === a.tokenHash) {
+    const row = rs[6]!.results[0] as undefined | { party_id: string; staff_id: string; token_hash: string; ok: number };
+    if (row && Number(row.ok) === 1 && row.party_id === p && row.staff_id === a.staffId && row.token_hash === a.tokenHash) {
       return rs[2]!.meta.changes === 1 ? ("created" as const) : ("already" as const);
     }
     return "rejected" as const;
@@ -334,10 +335,10 @@ export class Db {
       sql`UPDATE sessions SET revoked_at = ${now} WHERE invite_id = ${inviteId} AND revoked_at IS NULL
         AND EXISTS (SELECT 1 FROM invites WHERE id = ${inviteId} AND party_id = ${p} AND revoked_at IS NOT NULL)`,
       audit(now, actor, "invite_revoked", "invite", sql`SELECT party_id, id, rev FROM invites WHERE id = ${inviteId} AND last_op = ${op}`),
-      sql`SELECT revoked_at FROM invites WHERE id = ${inviteId} AND party_id = ${p}`,
+      sql`SELECT revoked_at, ${ok} AS ok FROM invites WHERE id = ${inviteId} AND party_id = ${p}`,
     ]);
-    const row = rs[3]!.results[0] as undefined | { revoked_at: number | null };
-    if (row?.revoked_at != null) return rs[0]!.meta.changes === 1 ? ("revoked" as const) : ("already" as const);
+    const row = rs[3]!.results[0] as undefined | { revoked_at: number | null; ok: number };
+    if (row?.revoked_at != null && Number(row.ok) === 1) return rs[0]!.meta.changes === 1 ? ("revoked" as const) : ("already" as const);
     return "rejected" as const;
   }
 
@@ -356,11 +357,11 @@ export class Db {
       sql`UPDATE sessions SET revoked_at = ${now} WHERE staff_id = ${staffId} AND revoked_at IS NULL
         AND EXISTS (SELECT 1 FROM staff WHERE id = ${staffId} AND party_id = ${p} AND last_op = ${op})`,
       audit(now, actor, "role_changed", "staff", sql`SELECT party_id, id, rev FROM staff WHERE id = ${staffId} AND last_op = ${op}`, role),
-      sql`SELECT role, disabled_at FROM staff WHERE id = ${staffId} AND party_id = ${p}`,
+      sql`SELECT role, disabled_at, ${ok} AS ok FROM staff WHERE id = ${staffId} AND party_id = ${p}`,
     ]);
-    const row = rs[3]!.results[0] as undefined | { role: string; disabled_at: number | null };
+    const row = rs[3]!.results[0] as undefined | { role: string; disabled_at: number | null; ok: number };
     if (rs[0]!.meta.changes === 1) return "changed" as const;
-    if (row && row.role === role && row.disabled_at == null) return "already" as const;
+    if (row && Number(row.ok) === 1 && row.role === role && row.disabled_at == null) return "already" as const;
     return "rejected" as const;
   }
 
@@ -379,11 +380,11 @@ export class Db {
           AND EXISTS (SELECT 1 FROM staff WHERE id = ${staffId} AND last_op = ${op})`,
       audit(now, actor, "staff_disabled", "staff", sql`SELECT party_id, id, rev FROM staff WHERE id = ${staffId} AND last_op = ${op}`),
       audit(now, actor, "invite_revoked", "invite", sql`SELECT party_id, id, rev FROM invites WHERE staff_id = ${staffId} AND last_op = ${op}`),
-      sql`SELECT disabled_at FROM staff WHERE id = ${staffId} AND party_id = ${p}`,
+      sql`SELECT disabled_at, ${ok} AS ok FROM staff WHERE id = ${staffId} AND party_id = ${p}`,
     ]);
-    const row = rs[5]!.results[0] as undefined | { disabled_at: number | null };
+    const row = rs[5]!.results[0] as undefined | { disabled_at: number | null; ok: number };
     if (rs[0]!.meta.changes === 1) return "disabled" as const;
-    if (row?.disabled_at != null) return "already" as const;
+    if (row?.disabled_at != null && Number(row.ok) === 1) return "already" as const;
     return "rejected" as const;
   }
 

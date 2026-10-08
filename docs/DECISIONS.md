@@ -690,9 +690,29 @@ table `platform_admins` (change-log entity `platform_admin`), the route prefix
   untouched, old sessions and invitations stay revoked. Its owners sign in
   again, reopen admission themselves and invite door staff again. Re-enabling
   may leave an organiser above their party limit; that only blocks new parties.
-- **Switching off an organiser**: intent first, then one batch: organiser
-  disabled, every platform session of that Google account revoked, unused
-  invitations revoked, audit. Their parties keep running (owner decision).
+- **Switching off an organiser** (owner decision, revised): it also ends their
+  management of parties. Intents first (the organiser, and each party staff row
+  of their Google account, entity "staff", same op id), then ONE batch:
+  organiser disabled, every platform session of that account revoked, unused
+  organiser invitations revoked, and every party staff row of that account
+  disabled (rows linked to the account in any party, plus rows in parties they
+  created that were invited with their email and not yet linked), with those
+  rows' sessions and unused invitations revoked, audit rows ("organiser
+  switched off"), change log. Their parties keep running for guests and the
+  OTHER staff (door phones keep admitting; invitations they made for other
+  people stay valid). A staff row created between the intent read and the batch
+  (a party created at that very moment) is disabled too, and its intent is
+  written right after the batch, before the change is confirmed.
+- **Appointing a new owner** (`POST /api/platform/parties/:id/owner-invite`,
+  site owner only): for a party with no active owner (no linked, enabled owner
+  staff row), creates a staff row (role owner, invited_email) and a Google owner
+  invitation valid 14 days, logged and audited ("owner appointed by site
+  owner"), like Db.createGoogleInvite. The site owner check, "party not
+  disabled" and "no active owner" are inside the INSERT; a retry with the same
+  ids is "already". The site owner page lists `active_owners`,
+  `pending_owner_invites` and `no_active_owner` per party. Known limit: the
+  switched-off organiser themself cannot be re-appointed this way (their
+  disabled staff row keeps the account link).
 - **Removing a site owner** (`POST /api/platform/site-owners/:id/remove`):
   intent first (a removal must survive a recovery), then one batch: the row is
   disabled (never the caller, never the last active one: both inside the
@@ -729,8 +749,39 @@ anywhere yet)**
 **Shared files changed** (minimal): `src/db/index.ts` (unlogged/markLogged lines;
 `activeStaffForSub` and `createGoogleSession` now skip a disabled party),
 `src/routes/auth.ts` (platform start + one branch in the callback),
-`src/app.ts` (route), `test/helpers.ts`, `test/unauth.test.ts` (23 cases; the
-counted tables now include the platform tables and ledger intents).
+`src/app.ts` (route), `test/helpers.ts`, `test/unauth.test.ts` (25 cases; the
+counted tables now include the platform tables and ledger intents). After the
+authority audit (below), the "already" answers of createGoogleInvite,
+createDoorInvite, revokeInvite, changeRole and disableStaff also require the
+session to be valid (they were read-only answers, nothing was applied, but a
+retry after losing authority now gets "refused" instead of "already").
+
+**Losing authority on sessions already open (audit, `test/authority.test.ts`)**
+
+Every write statement on these paths carries its authority condition itself
+(`sessionValid`, `siteOwnerValid`, `organiserValid`), so the change is decided
+by the database at the moment the statement runs, not by an earlier check.
+Tested with sessions that stay open and keep making requests:
+
+- organiser switched off: the next platform request and the next request as
+  owner of their party are refused (401);
+- site owner removed: the next request is refused;
+- owner demoted to admin, and staff disabled: owner-only actions refused on the
+  very next request;
+- the same, with the session row artificially un-revoked (a session that
+  escaped revocation): requests still refused, and the statements called
+  directly answer "rejected"/"forbidden" and write nothing (the staff row's
+  role or disabled state is checked inside each statement);
+- requests fired at the same moment as the change (Promise.all): each either
+  completed before it (its rows exist, are logged, and its audit row comes
+  before the change's audit row) or is refused with nothing written; never
+  applied after;
+- a retry with the same ids after the change: refused, nothing new.
+
+Statements without such a condition, reviewed: logouts (only revoke the
+caller's own session), session creation (its own active-principal and cap
+conditions), revocations keyed to rows the same batch just disabled, and guest
+sign-up (unauthenticated by design, Turnstile).
 
 **Rows per request (measured locally, small test database)**
 
@@ -739,16 +790,17 @@ counted tables now include the platform tables and ledger intents).
 | POST /api/auth/platform/start | 0 | 0 | 0 | 0 |
 | Platform callback, first sign-in (links organiser + invitation) | 5 | 31 | 10 | 2 |
 | Platform callback, later sign-in | 4 | 25 | 3 | 0 |
-| POST /api/platform/organisers (invite) | 4 | 20 | 10 | 2 |
-| POST /api/platform/organisers/:id/party-limit | 4 | 16 | 3 | 1 |
-| POST /api/platform/organisers/:id/disable | 4 | 27 | 5 | 2 |
-| POST /api/platform/parties (create) | 4 | 26 | 10 | 2 |
-| GET /api/platform/my-parties | 2 | 6 | 0 | 0 |
-| GET /api/platform/parties (counts) | 2 | 13 | 0 | 0 |
-| POST /api/platform/parties/:id/disable (no sessions or invitations) | 5 | 23 | 3 | 3 |
-| POST /api/platform/parties/:id/enable | 4 | 16 | 3 | 1 |
+| POST /api/platform/organisers (invite) | 4 | 23 | 11 | 3 |
+| POST /api/platform/organisers/:id/party-limit | 4 | 17 | 3 | 1 |
+| POST /api/platform/organisers/:id/disable (1 party staff row) | 5 | 49 | 8 | 4 |
+| POST /api/platform/parties (create) | 4 | 29 | 10 | 2 |
+| GET /api/platform/my-parties | 2 | 7 | 0 | 0 |
+| GET /api/platform/parties (counts) | 2 | 15 | 0 | 0 |
+| POST /api/platform/parties/:id/disable (no sessions or invitations) | 5 | 24 | 3 | 3 |
+| POST /api/platform/parties/:id/enable | 4 | 17 | 3 | 1 |
+| POST /api/platform/parties/:id/owner-invite | 4 | 31 | 11 | 2 |
 | GET /api/platform/site-owners | 2 | 6 | 0 | 0 |
-| POST /api/platform/site-owners/:id/remove (1 session) | 4 | 22 | 4 | 2 |
+| POST /api/platform/site-owners/:id/remove (1 session) | 4 | 23 | 4 | 2 |
 
 Rows read grow with the database: the change-log check (`unlogged()`) scans the
 parties, staff, invites and the three platform tables on every change (as
@@ -756,7 +808,7 @@ before), and the counts page reads every ticket, session and outbox row once
 (GROUP BY; opened by hand, not polled). Disabling a party also writes one row
 per revoked session and two per revoked invitation (row + audit), and one
 change-log entry per invitation; more than 20 pending entries answer "pending"
-and the retry continues. Requests without a session write nothing (all 23 new
+and the retry continues. Requests without a session write nothing (all 25 new
 unauthenticated cases).
 
 **What local tests cannot prove**
@@ -773,10 +825,10 @@ unauthenticated cases).
 
 **Open points**
 
-1. Recovery (coordinator, at integration) must learn the new entities: the
-   `party_disabled`, `organiser_disabled` and `site_owner_removed` intents, and
-   the `_platform` party id in the change log. Party limit changes and
-   re-enabling have no intent (losing them in a recovery is safe).
+1. Recovery covers the platform entities since integration; switching off an
+   organiser now also writes "staff_disabled" intents (entity "staff", the
+   party's id) under the organiser's op id. Party limit changes, re-enabling
+   and owner invitations have no intent (losing them in a recovery is safe).
 2. Site owners can only be added with the ops step (no web invitation for site
    owners).
 3. Non-Gmail, non-Workspace organiser addresses cannot sign in until email

@@ -28,6 +28,8 @@
 <h3>Parties (counts only, no guest data)</h3>
 <pre id="parties"></pre>
 <form id="disable-party"><input name="id" placeholder="party id" required> <button>Disable party</button></form>
+<p>Parties with "no_active_owner": true need a new owner (for example after their organiser was switched off):</p>
+<form id="owner-invite"><input name="id" placeholder="party id" required> <input name="name" placeholder="New owner name" required> <input name="email" type="email" placeholder="Gmail address" required> <button>Invite new party owner</button></form>
 <form id="enable-party"><input name="id" placeholder="party id" required> <button>Turn party back on (stays paused)</button></form>
 <h3>Site owners</h3>
 <pre id="owners"></pre>

@@ -76,12 +76,18 @@
       loadOwner();
     });
     form("disable-org", async function (f) {
-      if (!confirm("Disable this organiser? They lose platform access.")) return;
+      if (!confirm("Switch off this organiser? They lose platform access and stop managing their parties (the parties keep running).")) return;
       show(await act("/api/platform/organisers/" + encodeURIComponent(String(f.get("id")).trim()) + "/disable"));
       loadOwner();
     });
     form("limit", async function (f) {
       show(await act("/api/platform/organisers/" + encodeURIComponent(String(f.get("id")).trim()) + "/party-limit", { limit: Number(f.get("limit")) }));
+      loadOwner();
+    });
+    form("owner-invite", async function (f) {
+      show(await act("/api/platform/parties/" + encodeURIComponent(String(f.get("id")).trim()) + "/owner-invite", {
+        staff_id: crypto.randomUUID(), invite_id: crypto.randomUUID(), name: f.get("name"), email: f.get("email"),
+      }));
       loadOwner();
     });
     form("enable-party", async function (f) {
