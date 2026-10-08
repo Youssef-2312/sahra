@@ -184,3 +184,16 @@ coordinator's session. Status: agreed, rejected or open.
 - Needs: a rule for the whole build, no new data. Effort: no extra screens; it shapes all of them.
 - Free-tier cost: none; lighter pages help
 - Rule conflicts: none
+
+## 13. Site-owner panel: small and simple
+
+- Status: agreed
+- Owner's words: "nope" (when asked whether anything else was needed in the panel)
+- Three parts only:
+  - "Needs attention": health alerts (failed backup, database nearly full, unusual daily usage). Says "All good" when there is nothing;
+  - "Parties": short list with organiser, status and ticket count, plus a switch to disable or re-enable a party;
+  - "Organisers": invite one, change their party limit, disable one.
+- Needs: one screen on actions that already exist (Workstream B and F); no new data.
+- Effort: small to medium
+- Free-tier cost: a few reads per page view; the health status is read from the stored state, not recomputed
+- Rule conflicts: none; follows ideas 6 and 12 (phone first, uncluttered)
