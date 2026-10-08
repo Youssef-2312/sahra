@@ -367,3 +367,19 @@ coordinator's session. Status: agreed, rejected or open.
   - separate sign-in pages for organisers and for the site owner stay separate (separate cookie, already built).
 - Needs: one static page per sign-in type. Effort: small. Free-tier cost: none. Rule conflicts: none (no passwords; Google sign-in as already built).
 - Owner decision on charts: "yes all three". The organiser dashboard gets all three charts below the number tiles: sign-ups per day (line), ticket-type split (donut), and arrivals per 15 minutes (bars). Suggested placement: sign-ups and ticket types before the party; the arrivals chart appears once doors open. Tiles stay at the top (idea 10), and each chart sits below on a phone as a single full-width card.
+
+## 28. Site footer: Instagram, "Built by Nova" credit with Nova's logo in the middle
+
+- Status: agreed in principle; details needed from the owner (see "Needs from the owner")
+- Owner's words: "the footer aswell with the instagram and a website showcasing it was built by nova and novas logo in the middle" (screenshot of efferd footer-5: a dark multi-column footer, round social icons, app-store buttons, a copyright line)
+- Footer for Sahra, simple and uncluttered (idea 12):
+  - Nova's logo in the middle with "Built by Nova", linking to Nova's website;
+  - an Instagram icon linking to Sahra's Instagram;
+  - a very short row of links: Privacy and Terms (see below);
+  - a copyright line;
+  - NOT taken from the screenshot: the four link columns, the Google Play and App Store buttons, and the other social icons (Sahra has no app, and only Instagram is wanted).
+- Phone first: everything stacks in one centred column; the icons and links are large enough to tap.
+- Recommendation: add two short plain pages, "Privacy" (what Sahra stores: name, email, payment screenshot, answers to organiser questions; who sees it; how long it is kept) and "Terms" (Sahra is a ticketing tool, the organiser sets the price, refund policy and rules, the organiser is the contact for problems). Guests hand over payment screenshots and personal details, so a clear privacy page matters. The coordinator should draft the text from what the system really stores; the owner approves it. Not yet agreed by the owner.
+- Needs from the owner: Sahra's Instagram link, Nova's website link, and Nova's logo file (PNG or SVG, ideally a version that works on a dark background).
+- Needs (build): one shared footer used on every public page; the logo stored in the project as a static file (small size). Links to Instagram and Nova open in a new tab and load nothing from those sites until tapped. No embedded Instagram feed or widget (extra weight, tracking, outside dependency).
+- Effort: small. Free-tier cost: none (static). Rule conflicts: none; icons are drawn shapes, not emojis.
