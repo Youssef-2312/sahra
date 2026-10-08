@@ -93,3 +93,19 @@ coordinator's session. Status: agreed, rejected or open.
 - Needs: a rule for the whole build, no new data. Effort: no extra screens, but it shapes the effort of all of them.
 - Free-tier cost: lighter pages help; static assets do not count as Worker requests
 - Rule conflicts: none
+
+## 7. Door scanner result screens
+
+- Status: agreed
+- Owner's words: "yes thats correct the staff should see the guests name and the word"
+- Whole screen turns one colour with one big word:
+  - green "Admitted": guest name, ticket type, group size (so staff can greet the guest and spot a borrowed ticket);
+  - red "Already used": when it was used and at which scanner;
+  - red "Invalid": forged or wrong-party code;
+  - amber "Can't verify" or "Paused": anything uncertain. Never green when in doubt.
+- Each result also has its own sound and vibration so staff need not watch the screen constantly.
+- Phone first (idea 6). Large QR-reading area, high contrast for dark rooms.
+- Needs: scanner screens on existing scan results. The "Already used" detail (time, scanner) needs the scan response to include it; check what the API returns today.
+- Effort: medium
+- Free-tier cost: none beyond scans already counted
+- Rule conflicts: none; consistent with fail-closed. No emojis: colours, words, sound and vibration only.
