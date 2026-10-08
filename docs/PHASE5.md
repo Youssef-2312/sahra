@@ -52,8 +52,8 @@ the `staging` branch; a finished piece the owner should try is pushed there too.
 | 2 | Guest sign-up page (`/signup.html?party=`): party, address status, ticket types, short form | done |
 | 2b | Privacy and Terms pages (agreed, idea 28; text from what Sahra really stores; owner approves) | done (drafts) |
 | 3 | Guest ticket page (`/ticket.html#t=`): big QR, name/type/group, party, address or countdown | done |
-| 4 | Home page: party cards with the guest's own status; "Find my tickets" (needs backend) | next |
-| 5 | Door scanner: camera, full-screen verdicts, sound and vibration | |
+| 4 | Home page: party cards with the guest's own status; "Find my tickets" (needs backend) | waiting for the owner (brief vs idea 4) |
+| 5 | Door scanner: camera, full-screen verdicts, sound and vibration | done (first version) |
 | 6 | Organiser dashboard: top numbers and big buttons | |
 | 7 | Approval queue: one card per request, "Approve and send QR" | |
 | 8 | Party settings: details, ticket types, sign-up questions | |
@@ -97,6 +97,22 @@ the `staging` branch; a finished piece the owner should try is pushed there too.
   database and sign its link with `src/guests/link.ts` bundled by esbuild
   (scratchpad `sign.mjs`), using the local `.dev.vars` keys.
 
+- Piece 5: `public/scan.html` + `public/js/scan.js`. Camera via getUserMedia
+  (back camera), QR via BarcodeDetector where the browser has it, else jsQR
+  (`public/vendor/jsqr/`, Apache-2.0, loaded only then). Full-screen verdict:
+  green ADMIT (name, type, group) goes back to the camera after 2.5 s; red
+  ALREADY USED / DO NOT ADMIT and amber CAN'T VERIFY / PAUSED wait for "Next
+  guest". Sounds (Web Audio) and vibration per result. One scan id per scan,
+  reused for retries ("recording" or network), max 6 tries, then CAN'T VERIFY.
+  The same code still in view is ignored for 4 s after its result. Light
+  (torch) button where the phone supports it. No footer on this page. Door
+  join (`/join`) now goes straight to `/scan.html`.
+- Checked end to end locally (headless Chromium with a fake camera fed a Y4M
+  video of a real ticket QR, scratchpad `scan-e2e.mjs`): join -> scanner ->
+  ADMIT -> same code -> ALREADY USED, no page errors (jsQR path; headless
+  Chromium has no BarcodeDetector). Real phones still to be tried by the owner
+  (two-phone rehearsal).
+
 ## Open questions for the owner
 
 - Privacy and Terms drafts: approve or change the wording (then remove the
@@ -108,6 +124,8 @@ the `staging` branch; a finished piece the owner should try is pushed there too.
   handed over.
 
 ## Next
+
+Piece 6 (organiser dashboard) unless the owner answers piece 4 first.
 
 Piece 4, the home page. The original brief says "the website homepage is the
 staff login"; the brainstorm (idea 4) agreed party cards as the hero with the

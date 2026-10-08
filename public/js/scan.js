@@ -200,7 +200,7 @@
     }
     app.appendChild(el("div", { class: "row" },
       el("strong", { text: party ? party.name : me.party.name, attrs: { dir: "auto" } }),
-      el("span", { class: "pill yes", text: t("sc_rule") })));
+      el("span", { class: "pill", text: t("sc_rule") })));
     var finder = el("div", { class: "viewfinder" }, video, el("div", { class: "frame" }));
     finder.hidden = !stream;
     app.appendChild(finder);
