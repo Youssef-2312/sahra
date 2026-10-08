@@ -135,3 +135,18 @@ coordinator's session. Status: agreed, rejected or open.
 - Effort: medium to large
 - Free-tier cost: about 4 to 5 rows written per guest (ticket, change log, outbox, audit), so 300 guests is roughly 1,500 rows, fine. Large imports should be done in chunks so no single request goes over 50 queries or 10 ms CPU. The bigger limit is email: QR emails leave a few per minute through the outbox and count against the Gmail daily cap, so a big import may take a while to finish sending. The dashboard should show "x of y QRs sent".
 - Rule conflicts: none, if capacity and QR issuing use the same code as normal tickets. An imported guest must never get a QR that skips the capacity check. Emails contain no emojis.
+
+## 10. Organiser dashboard: top of the page
+
+- Status: agreed
+- Owner's words: "its correct"
+- Top of the dashboard, phone first:
+  - tickets approved out of capacity (for example "86 / 120");
+  - requests waiting for approval, with a big "Review" button;
+  - money expected (from approved tickets and prices) with a separate "Cash" total (idea 9);
+  - countdown to the party, then "Doors open" with the number checked in once it starts.
+- Below: big buttons to open or close registration, send an announcement, add a cash guest or import a CSV, and open the guest list.
+- Needs: one screen on data that already exists or is being built (capacity indicator, check-in stats, ticket prices); cash total needs the payment-method flag from idea 9.
+- Effort: medium
+- Free-tier cost: a few counts per page view; cache them for a short time and avoid refreshing in a tight loop
+- Rule conflicts: none
