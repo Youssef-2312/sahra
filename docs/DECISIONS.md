@@ -781,3 +781,174 @@ unauthenticated cases).
    owners).
 3. Non-Gmail, non-Workspace organiser addresses cannot sign in until email
    confirmation exists (same as staff).
+## Workstream E: backups outside Cloudflare (Phase 4)
+
+Built on branch `claude/p4-e-backups` (base e39097e). Only tested locally (workerd
+tests, Miniflare, a simulated Apps Script, a Drive folder on disk); nothing ran
+against Cloudflare or Google.
+
+**What was built**
+
+- `src/routes/backup.ts`, `src/backup/`: four read-only GET endpoints for the
+  platform owner's Apps Script. `/api/backup/schedule` (hourly or nightly and
+  why), `/api/backup/manifest[?counts=1]` (exported and excluded tables with the
+  reason, migrations, D1's measured size per database, optional row counts),
+  `/api/backup/rows/:db/:table?after=&limit=` (one page by primary key, default
+  200, at most 500 rows; composite keys use a row-value comparison; never
+  OFFSET), `/api/backup/file/:id` (one screenshot's bytes with `x-sahra-sha256`
+  and `x-sahra-size`).
+- **Signature, checked before any database access:** HMAC-SHA256 with the secret
+  `BACKUP_KEY` over `SAHRA-BACKUP-1`, method, host, path, raw query and a Unix
+  time; refused when more than 5 minutes off, when signed for another path,
+  query, host (staging vs production) or with another key. Missing or short key
+  (under 32 bytes) -> 503 on every endpoint (fail closed). **Stateless, no
+  nonces:** every endpoint is a read-only GET, so replaying a captured request
+  inside its 5 minutes only reads the same page again, which the capture already
+  showed; a nonce store would cost a database write per request.
+- **Excluded from the backup:** `sessions` and `platform_sessions` (session token
+  hashes; short-lived and every restore ends all sessions), `outbox` (email
+  bodies carry guests' signed ticket links, which show the QR; a restore from
+  Drive sends nothing again, guests use "resend my ticket link"), `d1_migrations`
+  (recreated by the migrations; the names are in the manifest and the drill
+  checks them). Kept: invitation token hashes and scan QR fingerprints (SHA-256
+  of 256-bit / 130-bit-signed values; not usable to sign in or forge a code, and
+  the change log already holds invitations in full), guest names, emails and
+  answers (needed to restore tickets). No table holds a plaintext secret. A test
+  fails when a migration adds a table that is neither exported nor excluded.
+- **Not a snapshot:** pages are ordinary queries over minutes. The main tables go
+  first, the screenshot list next, the ledger last, so the ledger is never older
+  than the rows it covers; restoring = load the tables, then the recovery
+  engine's replay (newest rev per entity wins). Tested: a guest admitted after
+  the main tables were exported comes back as admitted through the ledger.
+- **Restore** (`src/backup/restore.ts`, shared by the tests and
+  `scripts/restore-drill.mjs`): only into fresh migrated databases (refuses a
+  table that has rows), one parameterized INSERT per row, **one statement per
+  screenshot with the bytes bound as a BLOB**; then every table is read back and
+  compared, every restored screenshot hashed, and `src/recovery` verify / replay /
+  verify run on the restored main database and change log.
+- `backup/apps-script/Code.gs` + `README.md` (install steps), `appsscript.json`.
+  Resumable state machine in Script Properties (tables page by page, part files
+  of 5,000 rows gzipped, screenshots in batches of 20), each run stops after 5
+  minutes and a one-off trigger continues 1 minute later; screenshots stored once
+  and checked three times (Worker hash vs received bytes, size vs list, read back
+  from Drive); summary with the measured database sizes; retention 48 hours +
+  one per day for 30 days; email alerts (MailApp, own account) on failure, on a
+  screenshot check failure, when no backup succeeded for 3 h (hourly mode) or
+  30 h, and when the daily budget is used; at most one per problem per 6 hours.
+- `scripts/restore-drill.mjs`: backup folder -> fresh local D1 (`wrangler d1
+  migrations apply --local --persist-to <new dir>`, then the same files through
+  Miniflare's D1 binding) -> load, compare, hash, recovery verify / replay; the
+  largest screenshot is also read back through `wrangler d1 execute --local` and
+  hashed. `scripts/backup-e2e.mjs`: the whole path locally (see below).
+- Shared files: `src/app.ts` (route), `src/env.ts` (`BACKUP_KEY`),
+  `vitest.config.ts` (test-only `BACKUP_KEY` and three empty restore databases),
+  `test/env.d.ts`, `test/helpers.ts` (`backupGet`, `exportAll`),
+  `test/unauth.test.ts` (8 cases). No migration.
+
+**Schedule (Worker decides, script follows):** hourly while any party's admission
+is open, on a party night (12 h before the start until 6 h after the end), or while
+a party is "selling"; nightly otherwise (from 03:00 in the script's time zone).
+"Selling" is approximated without reading tickets: some party is not switched off
+and not over, and the newest audit row is under 24 hours old. The check reads the
+parties table and one audit row.
+
+**Measured locally** (workerd; rows from the endpoints' own log line `evt:
+"backup"`, which counts main, ledger and files reads; `test/backup-cost.test.ts`):
+
+| Request | rows read | rows written |
+|---|---|---|
+| one page of N rows (any table) | N (an index range; 500-row change-log page = 500) | 0 |
+| one screenshot | 1 | 0 |
+| schedule | parties + 1 | 0 |
+| manifest without counts (10 parties, 4,000 tickets) | 100 | 0 |
+| manifest with counts | 44,160 (one per row: COUNT(*) reads the table) | 0 |
+| unsigned / bad signature / no key | 0 (no query) | 0 |
+
+**Full backup at 4,000 tickets with screenshots** (synthetic rows, per ticket: 4
+change-log entries, 4 audit rows, 1 scan, 1 screenshot; 10 parties, 50 staff;
+44,060 rows in the backup): **92,232 rows read** with counts and every screenshot
+downloaded (main 48,202, ledger 32,019, files 12,011), the same with 200- or
+500-row pages. Split: the rows themselves about 44,100; the manifest counts
+44,160; one per screenshot download (only NEW screenshots are downloaded after
+the first backup). So an hourly backup (no counts, no new screenshots) reads about
+44,100 rows, a nightly one about 88,000. **A day of hourly backups at that size is
+about 1.1 million rows read, 22% of the account's 5 million per day.** A 500-row
+change-log page is about 313 KB of JSON; serializing it took 0.5 ms (median) in
+Node's V8, SHA-256 of a 1.5 MB screenshot 1.3 ms; Workers CPU per request is not
+measurable locally.
+
+**Apps Script runtime (an estimate, not measured):** a backup of 4,000 tickets is
+about 120 requests (400-row pages) plus about 9 part files; at 0.3 to 0.5 s per
+request and 1 to 2 s per Drive file, 1.5 to 2 minutes per run without new
+screenshots, plus about 1.5 s per new screenshot. 24 hourly runs: about 40 to 50
+minutes a day, inside the 90-minute trigger budget; the script itself stops
+starting backups after 75 minutes in a day and emails the owner. A first backup
+of 4,000 existing screenshots would take about 100 minutes, i.e. spread over two
+days of runs: install the script before sales start. Drive use (estimate): about
+3 MB gzipped per backup at 4,000 tickets, about 80 kept (about 250 MB), plus each
+screenshot once (4,000 x 200 KB = 800 MB).
+
+**Local end to end** (`node scripts/backup-e2e.mjs`, about 30 s): fresh local
+databases; the Worker in Miniflare with random test keys; data through the real
+routes (12 test tickets, 3 admissions, 4 sign-ups with screenshots of 1,500,
+48,000, 210,000 and exactly 1,500,000 bytes, approve, release, cancel with its
+intent); Code.gs itself in the simulation, with a 60 ms limit per run, so it
+resumed 4 times (43 requests, 258 rows read, 0 written); each screenshot in
+"Drive" with the uploaded SHA-256; a second backup copied only the one new
+screenshot; the restore drill passed (14 tables identical, 5 screenshots hashed
+after the restore, 1.5 MB screenshot identical also through wrangler, recovery
+verify OK, replay 0 changes, 0 holds); the drill FAILS when one byte of a
+screenshot copy is changed; a wrong key makes the run fail and sends one alert.
+
+**Findings on D1 (local):** `PRAGMA page_count` is not allowed (SQLITE_AUTH), so
+the size is D1's own `meta.size_after` (with `PRAGMA page_size`, 4096).
+`hex()` of a 1.5 MB BLOB fails with SQLITE_TOOBIG (SQLite's string limit in D1,
+the hex text is 3 MB), and an `X'...'` literal of it would be a 3 MB statement
+(limit 100 KB): a SQL-dump round trip cannot carry the largest screenshots, so
+the restore is file by file with bound parameters (as decided above), and the
+drill reads the largest file back through wrangler in 500 KB slices.
+
+**What the owner sets up** (details in `backup/apps-script/README.md`; staging
+first, production later with its own key and folder):
+
+1. `BACKUP_KEY` secret on staging (`node scripts/gen-secret.mjs` into a file
+   outside the repository, `npx wrangler secret put BACKUP_KEY --env staging`).
+2. A Drive folder in the platform owner's own account, not shared.
+3. A new Apps Script project in that account with `Code.gs` and
+   `appsscript.json`; Script Properties `BACKUP_URL`, `BACKUP_KEY`, `FOLDER_ID`
+   (optional `ALERT_EMAIL`); run `setup` (grants access, installs the hourly
+   trigger), then `backupNow` once.
+4. Download one backup folder and `screenshots/`, run
+   `node scripts/restore-drill.mjs <folder>`: it must say "Restore drill OK".
+   This is the brief's "prove early" step on real data.
+
+**What local tests cannot prove:** real Drive behaviour and speed, real Apps
+Script quotas (6 minutes per run, 90 minutes per day, UrlFetch 20,000 per day,
+MailApp) and the runtime estimate above; that Google's UrlFetch leaves the query
+string and headers as signed (the query uses only unreserved characters for this
+reason); real D1 rows-read figures and database sizes on Cloudflare (verify on
+staging with `wrangler tail`: the `evt: "backup"` lines), CPU per backup request
+on Cloudflare, D1's real behaviour for 1.5 MB BLOB reads; how much an hourly
+backup during a party night slows scans (each page is one short indexed query;
+not a D1 export, so it does not block the database, but it shares it). The restore
+here is into LOCAL databases only; restoring into new remote D1 databases needs the
+owner's credential and a parameterized writer for BLOBs (wrangler's `d1 execute`
+cannot bind parameters), which is not built.
+
+**Open questions for the owner/coordinator**
+
+1. Rows read: hourly backups all day at 4,000 tickets use about 22% of the
+   account's daily reads. Options: accept; or hourly runs copy only the ledger
+   (change log, intents, control objects: about 40% of the rows, enough to rebuild
+   every logged entity by replay) and the full tables nightly; or let the quota
+   workstream skip backups past 50% of the daily limit (backups are non-essential).
+2. Outbox rows are not in the backup (they carry ticket links). Emails awaiting
+   the party owner's approval are lost in a restore from Drive. Acceptable?
+3. If the script itself stops (trigger deleted, Google account problem), it
+   cannot email. The planned Worker health check "backup succeeded" cannot see
+   backups (the endpoints write nothing); it could if the script reported each
+   finished backup to a small signed write endpoint (one row per backup). Decide
+   whether that write is wanted.
+4. Only one files database (`FILES`) is exported; when `sahra-files-2` exists,
+   the export and restore need its binding added to the table list.
+5. Trashed Drive folders count against the Drive quota for 30 days.
