@@ -19,6 +19,7 @@ import { outboxRoutes } from "./routes/outbox";
 import { guestRoutes } from "./routes/guests";
 import { ticketRoutes } from "./routes/tickets";
 import { platformRoutes } from "./routes/platform";
+import { backupRoutes } from "./routes/backup";
 
 export type { Deps } from "./context";
 
@@ -129,6 +130,7 @@ export function createApp(deps: Deps) {
   app.route("/api/guest", guestRoutes);
   app.route("/api/tickets", ticketRoutes);
   app.route("/api/platform", platformRoutes);
+  app.route("/api/backup", backupRoutes);
 
   app.get("/api/me", requireAuth(["owner", "admin", "door"]), async (c) => {
     const a = c.var.auth;

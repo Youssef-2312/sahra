@@ -12,6 +12,9 @@ declare global {
       TEST_FILES_MIGRATIONS: D1Migration[];
       COOKIE_MASTER_K2: string;
       RL_TEST: RateLimit;
+      RESTORE_MAIN: D1Database;
+      RESTORE_LEDGER: D1Database;
+      RESTORE_FILES: D1Database;
     }
   }
 }

@@ -29,6 +29,8 @@ export interface Env {
   /** Email fallback: Brevo API key (secret) and its verified sender address (var). */
   BREVO_API_KEY?: string;
   BREVO_SENDER?: string;
+  /** Backup export (src/routes/backup.ts): HMAC key shared with the owner's Apps Script (secret; base64url, at least 32 bytes). Missing: 503. */
+  BACKUP_KEY?: string;
 }
 
 export const CONFIG = {

@@ -31,14 +31,16 @@ export default defineConfig(async () => {
             // A second key id, to test that old-key cookies stop working once removed.
             COOKIE_MASTER_K2: "dGVzdC1vbmx5LWNvb2tpZS1tYXN0ZXItc2VjcmV0LWsyLTMyYg",
             LINK_MASTER_K1: "dGVzdC1vbmx5LWxpbmstbWFzdGVyLXNlY3JldC0zMi1ieXRlcw",
+            BACKUP_KEY: "dGVzdC1vbmx5LWJhY2t1cC1zaWduaW5nLWtleS0zMi1ieXRlcw",
             // Cloudflare's documented Turnstile test keys (always pass); accepted only
             // where ENABLE_TEST_TICKETS = "1". Tests answer siteverify with a fake.
             TURNSTILE_SITE_KEY: "1x00000000000000000000AA",
             TURNSTILE_SECRET: "1x0000000000000000000000000000000AA",
             ENABLE_TEST_TICKETS: "1",
           },
-          // Test-only: the real files databases (sahra-files-N) do not exist yet.
-          d1Databases: { FILES: "test-files" },
+          // Test-only: the real files databases (sahra-files-N) do not exist yet. RESTORE_*:
+          // fresh databases the backup tests restore into (src/backup/restore.ts).
+          d1Databases: { FILES: "test-files", RESTORE_MAIN: "test-restore-main", RESTORE_LEDGER: "test-restore-ledger", RESTORE_FILES: "test-restore-files" },
           // Generous limits for the functional tests; RL_TEST checks limiting itself.
           ratelimits: {
             RL_AUTH: { namespace_id: "91001", simple: { limit: 100000, period: 60 } },

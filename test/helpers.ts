@@ -475,3 +475,60 @@ export function papi(sess: { token: string; csrf: string }, body?: unknown, meth
   const r = api(sess, body, method);
   return { ...r, cookies: { "__Host-sahra_p": sess.token } };
 }
+
+// ------------------------------------------------------------- backup
+
+/** A GET signed with BACKUP_KEY, as the owner's Apps Script sends it (src/backup/auth.ts). */
+export async function backupGet(h: Harness, path: string, o: { key?: string; at?: number; headers?: Record<string, string> } = {}) {
+  const { signedHeaders } = await import("../src/backup/auth");
+  const headers = { ...(await signedHeaders(o.key ?? env.BACKUP_KEY!, "GET", `${ORIGIN}${path}`, o.at ?? h.clock.now())), ...o.headers };
+  return h.req(path, { headers });
+}
+
+type BackupRow = Record<string, unknown>;
+
+/**
+ * Walks the whole export like the Apps Script: manifest, every table page by
+ * page (ledger last), then every screenshot, checking each file's SHA-256 and
+ * size header against the bytes received. Returns an in-memory backup.
+ */
+export async function exportAll(h: Harness, limit = 200) {
+  const { sha256hexBytes } = await import("../src/backup/restore");
+  const m = await backupGet(h, "/api/backup/manifest?counts=1");
+  if (m.status !== 200) throw new Error(`manifest ${m.status}`);
+  const manifest = (await m.json()) as { order: { db: string; table: string }[]; databases: Record<string, unknown> };
+  const tables = new Map<string, BackupRow[]>();
+  let requests = 1;
+  for (const t of manifest.order) {
+    const rows: BackupRow[] = [];
+    let after: string | null = null;
+    for (;;) {
+      const r = await backupGet(h, `/api/backup/rows/${t.db}/${t.table}?limit=${limit}${after ? `&after=${after}` : ""}`);
+      requests++;
+      if (r.status !== 200) throw new Error(`${t.db}.${t.table} ${r.status} ${await r.text()}`);
+      const page = (await r.json()) as { rows: BackupRow[]; next: string | null };
+      rows.push(...page.rows);
+      if (!page.next) break;
+      after = page.next;
+    }
+    tables.set(`${t.db}.${t.table}`, rows);
+  }
+  const files = new Map<number, { bytes: Uint8Array; sha256: string }>();
+  for (const f of tables.get("files.files") ?? []) {
+    const r = await backupGet(h, `/api/backup/file/${f.id}`);
+    requests++;
+    const bytes = new Uint8Array(await r.arrayBuffer());
+    const sha256 = await sha256hexBytes(bytes);
+    if (r.status !== 200 || sha256 !== r.headers.get("x-sahra-sha256") || bytes.length !== Number(r.headers.get("x-sahra-size")) || bytes.length !== f.size) {
+      throw new Error(`file ${f.id}: transfer check failed`);
+    }
+    files.set(Number(f.id), { bytes, sha256 });
+  }
+  return {
+    manifest, tables, files, requests,
+    source: {
+      rows: async (db: string, table: string) => tables.get(`${db}.${table}`) ?? [],
+      file: async (id: number) => files.get(id) ?? null,
+    },
+  };
+}
