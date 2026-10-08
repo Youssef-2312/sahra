@@ -23,6 +23,9 @@ const JSON_H = { origin: ORIGIN, "sec-fetch-site": "same-origin", "content-type"
 const junkCookie = { "__Host-sahra_s": newToken() };
 const id = newId();
 
+// Read-only public pages that answer 200 without a session (still zero writes).
+const PUBLIC_READS = new Set(["public party page, existing party"]);
+
 type Case = [label: string, method: string, path: string, run: (h: Harness) => Promise<Response>];
 
 const cases: Case[] = [
@@ -54,6 +57,14 @@ const cases: Case[] = [
   ["test door invite, junk session", "POST", "/api/test/door-invite", (h) => h.req("/api/test/door-invite", { method: "POST", headers: JSON_H, cookies: junkCookie, body: "{}" })],
   ["test revoke door access, junk session", "POST", "/api/test/revoke-door-access", (h) => h.req("/api/test/revoke-door-access", { method: "POST", headers: JSON_H, cookies: junkCookie, body: "{}" })],
   ["test ledger check, junk session", "GET", "/api/test/ledger-check", (h) => h.req("/api/test/ledger-check", { cookies: junkCookie })],
+  ["party details, no session", "GET", "/api/party", (h) => h.req("/api/party")],
+  ["party details, junk session", "GET", "/api/party", (h) => h.req("/api/party", { cookies: junkCookie })],
+  ["party edit, no session", "POST", "/api/party/details", (h) => h.req("/api/party/details", { method: "POST", headers: JSON_H, body: JSON.stringify({ name: "x", capacity: 0 }) })],
+  ["party edit, junk session", "POST", "/api/party/details", (h) => h.req("/api/party/details", { method: "POST", headers: JSON_H, cookies: junkCookie, body: JSON.stringify({ address: "x", address_mode: "public" }) })],
+  ["party reveal, junk session", "POST", "/api/party/reveal", (h) => h.req("/api/party/reveal", { method: "POST", headers: JSON_H, cookies: junkCookie, body: "{}" })],
+  ["party preview, junk session", "GET", "/api/party/preview", (h) => h.req("/api/party/preview?viewer=public", { cookies: junkCookie })],
+  ["public party page, unknown party", "GET", "/api/party/public/:id", (h) => h.req("/api/party/public/nope")],
+  ["public party page, existing party", "GET", "/api/party/public/:id", async (h) => h.req(`/api/party/public/${await env.DB.prepare("SELECT id FROM parties LIMIT 1").first("id")}`)],
   ["unknown API path", "GET", "/api/*", (h) => h.req("/api/nothing-here")],
 ];
 
@@ -71,7 +82,7 @@ describe("endpoints without a session write nothing", () => {
       await seedParty();
       const before = await counts();
       const res = await run(h);
-      if (res.status === 200) {
+      if (res.status === 200 && !PUBLIC_READS.has(label)) {
         // The scanner protocol always answers 200 with a verdict; without a session it must be this one.
         expect(await res.clone().json(), label).toEqual({ verdict: "not_signed_in" });
       }
@@ -88,6 +99,7 @@ async function counts() {
   const tables = ["parties", "staff", "invites", "sessions", "audit", "tickets", "scans"];
   const out: Record<string, unknown> = {};
   for (const t of tables) out[t] = await env.DB.prepare(`SELECT COUNT(*) AS n, COALESCE(SUM(rev), 0) AS r FROM ${t}`).first().catch(async () => env.DB.prepare(`SELECT COUNT(*) AS n FROM ${t}`).first());
+  out.outbox = await env.DB.prepare("SELECT COUNT(*) AS n FROM outbox").first("n");
   for (const t of ["change_log", "party_control"]) out[t] = await env.LEDGER.prepare(`SELECT COUNT(*) AS n FROM ${t}`).first("n");
   return out;
 }

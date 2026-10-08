@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Sahra party details</title></head>
+<body>
+<header><span id="account"><a href="/">Sign in</a></span> | <a href="https://nova.example/" id="nova" rel="noopener">Made by Nova</a></header>
+<main>
+<h1>Party details (Phase 4 test page)</h1>
+<p><a href="/dashboard.html">Dashboard</a></p>
+<pre id="current">Loading...</pre>
+
+<section id="editor" hidden>
+<h2>Edit</h2>
+<p>Times are entered in the party's time zone. Empty fields are cleared.</p>
+<form id="edit">
+<p><label>Name <input name="name" maxlength="80" required></label></p>
+<p><label>Description<br><textarea name="description" rows="3" cols="60" maxlength="2000"></textarea></label></p>
+<p><label>Time zone (IANA) <input name="time_zone" placeholder="Africa/Cairo" required></label></p>
+<p><label>Starts <input name="starts_at_local" type="datetime-local"></label>
+<label>Ends <input name="ends_at_local" type="datetime-local"></label></p>
+<p><label>Venue <input name="venue_name" maxlength="120"></label></p>
+<p><label>Address<br><textarea name="address" rows="2" cols="60" maxlength="300"></textarea></label></p>
+<p><label>Map link (https) <input name="map_url" type="url" size="60"></label></p>
+<p><label>Rules / dress code<br><textarea name="rules" rows="3" cols="60" maxlength="2000"></textarea></label></p>
+<p><label>Payment instructions<br><textarea name="payment_instructions" rows="2" cols="60" maxlength="1000"></textarea></label></p>
+<p><label>Capacity <input name="capacity" type="number" min="0" max="100000"></label>
+<label>People per ticket <input name="max_people_per_ticket" type="number" min="1" max="50"></label></p>
+<p><label>Address mode <select name="address_mode">
+<option value="public">Public</option><option value="with_ticket">Sent with ticket</option>
+<option value="at_time">Revealed at a time</option><option value="manual">Manual reveal</option></select></label>
+<label>Reveal at <input name="reveal_at_local" type="datetime-local"></label></p>
+<p><label>Lock the place from <input name="address_locked_at_local" type="datetime-local"></label></p>
+<p><label><input name="notify_guests" type="checkbox"> Queue a notice to ticket holders (time or place change; sent only after approval)</label></p>
+<button>Save</button>
+</form>
+<p><button id="reveal" type="button">Reveal now (manual mode)</button></p>
+
+<h2>Preview</h2>
+<form id="preview">
+<select name="viewer"><option value="public">Public page</option><option value="ticket">Ticket holder</option></select>
+ticket status <select name="status"><option>approved</option><option>pending</option><option>cancelled</option></select>
+<label><input name="released" type="checkbox" checked> released</label>
+<label><input name="on_hold" type="checkbox"> on hold</label>
+<button>Preview</button>
+</form>
+<pre id="view"></pre>
+</section>
+<pre id="out" role="status"></pre>
+</main>
+<script src="/js/common.js"></script>
+<script src="/js/party.js"></script>
+</body>
+</html>
