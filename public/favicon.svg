@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Favicon: Sahra's mark (img/sahra-mark.svg) on the site's dark base. -->
+  <defs>
+    <mask id="cut">
+      <rect width="64" height="64" fill="#fff"/>
+      <circle cx="39.5" cy="24.5" r="16.5" fill="#000"/>
+    </mask>
+  </defs>
+  <rect width="64" height="64" rx="15" fill="#0c0d10"/>
+  <circle cx="30" cy="34" r="20" fill="#f3f2ef" mask="url(#cut)"/>
+  <circle cx="45" cy="19" r="6" fill="#2f6bff"/>
+</svg>

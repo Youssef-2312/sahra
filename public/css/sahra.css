@@ -86,8 +86,8 @@ html[lang="ar"] .kicker, html[lang="ar"] .tile .label, html[lang="ar"] .card > .
 /* Frosted top bar. */
 .topbar-shell { position: sticky; top: 0; z-index: 30; background: var(--glass); -webkit-backdrop-filter: blur(18px) saturate(160%); backdrop-filter: blur(18px) saturate(160%); border-bottom: 1px solid var(--line); }
 .topbar { display: flex; align-items: center; justify-content: space-between; gap: var(--gap); max-width: 36rem; margin: 0 auto; padding: 10px var(--gap); }
-.brand { font-weight: 700; font-size: 1.2rem; letter-spacing: -0.01em; color: var(--text); text-decoration: none; display: inline-flex; align-items: center; gap: 9px; }
-.brand::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--accent-2); box-shadow: 0 0 0 4px rgba(47, 107, 255, 0.2); }
+.brand { font-weight: 700; font-size: 1.2rem; letter-spacing: -0.01em; color: var(--text); text-decoration: none; display: inline-flex; align-items: center; gap: 7px; }
+.brand img { width: 28px; height: 28px; display: block; }
 .topbar-end { display: inline-flex; align-items: center; gap: 8px; }
 .lang-switch { border: 1px solid var(--line-strong); background: transparent; color: var(--text); border-radius: 999px; padding: 6px 14px; font: inherit; font-size: 0.88rem; min-height: 38px; cursor: pointer; }
 

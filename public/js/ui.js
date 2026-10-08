@@ -138,7 +138,7 @@ var Sahra = (function () {
     renderFn = (opts && opts.render) || null;
     var me = (opts && opts.me) || null;
     applyLang();
-    var brand = el("a", { class: "brand", text: "Sahra", attrs: { href: "/" } });
+    var brand = el("a", { class: "brand", attrs: { href: "/" } }, el("img", { attrs: { src: "/img/sahra-mark.svg", alt: "", width: 28, height: 28 } }), "Sahra");
     var account = el("a", { class: "btn small-btn", attrs: { href: me ? (me.staff.role === "door" ? "/scan.html" : "/dashboard.html") : "/signin.html" } });
     var sw = el("button", { class: "lang-switch", attrs: { type: "button" } });
     var foot = el("footer", { class: "site-footer" });

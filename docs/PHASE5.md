@@ -54,6 +54,12 @@ the `staging` branch; a finished piece the owner should try is pushed there too.
 - Home layout: a hero that is a grid of party photos with a "Discover parties"
   button, then the parties as a grid of cards, then "About Sahra", then the
   footer; also good on phones.
+- Home hero: full width, the photos in a grid behind the heading and buttons
+  (not a grid beside the text).
+- Logo and favicon (asked 2026-10-08): a crescent moon ("sahra" is a night out)
+  with a Nova blue dot as its star, white on the dark base; the same family as
+  Nova's white mark and blue dot. Files: public/img/sahra-mark.svg (top bar),
+  public/favicon.svg, favicon.ico (16/32/48), apple-touch-icon.png (180).
 - Hero photos: the owner has permission to use them; they are compressed
   (about 150 KB each) and slightly blurred before they go in public/img/hero.
 
