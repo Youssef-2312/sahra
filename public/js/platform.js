@@ -1,4 +1,4 @@
-// Bare platform admin / organiser test page.
+// Bare site owner / organiser test page.
 "use strict";
 (async function () {
   var csrf = "";
@@ -38,32 +38,46 @@
   csrf = me.csrf;
   document.getElementById("signedin").hidden = false;
   document.getElementById("me").textContent = JSON.stringify(me, null, 2);
-  document.getElementById("account").textContent = (me.admin || me.organiser).name + (me.admin ? " (platform admin)" : " (organiser)");
+  document.getElementById("account").textContent = (me.site_owner || me.organiser).name + (me.site_owner ? " (site owner)" : " (organiser)");
   document.getElementById("logout").addEventListener("click", async function () {
     await post("/api/platform/logout");
     location.href = "/platform";
   });
 
-  if (me.admin) {
-    document.getElementById("admin").hidden = false;
-    var loadAdmin = async function () {
+  if (me.site_owner) {
+    document.getElementById("owner").hidden = false;
+    var loadOwner = async function () {
       document.getElementById("organisers").textContent = JSON.stringify(await get("/api/platform/organisers"), null, 2);
       document.getElementById("parties").textContent = JSON.stringify(await get("/api/platform/parties"), null, 2);
+      document.getElementById("owners").textContent = JSON.stringify(await get("/api/platform/site-owners"), null, 2);
     };
-    loadAdmin();
+    loadOwner();
     form("invite", async function (f) {
       show(await act("/api/platform/organisers", { organiser_id: crypto.randomUUID(), invite_id: crypto.randomUUID(), name: f.get("name"), email: f.get("email") }));
-      loadAdmin();
+      loadOwner();
     });
     form("disable-org", async function (f) {
       if (!confirm("Disable this organiser? They lose platform access.")) return;
       show(await act("/api/platform/organisers/" + encodeURIComponent(String(f.get("id")).trim()) + "/disable"));
-      loadAdmin();
+      loadOwner();
+    });
+    form("limit", async function (f) {
+      show(await act("/api/platform/organisers/" + encodeURIComponent(String(f.get("id")).trim()) + "/party-limit", { limit: Number(f.get("limit")) }));
+      loadOwner();
+    });
+    form("enable-party", async function (f) {
+      show(await act("/api/platform/parties/" + encodeURIComponent(String(f.get("id")).trim()) + "/enable"));
+      loadOwner();
+    });
+    form("remove-owner", async function (f) {
+      if (!confirm("Remove this site owner? Their platform sessions end.")) return;
+      show(await act("/api/platform/site-owners/" + encodeURIComponent(String(f.get("id")).trim()) + "/remove"));
+      loadOwner();
     });
     form("disable-party", async function (f) {
       if (!confirm("Disable this party? Admission pauses and every staff session and invitation ends.")) return;
       show(await act("/api/platform/parties/" + encodeURIComponent(String(f.get("id")).trim()) + "/disable"));
-      loadAdmin();
+      loadOwner();
     });
   }
 

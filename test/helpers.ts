@@ -356,8 +356,8 @@ export async function platformLogin(h: Harness, mutateBeforeCallback?: (ctx: { s
   return { res, cookies: setCookies(res), html: await res.clone().text() };
 }
 
-/** A linked, active platform admin. */
-export async function seedPlatformAdmin(sub = `pa-${newId()}`) {
+/** A linked, active site owner. */
+export async function seedSiteOwner(sub = `pa-${newId()}`) {
   const id = newId();
   await env.DB.prepare(
     "INSERT INTO platform_admins (id, name, email, google_sub, invite_expires_at, created_at, logged_rev) VALUES (?, ?, ?, ?, 0, 0, 1)",

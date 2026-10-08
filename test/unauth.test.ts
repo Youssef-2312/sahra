@@ -72,6 +72,13 @@ const cases: Case[] = [
   ["my parties, junk session", "GET", "/api/platform/my-parties", (h) => h.req("/api/platform/my-parties", { cookies: junkPlatform })],
   ["create party, junk session", "POST", "/api/platform/parties", (h) => h.req("/api/platform/parties", { method: "POST", headers: JSON_H, cookies: junkPlatform, body: JSON.stringify({ id: "new-party", name: "x", capacity: 10, staff_id: newId() }) })],
   ["create party, no session", "POST", "/api/platform/parties", (h) => h.req("/api/platform/parties", { method: "POST", headers: JSON_H, body: JSON.stringify({ id: "new-party", name: "x", capacity: 10, staff_id: newId() }) })],
+  ["party enable, junk session", "POST", "/api/platform/parties/:id/enable", (h) => h.req("/api/platform/parties/some-party/enable", { method: "POST", headers: JSON_H, cookies: junkPlatform })],
+  ["party enable, staff cookie", "POST", "/api/platform/parties/:id/enable", (h) => h.req("/api/platform/parties/some-party/enable", { method: "POST", headers: JSON_H, cookies: junkCookie })],
+  ["party limit, junk session", "POST", "/api/platform/organisers/:id/party-limit", (h) => h.req(`/api/platform/organisers/${id}/party-limit`, { method: "POST", headers: JSON_H, cookies: junkPlatform, body: JSON.stringify({ limit: 5 }) })],
+  ["party limit, no session", "POST", "/api/platform/organisers/:id/party-limit", (h) => h.req(`/api/platform/organisers/${id}/party-limit`, { method: "POST", headers: JSON_H, body: JSON.stringify({ limit: 5 }) })],
+  ["site owner list, junk session", "GET", "/api/platform/site-owners", (h) => h.req("/api/platform/site-owners", { cookies: junkPlatform })],
+  ["site owner remove, junk session", "POST", "/api/platform/site-owners/:id/remove", (h) => h.req(`/api/platform/site-owners/${id}/remove`, { method: "POST", headers: JSON_H, cookies: junkPlatform })],
+  ["site owner remove, no session", "POST", "/api/platform/site-owners/:id/remove", (h) => h.req(`/api/platform/site-owners/${id}/remove`, { method: "POST", headers: JSON_H })],
   ["unknown API path", "GET", "/api/*", (h) => h.req("/api/nothing-here")],
 ];
 

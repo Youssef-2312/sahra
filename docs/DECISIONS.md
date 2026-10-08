@@ -269,39 +269,50 @@ Chosen extras (numbers from the brainstorm):
 - **15 Big result screens, distinct sounds and vibration** for admit, used and
   stop (frontend).
 
-## Workstream B: organisers, party creation, platform admin (Phase 4)
+## Workstream B: organisers, party creation, site owners (Phase 4)
 
 Built on branch `claude/p4-b-organisers` (base c1da976). Only tested locally
 (workerd + local D1 in `npx vitest run`); nothing ran against Cloudflare.
 
+**Naming (owner decision):** the top level is the **site owner** everywhere a
+person reads it (pages, API texts, docs, `setup.bat` step 14
+"create-site-owner"). Kept as before, to avoid churn in storage and routes: the
+table `platform_admins` (change-log entity `platform_admin`), the route prefix
+`/api/platform`, the sign-in route `/api/auth/platform/start`, the page
+`/platform` and the cookie `__Host-sahra_p`.
+
 **What it does**
 
-- **Platform admins.** Added by the owner with `setup.bat` step 14
-  (`node scripts/ops.mjs create-platform-admin`, production asks for PROD). It
+- **Site owners.** The first is added by the owner with `setup.bat` step 14
+  (`node scripts/ops.mjs create-site-owner`; production asks for PROD). It
   writes one row (email, no Google account yet, 14-day sign-in window) plus an
   audit row with `wrangler d1 execute --remote --file`; running it again never
-  duplicates an admin (an unlinked one gets a fresh 14 days). The SQL is built by
-  `scripts/platform-admin-sql.mjs`, and the tests run exactly that SQL locally.
+  duplicates a site owner (an unlinked one gets a fresh 14 days). The SQL is
+  built by `scripts/site-owner-sql.mjs`; the tests run exactly that SQL locally.
 - **Platform sign-in** at `/platform` (`POST /api/auth/platform/start`, same
   callback as staff). Same mechanisms as staff: state, nonce and PKCE in the
-  sealed attempt cookie (it now carries a sealed "platform" flag), no database
-  write before a verified Google response, the same auto-link rules (verified
-  Gmail, or Workspace with a matching hd; afterwards by Google account id only),
-  the same read-only cap (10 sessions per Google account per rolling hour,
-  counted from session rows), session token stored as SHA-256, HttpOnly Secure
+  sealed attempt cookie (it carries a sealed "platform" flag), no database write
+  before a verified Google response, the same auto-link rules (verified Gmail,
+  or Workspace with a matching hd; afterwards by Google account id only), the
+  same read-only cap (10 sessions per Google account per rolling hour, counted
+  from session rows), session token stored as SHA-256, HttpOnly Secure
   SameSite=Strict `__Host-sahra_p` cookie, Origin + CSRF on every change.
-- **Organisers by invitation.** A platform admin invites by email; the first
+- **Organisers by invitation.** A site owner invites by email; the first
   platform sign-in with that address links the organiser. Invitations expire
   (7 days default, 14 max) and are single use.
 - **Party creation** (`POST /api/platform/parties`, organisers only): one batch
   inserts the party, makes the organiser its owner (staff row linked to their
-  Google account) and writes both audit rows; the organiser check and the limit
-  of **5 parties per organiser** (all time, disabled ones included) are inside
-  the INSERT. The organiser then signs in to the party on the normal staff
-  sign-in page. Party ids follow the create-party rule (3-24 of a-z, 0-9, "-").
-- **Platform admin page**: invite and disable organisers, disable a party, and
-  per-party counts (staff, active sessions, tickets by status, outbox rows by
-  status). No guest names, emails, answers or payment data.
+  Google account) and writes both audit rows. The organiser check and the
+  **party limit** are inside the INSERT: the organiser's ACTIVE (not disabled)
+  parties must be fewer than `organisers.party_limit` (default **1**; a site
+  owner sets 1..20 with `POST /api/platform/organisers/:id/party-limit`, logged
+  and audited; lowering it below the current count only blocks new parties).
+  The organiser then signs in to the party on the normal staff sign-in page.
+  Party ids follow the create-party rule (3-24 of a-z, 0-9, "-").
+- **Site owner page**: invite and switch off organisers, set party limits,
+  disable and re-enable parties, list and remove site owners, and per-party
+  counts (staff, active sessions, tickets by status, outbox rows by status). No
+  guest names, emails, answers or payment data.
 - **Disabling a party**: intent first (ledger), then the control object is
   paused with pause_number + 1 (conditional on its rev, like an admission
   pause), then ONE main batch sets `parties.disabled_at`, admission paused with
@@ -309,18 +320,31 @@ Built on branch `claude/p4-b-organisers` (base c1da976). Only tested locally
   the party, with audit rows; then the change log. Scans answer "paused" (the
   control object is read first); staff Google sign-in skips a disabled party and
   the session INSERT refuses it; door join fails because the invitation is
-  revoked. There is no "re-enable" yet.
-- **Disabling an organiser**: intent first, then one batch: organiser disabled,
-  every platform session of that Google account revoked, unused invitations
-  revoked, audit. Their parties are NOT changed (they stay owner there); disable
-  those parties separately if needed.
+  revoked.
+- **Re-enabling a party** (`POST /api/platform/parties/:id/enable`): clears
+  `disabled_at` in one batch with an audit row, logged; no intent (safe to
+  lose). The party stays paused: admission state and the control object are
+  untouched, old sessions and invitations stay revoked. Its owners sign in
+  again, reopen admission themselves and invite door staff again. Re-enabling
+  may leave an organiser above their party limit; that only blocks new parties.
+- **Switching off an organiser**: intent first, then one batch: organiser
+  disabled, every platform session of that Google account revoked, unused
+  invitations revoked, audit. Their parties keep running (owner decision).
+- **Removing a site owner** (`POST /api/platform/site-owners/:id/remove`):
+  intent first (a removal must survive a recovery), then one batch: the row is
+  disabled (never the caller, never the last active one: both inside the
+  statement), every platform session of that Google account revoked, audit.
+  Two site owners removing each other at once: exactly one is removed (the
+  second statement finds its own session no longer valid).
 
-**Storage (migration `migrations/0006_organisers.sql`, additive)**
+**Storage (migration `migrations/0006_organisers.sql`, additive; not applied
+anywhere yet)**
 
-- `platform_admins`, `organisers`, `organiser_invites`: logged entities (rev,
-  logged_rev, last_op, last_action), in `Db.unlogged()` / `markLogged()`. Their
-  change-log entries, audit rows and intents use party id `_platform` (party ids
-  cannot start with "_").
+- `platform_admins` (site owners), `organisers` (with `party_limit`, default 1,
+  CHECK 1..20), `organiser_invites`: logged entities (rev, logged_rev, last_op,
+  last_action), in `Db.unlogged()` / `markLogged()`. Their change-log entries,
+  audit rows and intents use party id `_platform` (party ids cannot start with
+  "_").
 - `organiser_invites` is a new table because `invites.kind` has a CHECK and
   `invites.party_id`/`staff_id` are NOT NULL; neither can change additively.
 - `platform_sessions` is a separate table because `sessions.party_id` and
@@ -328,19 +352,21 @@ Built on branch `claude/p4-b-organisers` (base c1da976). Only tested locally
   separate cookie) means a staff token is never found by a platform route and
   the other way round. A platform session belongs to a Google account; what it
   may do is decided on every request, and inside every write statement, from
-  the active admin / organiser rows with that account id. One person can be
-  both admin and organiser with one session.
+  the active site owner / organiser rows with that account id. One person can
+  be both site owner and organiser with one session.
 - `parties.disabled_at`, `parties.organiser_id` (ADD COLUMN).
-- Indexes: one active admin / organiser per Google account (partial unique;
-  this is what makes two sign-ins racing on one invitation give one link),
-  unlinked organiser email, invitations by organiser, platform sessions by
-  (google_sub, created_at) for the cap and revocation. Each is written only on
-  these rare platform changes, never on the scan or join path.
+- Indexes: one active site owner / organiser per Google account (partial
+  unique; this is what makes two sign-ins racing on one invitation give one
+  link), unlinked organiser email, invitations by organiser, platform sessions
+  by (google_sub, created_at) for the cap and revocation. Each is written only
+  on these rare platform changes, never on the scan or join path. The active
+  party count reads the organiser's parties without an index (parties is a
+  small table).
 
 **Shared files changed** (minimal): `src/db/index.ts` (unlogged/markLogged lines;
 `activeStaffForSub` and `createGoogleSession` now skip a disabled party),
 `src/routes/auth.ts` (platform start + one branch in the callback),
-`src/app.ts` (route), `test/helpers.ts`, `test/unauth.test.ts` (16 cases; the
+`src/app.ts` (route), `test/helpers.ts`, `test/unauth.test.ts` (23 cases; the
 counted tables now include the platform tables and ledger intents).
 
 **Rows per request (measured locally, small test database)**
@@ -352,19 +378,23 @@ counted tables now include the platform tables and ledger intents).
 | Platform callback, first sign-in (links organiser + invitation) | 5 | 31 | 10 | 2 |
 | Platform callback, later sign-in | 4 | 25 | 3 | 0 |
 | POST /api/platform/organisers (invite) | 4 | 20 | 10 | 2 |
-| POST /api/platform/parties (create) | 4 | 24 | 10 | 2 |
+| POST /api/platform/organisers/:id/party-limit | 4 | 16 | 3 | 1 |
+| POST /api/platform/organisers/:id/disable | 4 | 27 | 5 | 2 |
+| POST /api/platform/parties (create) | 4 | 26 | 10 | 2 |
 | GET /api/platform/my-parties | 2 | 6 | 0 | 0 |
 | GET /api/platform/parties (counts) | 2 | 13 | 0 | 0 |
 | POST /api/platform/parties/:id/disable (no sessions or invitations) | 5 | 23 | 3 | 3 |
-| POST /api/platform/organisers/:id/disable | 4 | 26 | 5 | 2 |
+| POST /api/platform/parties/:id/enable | 4 | 16 | 3 | 1 |
+| GET /api/platform/site-owners | 2 | 6 | 0 | 0 |
+| POST /api/platform/site-owners/:id/remove (1 session) | 4 | 22 | 4 | 2 |
 
 Rows read grow with the database: the change-log check (`unlogged()`) scans the
-parties, staff, invites and now the three platform tables on every change (as
+parties, staff, invites and the three platform tables on every change (as
 before), and the counts page reads every ticket, session and outbox row once
 (GROUP BY; opened by hand, not polled). Disabling a party also writes one row
 per revoked session and two per revoked invitation (row + audit), and one
 change-log entry per invitation; more than 20 pending entries answer "pending"
-and the retry continues. Requests without a session write nothing (all 16 new
+and the retry continues. Requests without a session write nothing (all 23 new
 unauthenticated cases).
 
 **What local tests cannot prove**
@@ -375,21 +405,17 @@ unauthenticated cases).
   execute --remote` itself is not run (workers never run --remote).
 - D1's real rows-read figures on larger tables, and CPU per new endpoint on
   staging (step 12 will list the new routes once they get traffic).
-- Concurrency: the races are tested against local SQLite through D1's batch
-  (serialized transactions), which is how D1 runs them, but not under real load.
+- Concurrency: the races (invitation link, party limit, mutual site owner
+  removal) are tested against local SQLite through D1's batch (serialized
+  transactions), which is how D1 runs them, but not under real load.
 
-**For the owner / coordinator to decide**
+**Open points**
 
-1. Party limit: 5 per organiser counting disabled parties (all time). Count
-   only active parties instead? Should a platform admin be able to raise it per
-   organiser?
-2. Disabling an organiser leaves their parties running (they remain owner
-   there). Should it also disable their parties, or remove their owner rows?
-3. No "re-enable party" and no "remove platform admin" endpoint yet (an admin
-   can be disabled only with SQL). Wanted?
-4. Recovery (Phase 3 code, not touched here) must learn the new entities:
-   `party_disabled` and `organiser_disabled` intents, and the `_platform` party
-   id in the change log, so a restore cannot bring back a disabled party or
-   organiser. Coordinator: route this to whoever owns `src/recovery/`.
-5. Non-Gmail, non-Workspace organiser addresses cannot sign in until email
+1. Recovery (coordinator, at integration) must learn the new entities: the
+   `party_disabled`, `organiser_disabled` and `site_owner_removed` intents, and
+   the `_platform` party id in the change log. Party limit changes and
+   re-enabling have no intent (losing them in a recovery is safe).
+2. Site owners can only be added with the ops step (no web invitation for site
+   owners).
+3. Non-Gmail, non-Workspace organiser addresses cannot sign in until email
    confirmation exists (same as staff).

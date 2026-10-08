@@ -1,20 +1,21 @@
 import { env } from "cloudflare:test";
 import { afterEach, describe, expect, it } from "vitest";
 import { newId, newToken } from "../src/lib/crypto";
-import { MAX_PARTIES_PER_ORGANISER, PlatformDb } from "../src/platform/db";
+import { DEFAULT_PARTY_LIMIT, PlatformDb } from "../src/platform/db";
 import { D1Driver } from "../src/db/driver";
-import { platformAdminSql } from "../scripts/platform-admin-sql.mjs";
+import { siteOwnerSql } from "../scripts/site-owner-sql.mjs";
 import {
   api, googleLogin, harness, logEntry, OutageDriver, openParty, ORIGIN, papi, platformLogin, scan, seedOrganiser, seedOwner,
-  seedParty, seedPlatformAdmin, seedPlatformSession, seedSession, setCookies, testTickets, type Harness,
+  seedParty, seedSiteOwner, seedPlatformSession, seedSession, setCookies, testTickets, type Harness,
 } from "./helpers";
 
 afterEach(() => { OutageDriver.down = { main: false, ledger: false }; });
 
+const DUMP = false; // true prints the measured rows (as a failure message)
 const pid = () => `pt-${newId().slice(0, 8)}`;
 
-async function admin(h: Harness) {
-  const a = await seedPlatformAdmin();
+async function siteOwner(h: Harness) {
+  const a = await seedSiteOwner();
   return { ...a, s: await seedPlatformSession(a.sub, h.clock) };
 }
 
@@ -33,12 +34,12 @@ function createParty(h: Harness, os: { token: string; csrf: string }, id = pid()
   return h.req("/api/platform/parties", papi(os, { id, name: `Party ${id}`, capacity: 120, staff_id: staffId }));
 }
 
-describe("platform admin bootstrap and sign-in", () => {
+describe("site owner bootstrap and sign-in", () => {
   it("the ops step's SQL adds an admin once; the first platform sign-in links it and sets a Strict __Host- cookie", async () => {
     const h = await harness();
     const now = h.clock.now();
     const run = async () => {
-      const { statements, email } = platformAdminSql({ name: "Owner", email: "Boot.Strap+x@gmail.com", id: newId(), op: newId(), now });
+      const { statements, email } = siteOwnerSql({ name: "Owner", email: "Boot.Strap+x@gmail.com", id: newId(), op: newId(), now });
       await env.DB.batch(statements.map((s) => env.DB.prepare(s)));
       return email;
     };
@@ -48,7 +49,7 @@ describe("platform admin bootstrap and sign-in", () => {
     const rows = await env.DB.prepare("SELECT id, rev, google_sub FROM platform_admins WHERE email = ?").bind(email).all<{ id: string; rev: number }>();
     expect(rows.results).toHaveLength(1);
     expect(rows.results[0]!.rev).toBe(2);
-    expect(() => platformAdminSql({ name: "x", email: "not-an-email", id: newId(), op: newId(), now })).toThrow();
+    expect(() => siteOwnerSql({ name: "x", email: "not-an-email", id: newId(), op: newId(), now })).toThrow();
 
     h.google.identity = { sub: "boot-sub", email: "bootstrap@gmail.com", email_verified: true };
     const { res, cookies, html } = await platformLogin(h);
@@ -65,14 +66,14 @@ describe("platform admin bootstrap and sign-in", () => {
     expect(((await logEntry("platform_admin", id, 3)) as Record<string, unknown>).party_id).toBe("_platform");
 
     const me = await h.req("/api/platform/me", { cookies: { "__Host-sahra_p": ck.value } });
-    expect(await me.json()).toMatchObject({ admin: { id }, organiser: null });
+    expect(await me.json()).toMatchObject({ site_owner: { id }, organiser: null });
     // Only the session hash is stored.
     expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM platform_sessions WHERE id_hash = ?").bind(ck.value).first("n")).toBe(0);
   });
 
   it("an expired bootstrap row does not link", async () => {
     const h = await harness();
-    const { statements } = platformAdminSql({ name: "Late", email: "late-admin@gmail.com", id: newId(), op: newId(), now: h.clock.now() - 15 * 86400_000 });
+    const { statements } = siteOwnerSql({ name: "Late", email: "late-admin@gmail.com", id: newId(), op: newId(), now: h.clock.now() - 15 * 86400_000 });
     await env.DB.batch(statements.map((s) => env.DB.prepare(s)));
     h.google.identity = { sub: "late-sub", email: "late-admin@gmail.com" };
     const { res } = await platformLogin(h);
@@ -81,7 +82,7 @@ describe("platform admin bootstrap and sign-in", () => {
 
   it("platform sessions are capped per Google account per hour (read-only check)", async () => {
     const h = await harness();
-    const a = await seedPlatformAdmin("cap-sub");
+    const a = await seedSiteOwner("cap-sub");
     for (let i = 0; i < 10; i++) await seedPlatformSession(a.sub, h.clock);
     h.google.identity = { sub: "cap-sub", email: "cap-sub@gmail.com" };
     const { res, cookies } = await platformLogin(h);
@@ -93,9 +94,9 @@ describe("platform admin bootstrap and sign-in", () => {
 
   it("a staff sign-in attempt cannot be turned into a platform sign-in (sealed attempt), and the other way round", async () => {
     const h = await harness();
-    const a = await seedPlatformAdmin("only-admin");
+    const a = await seedSiteOwner("only-admin");
     h.google.identity = { sub: a.sub, email: `${a.sub}@gmail.com` };
-    // Staff flow for a platform admin who is not party staff: no access, no platform cookie.
+    // Staff flow for a site owner who is not party staff: no access, no platform cookie.
     const staff = await googleLogin(h);
     expect(staff.res.status).toBe(403);
     expect(staff.cookies["__Host-sahra_p"]).toBeUndefined();
@@ -106,7 +107,7 @@ describe("platform admin bootstrap and sign-in", () => {
 describe("organisers by invitation", () => {
   it("admin invites; the organiser's first Gmail sign-in links them; retry is recognized; duplicates refused", async () => {
     const h = await harness();
-    const a = await admin(h);
+    const a = await siteOwner(h);
     const { r, body } = await inviteOrganiser(h, a.s, "Nour.Org@gmail.com");
     expect(await r.json()).toEqual({ status: "created", email: "nourorg@gmail.com" });
     expect(await (await h.req("/api/platform/organisers", papi(a.s, body))).json()).toEqual({ status: "already", email: "nourorg@gmail.com" });
@@ -124,7 +125,7 @@ describe("organisers by invitation", () => {
     expect(inv).toMatchObject({ rev: 2, logged_rev: 2 });
     expect(inv!.used_at).not.toBeNull();
     const me = await (await h.req("/api/platform/me", { cookies: { "__Host-sahra_p": cookies["__Host-sahra_p"]!.value } })).json();
-    expect(me).toMatchObject({ admin: null, organiser: { id: body.organiser_id } });
+    expect(me).toMatchObject({ site_owner: null, organiser: { id: body.organiser_id } });
 
     const list = (await (await h.req("/api/platform/organisers", { cookies: { "__Host-sahra_p": a.s.token } })).json()) as { organisers: { id: string; linked: number }[] };
     expect(list.organisers.find((x) => x.id === body.organiser_id)).toMatchObject({ linked: 1 });
@@ -132,7 +133,7 @@ describe("organisers by invitation", () => {
 
   it("one invitation consumed twice at once gives exactly one organiser link", async () => {
     const h = await harness();
-    const a = await admin(h);
+    const a = await siteOwner(h);
     const { body } = await inviteOrganiser(h, a.s, "race-org@gmail.com");
     // Two different Google accounts presenting the same address at the same moment
     // (the strongest form of the race): only one link, one invitation use.
@@ -161,7 +162,7 @@ describe("organisers by invitation", () => {
 
   it("an address that is not Gmail or Workspace cannot auto-link; Workspace with a matching hd can; unverified cannot", async () => {
     const h = await harness();
-    const a = await admin(h);
+    const a = await siteOwner(h);
     const other = (await inviteOrganiser(h, a.s, "someone@example.org")).body;
     h.google.identity = { sub: "ex-sub", email: "someone@example.org", email_verified: true };
     const r = await platformLogin(h);
@@ -228,9 +229,9 @@ describe("party creation by organisers", () => {
     expect(await (await createParty(h, o2.s, id)).json()).toEqual({ error: "party_id_taken" });
   });
 
-  it("only organisers can create parties: platform admins, party staff and strangers cannot", async () => {
+  it("only organisers can create parties: site owners, party staff and strangers cannot", async () => {
     const h = await harness();
-    const a = await admin(h);
+    const a = await siteOwner(h);
     expect((await createParty(h, a.s)).status).toBe(403);
     const party = await seedParty();
     const owner = await seedOwner(party);
@@ -245,20 +246,46 @@ describe("party creation by organisers", () => {
     for (const bad of ["_platform", "AB", "x", "a_b_c"]) expect((await createParty(h, o.s, bad)).status).toBe(400);
   });
 
-  it(`at most ${MAX_PARTIES_PER_ORGANISER} parties per organiser, enforced inside the statement (even at once)`, async () => {
+  it("party limit: 1 active party by default, a site owner raises it, inside the statement (even at once); disabled parties do not count", async () => {
     const h = await harness();
+    const so = await siteOwner(h);
     const o = await organiser(h);
-    const rs = await Promise.all(Array.from({ length: MAX_PARTIES_PER_ORGANISER + 3 }, () => createParty(h, o.s)));
-    const statuses = rs.map((r) => r.status);
-    expect(statuses.filter((s) => s === 200)).toHaveLength(MAX_PARTIES_PER_ORGANISER);
-    expect(statuses.filter((s) => s === 409)).toHaveLength(3);
+    const burst = async (n: number) => (await Promise.all(Array.from({ length: n }, () => createParty(h, o.s)))).map((r) => r.status);
+    let st = await burst(4);
+    expect(st.filter((s) => s === 200)).toHaveLength(DEFAULT_PARTY_LIMIT);
     expect(await (await createParty(h, o.s)).json()).toEqual({ error: "party_limit_reached" });
-    expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM parties WHERE organiser_id = ?").bind(o.id).first("n")).toBe(MAX_PARTIES_PER_ORGANISER);
+
+    // Only a site owner sets the limit, 1..20.
+    expect((await h.req(`/api/platform/organisers/${o.id}/party-limit`, papi(o.s, { limit: 3 }))).status).toBe(403);
+    for (const bad of [0, 21, 2.5, "3"]) expect((await h.req(`/api/platform/organisers/${o.id}/party-limit`, papi(so.s, { limit: bad }))).status).toBe(400);
+    expect((await h.req(`/api/platform/organisers/${newId()}/party-limit`, papi(so.s, { limit: 3 }))).status).toBe(404);
+    const r = await h.req(`/api/platform/organisers/${o.id}/party-limit`, papi(so.s, { limit: 3 }));
+    expect(await r.json()).toEqual({ status: "changed", party_limit: 3 });
+    expect(await (await h.req(`/api/platform/organisers/${o.id}/party-limit`, papi(so.s, { limit: 3 }))).json()).toMatchObject({ status: "already" });
+    expect((await logEntry("organiser", o.id, 2))!.state).toMatchObject({ party_limit: 3, last_action: "party_limit_changed" });
+    expect(await env.DB.prepare("SELECT detail FROM audit WHERE action = 'party_limit_changed' AND entity_id = ?").bind(o.id).first("detail")).toBe("3");
+
+    st = await burst(5);
+    expect(st.filter((s) => s === 200)).toHaveLength(2);
+    const active = () => env.DB.prepare("SELECT COUNT(*) AS n FROM parties WHERE organiser_id = ? AND disabled_at IS NULL").bind(o.id).first("n");
+    expect(await active()).toBe(3);
+
+    // A disabled party frees a place.
+    const one = await env.DB.prepare("SELECT id FROM parties WHERE organiser_id = ? LIMIT 1").bind(o.id).first<{ id: string }>();
+    expect((await h.req(`/api/platform/parties/${one!.id}/disable`, papi(so.s))).status).toBe(200);
+    expect((await createParty(h, o.s)).status).toBe(200);
+    expect(await active()).toBe(3);
+    // Lowering below the current count blocks new parties, nothing else.
+    expect((await h.req(`/api/platform/organisers/${o.id}/party-limit`, papi(so.s, { limit: 1 }))).status).toBe(200);
+    expect(await (await createParty(h, o.s)).json()).toEqual({ error: "party_limit_reached" });
+    expect(await active()).toBe(3);
+    const list = (await (await h.req("/api/platform/organisers", { cookies: { "__Host-sahra_p": so.s.token } })).json()) as { organisers: Record<string, unknown>[] };
+    expect(list.organisers.find((x) => x.id === o.id)).toMatchObject({ party_limit: 1, active_parties: 3, parties: 4 });
   });
 
   it("platform routes reject party staff sessions, and party routes reject platform sessions", async () => {
     const h = await harness();
-    const a = await admin(h);
+    const a = await siteOwner(h);
     const party = await seedParty();
     const owner = await seedOwner(party);
     const ss = await seedSession(party, owner.id, "owner", h.clock);
@@ -271,7 +298,7 @@ describe("party creation by organisers", () => {
     expect((await h.req("/api/me", { cookies: { "__Host-sahra_s": a.s.token } })).status).toBe(401);
     expect((await h.req("/api/staff", { cookies: { "__Host-sahra_s": a.s.token } })).status).toBe(401);
     expect((await h.req("/api/me", { cookies: { "__Host-sahra_p": a.s.token } })).status).toBe(401);
-    // An organiser is not an admin.
+    // An organiser is not a site owner.
     const o = await organiser(h);
     expect((await h.req("/api/platform/parties", { cookies: { "__Host-sahra_p": o.s.token } })).status).toBe(403);
     expect((await h.req(`/api/platform/parties/${party}/disable`, papi(o.s))).status).toBe(403);
@@ -294,7 +321,7 @@ describe("party creation by organisers", () => {
 describe("disabling", () => {
   it("disabled party: control object paused first (pause_number + 1), scans answer paused, sessions and invitations end, sign-in and join refused", async () => {
     const h = await harness();
-    const a = await admin(h);
+    const a = await siteOwner(h);
     const { party, owner, os } = await openParty(h);
     const door = await (await import("./helpers")).seedDoor(party, h.clock);
     const [t] = await testTickets(h, os, 2);
@@ -345,7 +372,7 @@ describe("disabling", () => {
 
   it("disabled party: staff sign-in refused even for a session-less owner (the party picker skips it)", async () => {
     const h = await harness();
-    const a = await admin(h);
+    const a = await siteOwner(h);
     const p1 = await seedParty();
     const p2 = await seedParty();
     const sub = `multi-${newId()}`;
@@ -362,7 +389,7 @@ describe("disabling", () => {
 
   it("disabled organiser: platform sessions end, sign-in refused, cannot create parties", async () => {
     const h = await harness();
-    const a = await admin(h);
+    const a = await siteOwner(h);
     const o = await organiser(h);
     const second = await seedPlatformSession(o.sub, h.clock);
     expect((await createParty(h, o.s)).status).toBe(200);
@@ -378,14 +405,14 @@ describe("disabling", () => {
     h.google.identity = { sub: o.sub, email: `${o.sub}@gmail.com` };
     expect((await platformLogin(h)).res.status).toBe(403);
     expect(await (await h.req(`/api/platform/organisers/${o.id}/disable`, papi(a.s))).json()).toEqual({ status: "already" });
-    // A session of a disabled admin does nothing either.
+    // A session of a removed site owner does nothing either.
     await env.DB.prepare("UPDATE platform_admins SET disabled_at = 1 WHERE id = ?").bind(a.id).run();
     expect((await h.req(`/api/platform/organisers/${o.id}/disable`, papi(a.s))).status).toBe(401);
   });
 
   it("an invitation for a disabled organiser can no longer be used", async () => {
     const h = await harness();
-    const a = await admin(h);
+    const a = await siteOwner(h);
     const { body } = await inviteOrganiser(h, a.s, "gone-org@gmail.com");
     expect((await h.req(`/api/platform/organisers/${body.organiser_id}/disable`, papi(a.s))).status).toBe(200);
     expect(await env.DB.prepare("SELECT revoked_at IS NOT NULL AS r FROM organiser_invites WHERE id = ?").bind(body.invite_id).first("r")).toBe(1);
@@ -400,7 +427,7 @@ describe("disabling", () => {
 describe("failures: nothing confirmed, a retry completes", () => {
   it("ledger unreachable: disabling a party is not made (intent not written); a retry makes it", async () => {
     const h = await harness();
-    const a = await admin(h);
+    const a = await siteOwner(h);
     const party = await seedParty();
     h.ledger.intentMode = "fail";
     const r = await h.req(`/api/platform/parties/${party}/disable`, papi(a.s));
@@ -414,7 +441,7 @@ describe("failures: nothing confirmed, a retry completes", () => {
 
   it("change log unreachable after the main batch: pending; the retry records it and answers already", async () => {
     const h = await harness();
-    const a = await admin(h);
+    const a = await siteOwner(h);
     const party = await seedParty();
     h.ledger.mode = "fail";
     expect((await h.req(`/api/platform/parties/${party}/disable`, papi(a.s))).status).toBe(503);
@@ -451,7 +478,7 @@ describe("failures: nothing confirmed, a retry completes", () => {
 
   it("platform sign-in whose change log write fails gives no session; the next sign-in completes it", async () => {
     const h = await harness();
-    const a = await admin(h);
+    const a = await siteOwner(h);
     const { body } = await inviteOrganiser(h, a.s, "flaky-org@gmail.com");
     h.google.identity = { sub: "flaky-sub", email: "flaky-org@gmail.com" };
     h.ledger.mode = "fail";
@@ -465,7 +492,7 @@ describe("failures: nothing confirmed, a retry completes", () => {
 
   it("main database unreachable: platform routes answer 503 and nothing is confirmed", async () => {
     const h = await harness();
-    const a = await admin(h);
+    const a = await siteOwner(h);
     const party = await seedParty();
     OutageDriver.down.main = true;
     expect((await h.req(`/api/platform/parties/${party}/disable`, papi(a.s))).status).toBe(503);
@@ -479,7 +506,7 @@ describe("failures: nothing confirmed, a retry completes", () => {
 describe("cookies", () => {
   it("logout ends only the platform session", async () => {
     const h = await harness();
-    const a = await admin(h);
+    const a = await siteOwner(h);
     const r = await h.req("/api/platform/logout", papi(a.s));
     expect(r.status).toBe(200);
     expect(setCookies(r)["__Host-sahra_p"]!.attrs).toMatch(/Max-Age=0/);
@@ -500,7 +527,7 @@ describe("rows per request (measured locally)", () => {
     };
     try {
       const h = await harness();
-      const a = await admin(h);
+      const a = await siteOwner(h);
       await h.req("/api/platform/me", { cookies: { "__Host-sahra_p": a.s.token } }); note("GET /api/platform/me");
       const { body } = await inviteOrganiser(h, a.s, "measure-org@gmail.com"); note("POST /api/platform/organisers (invite)");
       await h.req("/api/auth/platform/start", { method: "POST", headers: { origin: ORIGIN } }); note("POST /api/auth/platform/start");
@@ -513,16 +540,128 @@ describe("rows per request (measured locally)", () => {
       await h.req("/api/platform/my-parties", { cookies: { "__Host-sahra_p": os.token } }); note("GET /api/platform/my-parties");
       await h.req("/api/platform/parties", { cookies: { "__Host-sahra_p": a.s.token } }); note("GET /api/platform/parties (counts, whole test database)");
       await h.req(`/api/platform/parties/${id}/disable`, papi(a.s)); note("POST /api/platform/parties/:id/disable (no sessions/invites)");
+      await h.req(`/api/platform/parties/${id}/enable`, papi(a.s)); note("POST /api/platform/parties/:id/enable");
+      await h.req(`/api/platform/organisers/${body.organiser_id}/party-limit`, papi(a.s, { limit: 3 })); note("POST /api/platform/organisers/:id/party-limit");
+      await h.req("/api/platform/site-owners", { cookies: { "__Host-sahra_p": a.s.token } }); note("GET /api/platform/site-owners");
+      const other = await seedSiteOwner();
+      await seedPlatformSession(other.sub, h.clock);
+      await h.req(`/api/platform/site-owners/${other.id}/remove`, papi(a.s)); note("POST /api/platform/site-owners/:id/remove (1 session)");
       await h.req(`/api/platform/organisers/${body.organiser_id}/disable`, papi(a.s)); note("POST /api/platform/organisers/:id/disable");
     } finally {
       spy.mockRestore();
     }
+    if (DUMP) throw new Error(`ROWS ${JSON.stringify(out)}`);
     // Numbers are recorded in docs/DECISIONS.md (Workstream B). Pin the write counts.
     const w = (k: string) => (out[k] as { rows_written: number }).rows_written;
     expect(w("POST /api/platform/parties (create)")).toBe(10);
     expect(w("callback, later sign-in")).toBe(3);
+    expect(w("GET /api/platform/site-owners")).toBe(0);
+    expect(w("POST /api/platform/parties/:id/enable")).toBe(3);
     expect(w("GET /api/platform/me")).toBe(0);
     expect(w("POST /api/auth/platform/start")).toBe(0);
     expect(w("GET /api/platform/parties (counts, whole test database)")).toBe(0);
+  });
+});
+
+describe("re-enabling a party", () => {
+  it("clears disabled_at, stays paused (control object too), staff can sign in again; logged and audited", async () => {
+    const h = await harness();
+    const so = await siteOwner(h);
+    const { party, owner, os } = await openParty(h);
+    const door = await (await import("./helpers")).seedDoor(party, h.clock);
+    const [t] = await testTickets(h, os, 1);
+    expect((await h.req(`/api/platform/parties/${party}/disable`, papi(so.s))).status).toBe(200);
+    const controlBefore = (await h.ledger.getControl(party))!;
+
+    // Organisers and staff cannot re-enable.
+    const o = await organiser(h);
+    expect((await h.req(`/api/platform/parties/${party}/enable`, papi(o.s))).status).toBe(403);
+    expect((await h.req(`/api/platform/parties/no-such-party/enable`, papi(so.s))).status).toBe(404);
+
+    const r = await h.req(`/api/platform/parties/${party}/enable`, papi(so.s));
+    expect(await r.json()).toEqual({ status: "enabled", admission: "paused" });
+    const p = await env.DB.prepare("SELECT disabled_at, admission_state, rev, logged_rev, last_action FROM parties WHERE id = ?").bind(party).first();
+    expect(p).toMatchObject({ disabled_at: null, admission_state: "paused", last_action: "party_enabled" });
+    expect(p!.logged_rev).toBe(p!.rev);
+    expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM audit WHERE party_id = ? AND action = 'party_enabled'").bind(party).first("n")).toBe(1);
+    // No intent for re-enabling (safe to lose).
+    expect(await env.LEDGER.prepare("SELECT COUNT(*) AS n FROM intents WHERE party_id = ? AND action = 'party_enabled'").bind(party).first("n")).toBe(0);
+    expect(await h.ledger.getControl(party)).toEqual(controlBefore);
+    expect(await (await h.req(`/api/platform/parties/${party}/enable`, papi(so.s))).json()).toMatchObject({ status: "already" });
+
+    // Old sessions stay revoked; scans still answer paused.
+    expect(await scan(h, door, t!.qr)).toEqual({ verdict: "paused" });
+    // The owner signs in again and reopens admission; then scanning works with a new door session.
+    h.google.identity = { sub: owner.sub, email: `${owner.sub}@gmail.com` };
+    const login = await googleLogin(h);
+    expect(login.res.status).toBe(200);
+    const sess = login.cookies["__Host-sahra_s"]!.value;
+    const me = (await (await h.req("/api/me", { cookies: { "__Host-sahra_s": sess } })).json()) as { csrf: string; party: { id: string } };
+    expect(me.party.id).toBe(party);
+    const owner2 = { token: sess, csrf: me.csrf };
+    expect((await h.req("/api/admission", api(owner2, { action: "open" }))).status).toBe(200);
+    const door2 = await (await import("./helpers")).seedDoor(party, h.clock);
+    expect(await scan(h, door2, t!.qr)).toMatchObject({ verdict: "admit" });
+  });
+});
+
+describe("removing a site owner", () => {
+  it("removes another site owner: intent first, their platform sessions end, they cannot sign in; never yourself", async () => {
+    const h = await harness();
+    const a = await siteOwner(h);
+    const b = await siteOwner(h);
+    const bSecond = await seedPlatformSession(b.sub, h.clock);
+    expect(await (await h.req(`/api/platform/site-owners/${a.id}/remove`, papi(a.s))).json()).toEqual({ error: "cannot_remove_yourself" });
+    // Organisers cannot remove site owners.
+    const o = await organiser(h);
+    expect((await h.req(`/api/platform/site-owners/${b.id}/remove`, papi(o.s))).status).toBe(403);
+
+    const list = (await (await h.req("/api/platform/site-owners", { cookies: { "__Host-sahra_p": a.s.token } })).json()) as { site_owners: { id: string }[] };
+    expect(list.site_owners.map((x) => x.id)).toEqual(expect.arrayContaining([a.id, b.id]));
+
+    const r = await h.req(`/api/platform/site-owners/${b.id}/remove`, papi(a.s));
+    expect(await r.json()).toEqual({ status: "removed" });
+    expect(await env.LEDGER.prepare("SELECT COUNT(*) AS n FROM intents WHERE entity = 'platform_admin' AND entity_id = ? AND action = 'site_owner_removed'").bind(b.id).first("n")).toBe(1);
+    expect((await logEntry("platform_admin", b.id, 2))!.state).toMatchObject({ last_action: "site_owner_removed", disabled_by: a.id });
+    for (const s of [b.s, bSecond]) expect((await h.req("/api/platform/me", { cookies: { "__Host-sahra_p": s.token } })).status).toBe(401);
+    h.google.identity = { sub: b.sub, email: `${b.sub}@gmail.com` };
+    expect((await platformLogin(h)).res.status).toBe(403);
+    expect(await (await h.req(`/api/platform/site-owners/${b.id}/remove`, papi(a.s))).json()).toEqual({ status: "already" });
+    expect((await h.req(`/api/platform/site-owners/${newId()}/remove`, papi(a.s))).status).toBe(404);
+  });
+
+  it("two site owners removing each other at once: exactly one is removed, one always remains", async () => {
+    const h = await harness();
+    // Only these two are active in this check (the statement counts every active row).
+    const a = await siteOwner(h);
+    const b = await siteOwner(h);
+    const [ra, rb] = await Promise.all([
+      h.req(`/api/platform/site-owners/${b.id}/remove`, papi(a.s)),
+      h.req(`/api/platform/site-owners/${a.id}/remove`, papi(b.s)),
+    ]);
+    const statuses = [ra.status, rb.status].sort();
+    expect(statuses[0]).toBe(200);
+    expect(statuses[1]).not.toBe(200);
+    const left = await env.DB.prepare("SELECT COUNT(*) AS n FROM platform_admins WHERE id IN (?, ?) AND disabled_at IS NULL").bind(a.id, b.id).first("n");
+    expect(left).toBe(1);
+  });
+
+  it("the statement itself refuses removing yourself (the caller is always the last one left)", async () => {
+    const h = await harness();
+    const a = await siteOwner(h);
+    const pdb = new PlatformDb(new D1Driver(env.DB));
+    expect(await pdb.removeSiteOwner(a.s.hash, a.id, a.id, h.clock.now(), newId())).toBe("rejected");
+    expect(await env.DB.prepare("SELECT disabled_at FROM platform_admins WHERE id = ?").bind(a.id).first("disabled_at")).toBeNull();
+  });
+
+  it("intent not written (ledger unreachable): the site owner is not removed; a retry removes them", async () => {
+    const h = await harness();
+    const a = await siteOwner(h);
+    const b = await siteOwner(h);
+    h.ledger.intentMode = "fail";
+    expect((await h.req(`/api/platform/site-owners/${b.id}/remove`, papi(a.s))).status).toBe(503);
+    expect(await env.DB.prepare("SELECT disabled_at FROM platform_admins WHERE id = ?").bind(b.id).first("disabled_at")).toBeNull();
+    h.ledger.intentMode = "ok";
+    expect(await (await h.req(`/api/platform/site-owners/${b.id}/remove`, papi(a.s))).json()).toEqual({ status: "removed" });
   });
 });

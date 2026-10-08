@@ -36,7 +36,7 @@ echo    6  Create missing secrets on PRODUCTION
 echo    7  Set the Google client secret on STAGING
 echo    8  Set the Google client secret on PRODUCTION
 echo    9  Create a party (staging or production)
-echo   14  Add a platform admin by email (staging or production)
+echo   14  Add a site owner by email (staging or production)
 echo  Live checks (staging)
 echo   10  Run the live checks against STAGING
 echo   11  Verify ledger records vs admissions (STAGING, read-only)
@@ -60,6 +60,6 @@ if "%choice%"=="10" node scripts\ops.mjs checkpoint
 if "%choice%"=="11" node scripts\ops.mjs verify-ledger
 if "%choice%"=="12" node scripts\ops.mjs measure-cpu
 if "%choice%"=="13" node scripts\ops.mjs revoke-door-staging
-if "%choice%"=="14" node scripts\ops.mjs create-platform-admin
+if "%choice%"=="14" node scripts\ops.mjs create-site-owner
 pause
 goto menu

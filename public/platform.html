@@ -5,7 +5,7 @@
 <header><span id="account"><a href="/platform">Platform sign-in</a></span> | <a href="https://nova.example/" id="nova" rel="noopener">Made by Nova</a></header>
 <main>
 <h1>Platform (Phase 4 test page)</h1>
-<p>For platform admins and organisers. Party staff sign in at <a href="/">the staff sign-in page</a>.</p>
+<p>For site owners and organisers. Party staff sign in at <a href="/">the staff sign-in page</a>.</p>
 <section id="signin" hidden>
 <form method="post" action="/api/auth/platform/start"><button type="submit">Sign in with Google (platform)</button></form>
 </section>
@@ -14,15 +14,20 @@
 <button id="logout" type="button">Sign out</button>
 </section>
 
-<section id="admin" hidden>
-<h2>Platform admin</h2>
+<section id="site_owner" hidden>
+<h2>Site owner</h2>
 <h3>Organisers</h3>
 <pre id="organisers"></pre>
 <form id="invite"><input name="name" placeholder="Name" required> <input name="email" type="email" placeholder="Gmail address" required> <button>Invite organiser</button></form>
 <form id="disable-org"><input name="id" placeholder="organiser id" required> <button>Disable organiser</button></form>
+<form id="limit"><input name="id" placeholder="organiser id" required> <input name="limit" type="number" min="1" max="20" value="1" required> <button>Set party limit (active parties)</button></form>
 <h3>Parties (counts only, no guest data)</h3>
 <pre id="parties"></pre>
 <form id="disable-party"><input name="id" placeholder="party id" required> <button>Disable party</button></form>
+<form id="enable-party"><input name="id" placeholder="party id" required> <button>Turn party back on (stays paused)</button></form>
+<h3>Site owners</h3>
+<pre id="owners"></pre>
+<form id="remove-owner"><input name="id" placeholder="site owner id" required> <button>Remove site owner</button></form>
 </section>
 
 <section id="organiser" hidden>

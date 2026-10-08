@@ -1,7 +1,7 @@
--- Phase 4, workstream B: platform admins, organisers by invitation, platform
+-- Phase 4, workstream B: site owners, organisers by invitation, platform
 -- sessions, disabling a party.
 --
--- Platform admins and organisers are people identified by a Google account
+-- Site owners and organisers are people identified by a Google account
 -- (`google_sub`), linked on first sign-in by the same auto-link rules as party
 -- staff (verified Gmail, or Workspace with a matching hd; afterwards by sub only).
 -- They are logged entities like parties/staff/invites: every change bumps `rev`,
@@ -9,8 +9,8 @@
 -- confirmed in the change log (ledger, party_id '_platform') before the user is
 -- told it worked. Times are Unix ms. Additive only.
 
--- A platform admin row is created by the owner's bootstrap step
--- (`node scripts/ops.mjs create-platform-admin`) with an email and no Google
+-- Site owners (the table keeps its first name, platform_admins). A row is created by the owner's bootstrap step
+-- (`node scripts/ops.mjs create-site-owner`) with an email and no Google
 -- account yet; the first sign-in with that (auto-linkable) address before
 -- `invite_expires_at` links it.
 CREATE TABLE platform_admins (
@@ -21,13 +21,14 @@ CREATE TABLE platform_admins (
   invite_expires_at INTEGER NOT NULL,
   created_at INTEGER NOT NULL,
   created_by TEXT,
-  disabled_at INTEGER,
+  disabled_at INTEGER,              -- removed (by another site owner)
+  disabled_by TEXT,
   rev INTEGER NOT NULL DEFAULT 1,
   logged_rev INTEGER NOT NULL DEFAULT 0,
   last_op TEXT,
   last_action TEXT
 ) STRICT;
--- One active admin row per Google account (also the sign-in lookup by sub).
+-- One active site owner row per Google account (also the sign-in lookup by sub).
 CREATE UNIQUE INDEX platform_admins_sub ON platform_admins(google_sub) WHERE google_sub IS NOT NULL AND disabled_at IS NULL;
 
 CREATE TABLE organisers (
@@ -36,9 +37,11 @@ CREATE TABLE organisers (
   email TEXT NOT NULL,              -- normalized
   google_sub TEXT,
   created_at INTEGER NOT NULL,
-  created_by TEXT,                  -- platform admin id
+  created_by TEXT,                  -- site owner id
   disabled_at INTEGER,
   disabled_by TEXT,
+  -- Active (not disabled) parties this organiser may have; a site owner changes it.
+  party_limit INTEGER NOT NULL DEFAULT 1 CHECK (party_limit BETWEEN 1 AND 20),
   rev INTEGER NOT NULL DEFAULT 1,
   logged_rev INTEGER NOT NULL DEFAULT 0,
   last_op TEXT,
@@ -54,7 +57,7 @@ CREATE INDEX organisers_unlinked_email ON organisers(email) WHERE google_sub IS 
 CREATE TABLE organiser_invites (
   id TEXT PRIMARY KEY,
   organiser_id TEXT NOT NULL REFERENCES organisers(id),
-  created_by TEXT NOT NULL,         -- platform admin id
+  created_by TEXT NOT NULL,         -- site owner id
   created_at INTEGER NOT NULL,
   expires_at INTEGER NOT NULL,
   used_at INTEGER,
@@ -67,7 +70,7 @@ CREATE TABLE organiser_invites (
 ) STRICT;
 CREATE INDEX organiser_invites_organiser ON organiser_invites(organiser_id);
 
--- Platform sessions (admin and organiser pages). A separate table because
+-- Platform sessions (site owner and organiser pages). A separate table because
 -- `sessions.party_id` and `sessions.staff_id` are NOT NULL with foreign keys, and
 -- because keeping them apart means a party staff token can never be found by a
 -- platform route and the other way round (separate cookie as well). Stored as
@@ -85,7 +88,7 @@ CREATE TABLE platform_sessions (
 ) STRICT, WITHOUT ROWID;
 CREATE INDEX platform_sessions_sub ON platform_sessions(google_sub, created_at);
 
--- Disabling a party (platform admin). NULL = active. Who created it (organiser),
+-- Disabling a party (site owner). NULL = active. Who created it (organiser),
 -- for the per-organiser party limit; NULL for parties made by the operator script.
 ALTER TABLE parties ADD COLUMN disabled_at INTEGER;
 ALTER TABLE parties ADD COLUMN organiser_id TEXT;

@@ -68,7 +68,7 @@ async function startSignIn(c: Ctx, platform: boolean) {
 }
 
 authRoutes.post("/google/start", (c) => startSignIn(c, false));
-// Platform admins and organisers: the same Google flow and callback, a separate session (src/platform/auth.ts).
+// Site owners and organisers: the same Google flow and callback, a separate session (src/platform/auth.ts).
 authRoutes.post("/platform/start", (c) => startSignIn(c, true));
 
 // Step 2: Google redirects back here. The sealed cookie must exist, be genuine and
