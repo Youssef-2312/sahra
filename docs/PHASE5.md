@@ -78,7 +78,7 @@ the `staging` branch; a finished piece the owner should try is pushed there too.
 | 4 | Home page: party cards with the guest's own status; sign-in page | done ("Find my tickets" across parties still to do) |
 | 5 | Door scanner: camera, full-screen verdicts, sound and vibration | done (first version) |
 | 6 | Organiser dashboard: top numbers and big buttons | done (first version) |
-| 7 | Approval queue: one card per request, "Approve and send QR" | |
+| 7 | Approval queue: one card per request, "Approve and send QR" | done |
 | 8 | Party settings: details, ticket types, sign-up questions | |
 | 9 | Guests: find, resend, add a cash guest, CSV import (needs backend) | |
 | 10 | Site-owner panel: needs attention, parties, organisers | |
@@ -174,6 +174,17 @@ the `staging` branch; a finished piece the owner should try is pushed there too.
   with a photo and a gradient; top bar frosted (`.topbar-shell`). Fixed on the
   way: an empty translation fell back to English (Arabic heading showed "for").
 
+- Approval queue (`/queue.html`, piece 7): tabs Waiting / Approved / Rejected;
+  one card per request (name, type, people, expected amount, duplicate-email
+  warning, screenshot on tap, details with email, time and answers);
+  "Approve and send QR" (approve, then release; if sending fails the card says
+  "approved, QR not sent yet" and offers Send QR), "Approve only", "Reject"
+  with an optional reason; Send QR on approved cards; select several (up to 20,
+  the server's limit) for the same actions; Load more; CSV download; a link to
+  the old queue tools. Answers marked `retry` (503) are retried with the same
+  body. Checked locally end to end: each action, the bulk approve and send,
+  and the QR emails queued in the outbox.
+
 ## Open questions for the owner
 
 - Hero photos: sent in chat, which cannot be saved into the project. Waiting
@@ -187,5 +198,4 @@ the `staging` branch; a finished piece the owner should try is pushed there too.
 
 ## Next
 
-Piece 7: approval queue cards with one-tap "Approve and send QR"
-(public/queue.html exists; public/js/queue.js next).
+Piece 8: party settings (details, ticket types, sign-up questions).

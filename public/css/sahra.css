@@ -331,10 +331,13 @@ html[lang="ar"] .serif { font-family: var(--font-head); font-style: normal; font
 .tabs button { flex: none; min-height: 40px; padding: 6px 16px; border-radius: 999px; border: 1px solid var(--line-strong); background: var(--surface); color: var(--text); font: inherit; font-weight: 600; cursor: pointer; }
 .tabs button[aria-pressed="true"] { background: var(--accent-2); border-color: var(--accent-2); color: var(--accent-text); }
 .req { background: linear-gradient(180deg, var(--surface-2), var(--surface)); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px; margin: 12px 0; }
+.req { display: flex; flex-direction: column; }
+.req .actions { margin-top: auto; padding-top: 14px; }
+.reqs + .btn, .reqs ~ .stack.buttons { margin-top: 24px; }
 .req .head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
 .req .who { font-weight: 700; font-size: 1.1rem; overflow-wrap: anywhere; }
 .req .shot img { display: block; width: 100%; max-height: 70vh; object-fit: contain; border-radius: 12px; background: #000; margin-top: 10px; }
-.req .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; }
+.req .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .req .actions .btn + .btn { margin-top: 0; }
 .req .actions .main { grid-column: 1 / -1; }
 .req .check input { width: 22px; height: 22px; }
