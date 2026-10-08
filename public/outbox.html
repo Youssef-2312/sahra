@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Sahra outbox</title></head>
+<body>
+<header><span id="account"><a href="/">Sign in</a></span> | <a href="https://nova.example/" id="nova" rel="noopener">Made by Nova</a></header>
+<main>
+<h1>Email outbox (Phase 4 test page)</h1>
+<p><a href="/dashboard.html">Dashboard</a></p>
+<form id="filter">Show <select name="status">
+<option value="">all</option><option value="awaiting_approval">awaiting approval</option><option value="queued">queued</option>
+<option value="sending">sending</option><option value="sent">sent</option><option value="failed">failed</option><option value="cancelled">cancelled</option>
+</select> <button>Refresh</button></form>
+<p><button id="approve-all" type="button">Approve all awaiting</button> <button id="cancel-all" type="button">Cancel all awaiting</button>
+ | Selected: <button id="approve-sel" type="button">Approve</button> <button id="cancel-sel" type="button">Cancel</button></p>
+<table>
+<thead><tr><th></th><th>Created</th><th>Status</th><th>To</th><th>Subject</th><th>Message</th><th>Attempts</th><th>Sent</th><th>Last error</th></tr></thead>
+<tbody id="rows"></tbody>
+</table>
+<button id="more" type="button" hidden>Older</button>
+<pre id="out" role="status"></pre>
+</main>
+<script src="/js/common.js"></script>
+<script src="/js/outbox.js"></script>
+</body>
+</html>

@@ -398,3 +398,109 @@ hand in a browser.
   (today `revealed_at` stays set once pressed).
 - Address edits and reveals do not write a change intent (src/changes.ts): losing
   one in a recovery hides or reverts the place, it never opens access to a ticket.
+## Workstream D: sending email (Phase 4)
+
+**What was built.** `src/email/` and `src/routes/outbox.ts`, migration
+`0008_email.sql`, the Worker's `scheduled` handler (`src/index.ts`), test page
+`public/outbox.html`.
+
+- **Sender (once-a-minute cron).** Needs this in `wrangler.jsonc` (top level and
+  `env.staging`): `"triggers": { "crons": ["* * * * *"] }`. Each run: with no
+  provider configured it returns without touching the database (rows stay
+  queued, no error loop). Otherwise one "anything due?" read; if something is due,
+  it reads the provider counters and claims at most 3 rows with ONE conditional
+  UPDATE (`queued`, or `sending` past its 10-minute claim deadline, ->
+  `sending`, fresh `claim_op`, `attempts + 1`, RETURNING). D1 runs statements one
+  at a time, so two overlapping runs never claim the same row (tested). Each
+  result is written right after its send, conditional on our `claim_op`.
+- **Providers, in the owner's order:** (1) the platform's own Gmail account over
+  SMTP (`smtp.gmail.com:465`, implicit TLS via `connect()` from
+  `cloudflare:sockets`, AUTH PLAIN or LOGIN with a Gmail app password); (2) Brevo
+  free (HTTPS API) when Gmail definitely did not take the message (login refused,
+  connection failed, temporary refusal) or is at its cap. A party owner's Gmail is
+  never used. One SMTP connection per run, reused for its emails, QUIT at the end.
+- **Results.** Sent -> `sent` (`provider`, `sent_at`). Unknown (connection lost or
+  timeout after the end of DATA, Brevo 5xx or network error) -> no fallback (it
+  could duplicate), back to `queued` with backoff 2 min x 2^(n-1), at most 2 h,
+  times a random 0.5-1.0. Permanent refusal (bad recipient, Brevo 400) -> `failed`.
+  After 6 attempts -> `failed` with `last_error`; a row stuck in `sending` on its
+  last attempt is failed, not retried. Errors are single-line, at most 200
+  characters, and have the app password / API key removed (tested).
+- **Duplicates** are possible after an unknown result or a reclaimed stuck row
+  (acceptable: every email links to the same ticket page). Over Gmail the
+  Message-ID is the outbox id, the same on every retry.
+- **Caps** (`email_quota`, one row per provider per UTC hour; rolling 24 hours,
+  because Gmail's limit is rolling): Gmail 450 / 24 h (its limit is about 500),
+  Brevo 280 / 24 h (300 on the free plan), 10 per minute each. Gmail's own
+  "daily limit" reply (5.4.5) fills its cap for 24 hours. Overlapping runs can
+  overshoot a cap by at most one batch (3); the margins cover that. Both providers
+  at cap -> nothing is claimed.
+- **Content checks before any provider sees a row:** safe recipient address (no
+  header or SMTP injection), no emojis (same check as `outboxInsert`), no line
+  breaks in the subject. Message: plain text, UTF-8 subject as RFC 2047 encoded
+  words, body quoted-printable, CRLF, dot-stuffing, no List-Unsubscribe, no HTML,
+  no tracking.
+- **Endpoints (owner or admin; door staff get 403; Origin + CSRF on POST; the
+  session check is inside each statement):** `GET /api/outbox?status=&before=`
+  (50 per page, newest first, cursor `created_at.id`), `POST
+  /api/outbox/approve` and `/api/outbox/cancel` with `{ids: [...]}` (up to 500)
+  or `{all_awaiting: true}`, and `POST /api/outbox/:id/approve|cancel`.
+  Approve: `awaiting_approval` -> `queued` (sets `approved_at`, `approved_by`).
+  Cancel: `awaiting_approval` or `queued` -> `cancelled` (`cancelled_at`,
+  `cancelled_by`); a row being sent cannot be withdrawn. Rows awaiting approval
+  are never claimed by the sender (tested). Outbox rows are not a logged entity
+  (no change log), and approvals write no audit row: who approved/cancelled is on
+  the row itself.
+
+**Rows read/written (measured locally, D1 meta):**
+
+| Action | Read | Written |
+|---|---|---|
+| Producer adds one outbox row | - | 3 (row + 2 index entries; was 1 before this migration) |
+| Cron run, nothing due | 4 | 0 |
+| Cron run, 1 email | 24 | 5 |
+| Cron run, 3 emails | 38 | 15 |
+| Cron run, no provider configured | 0 (no query) | 0 |
+
+Per email sent: 5 rows written (claim: row + `outbox_due` entry; result: row +
+entry; the hour counter). An idle day of cron runs reads about 5,800 rows (1,440
+runs x 4). Approve/cancel: 1 row + 1 index entry per changed row. The party list
+reads one page through `outbox_party` (a status filter can read further).
+
+**CPU (Workers Free: 10 ms per invocation, cron runs included).** At most 3
+emails per run. Building one message (1.1 KB body, Arabic + ASCII) measured in
+Node's V8: 1.2 ms the first time, 0.1 ms after. **Not measurable locally:** the
+CPU cost of the TLS handshake and TLS records on a real socket (done by the
+runtime, possibly counted), Gmail's real replies, latency and limits, and
+Brevo's real API. These need a staging measurement (`wrangler tail` on the cron
+invocations) once the owner approves a real send test. If a run comes near the
+CPU limit, lower `EMAIL.batch` (src/email/sender.ts).
+
+**What the owner must do (never a worker; no real email is sent until the owner
+approves a real send test on staging):**
+
+1. Use a Gmail account that belongs to the platform (never a party owner's).
+   Turn on 2-Step Verification for it (Google Account -> Security).
+2. Create an app password (Google Account -> Security -> 2-Step Verification ->
+   App passwords), name it "sahra-staging". Google shows 16 characters once.
+3. Staging first: add `"GMAIL_ADDRESS": "<the platform address>"` to
+   `env.staging.vars`, then on your own computer run
+   `npx wrangler secret put GMAIL_APP_PASSWORD --env staging` and paste the app
+   password when asked (it is never committed, printed or sent to anyone).
+4. Optional fallback: create a free Brevo account, verify a sender address, set
+   `"BREVO_SENDER"` in vars and `npx wrangler secret put BREVO_API_KEY --env
+   staging`.
+5. Add the cron trigger above, deploy staging, queue one email to your own
+   address, check it arrives and how it looks, and measure the cron run's CPU.
+6. Production only after that, with a separate app password (`sahra-prod`).
+   To stop all sending at once: delete the secrets (`wrangler secret delete`);
+   rows then simply stay queued.
+
+**Open questions for the owner/coordinator.**
+- A restore of the main database to an earlier point can bring `sent` rows back
+  as `queued` (they would be sent again) and approved ones back to awaiting
+  approval. Should recovery cancel queued rows created before the restore point?
+- Old `email_quota` rows (2 per hour at most) are never deleted; a later
+  cleanup job can drop rows older than 2 days.
+- Stopping non-essential email when the account-wide D1 write budget is in danger
+  is left to the quota workstream (the sender can skip a run on a flag).
