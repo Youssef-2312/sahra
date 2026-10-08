@@ -19,7 +19,6 @@
 //   6. Set each party's pause_number to its control object's. Maintenance off.
 // Parties stay PAUSED until an owner or admin presses "Open admission".
 
-import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -47,9 +46,9 @@ function origins() {
 async function loadEngine() {
   const dir = mkdtempSync(join(tmpdir(), "sahra-recovery-"));
   const out = join(dir, "recovery.mjs");
-  const esbuild = join(ROOT, "node_modules", ".bin", process.platform === "win32" ? "esbuild.cmd" : "esbuild");
-  execFileSync(esbuild, [join(ROOT, "src/recovery/procedure.ts"), "--bundle", "--format=esm", "--platform=node", `--outfile=${out}`, "--log-level=error"],
-    { shell: process.platform === "win32" });
+  // esbuild's JS API (no shell, no child process arguments).
+  const { build } = await import("esbuild");
+  await build({ entryPoints: [join(ROOT, "src/recovery/procedure.ts")], bundle: true, format: "esm", platform: "node", outfile: out, logLevel: "error" });
   const mod = await import(pathToFileURL(out).href);
   rmSync(dir, { recursive: true, force: true });
   return mod;
