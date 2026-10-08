@@ -1596,8 +1596,8 @@ Run by the owner from their own computer (setup.bat step 15, `--tail`), on the
 deployed Phase 4 code (staging `5da3921`), default numbers: 10 parties x 4
 scanners, steady 4,000 admissions in 30 minutes, then a burst of 8 scans/s for 5
 minutes. (An earlier run from the cloud sandbox was stopped by the owner after
-3.5 minutes: 490 admitted, 0 errors; its test parties stay on staging, paused by
-nobody, with sessions only that program held.)
+3.5 minutes: 490 admitted, 0 errors; its test parties stay on staging with
+admission open and sessions that only that program held.)
 
 - **Correctness:** steady 4,000/4,000 and burst 1,200/1,200 admitted; 6,720
   scans (800 repeats, 360 denied, 360 same-ID retries), **0 errors**, 0 second
