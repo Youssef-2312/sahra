@@ -354,3 +354,76 @@ html[lang="ar"] .serif { font-family: var(--font-head); font-style: normal; font
   .reqs .req { margin: 0; }
   .req .actions .btn { width: 100%; min-width: 0; }
 }
+
+/* Motion (owner request): calm and purposeful. Entrances on load, a slow drift
+   on the hero photos, sections revealed while scrolling, feedback on hover and
+   press. The door verdict stays instant. Phones set to "reduce motion" get a
+   still page (last rule). Scroll reveals only run when ui.js adds .motion to
+   <html>, so without JavaScript nothing stays hidden. */
+@keyframes rise { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+@keyframes tile-in { from { opacity: 0; transform: scale(1.08); } to { opacity: 1; transform: none; } }
+@keyframes drift { from { transform: scale(1.04); } to { transform: scale(1.16) translate3d(-2%, -1.5%, 0); } }
+@keyframes ping { 0% { box-shadow: 0 0 0 0 rgba(47, 107, 255, 0.55); } 70%, 100% { box-shadow: 0 0 0 9px rgba(47, 107, 255, 0); } }
+@keyframes sheen { 0%, 100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
+@keyframes shine { from { transform: translateX(-130%) skewX(-20deg); } to { transform: translateX(260%) skewX(-20deg); } }
+@keyframes twinkle { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+@keyframes pop { from { opacity: 0.4; transform: scale(0.97); } to { opacity: 1; transform: none; } }
+@keyframes grow { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@keyframes spin-in { from { opacity: 0; transform: rotate(-90deg) scale(0.85); } to { opacity: 1; transform: none; } }
+
+main { animation: rise 0.5s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.topbar-shell { transition: background 0.3s, box-shadow 0.3s; }
+.topbar-shell.scrolled { background: rgba(12, 13, 16, 0.86); box-shadow: 0 14px 34px -24px rgba(0, 0, 0, 0.9); }
+.brand:hover img { animation: twinkle 1.2s ease-in-out; }
+
+/* Hero: tiles arrive one after another, then drift slowly; the words rise in. */
+.hero-bg .ph { animation: tile-in 1s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.hero-bg .ph:nth-child(2) { animation-delay: 0.06s; } .hero-bg .ph:nth-child(3) { animation-delay: 0.12s; }
+.hero-bg .ph:nth-child(4) { animation-delay: 0.18s; } .hero-bg .ph:nth-child(5) { animation-delay: 0.24s; }
+.hero-bg .ph:nth-child(6) { animation-delay: 0.3s; } .hero-bg .ph:nth-child(7) { animation-delay: 0.36s; }
+.hero-bg .ph:nth-child(8) { animation-delay: 0.42s; } .hero-bg .ph:nth-child(9) { animation-delay: 0.48s; }
+.hero-bg img { animation: drift 26s ease-in-out infinite alternate; will-change: transform; }
+.hero-bg .ph:nth-child(even) img { animation-duration: 32s; animation-direction: alternate-reverse; }
+.hero .copy > * { animation: rise 0.8s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.hero .copy > :nth-child(1) { animation-delay: 0.2s; } .hero .copy > :nth-child(2) { animation-delay: 0.32s; }
+.hero .copy > :nth-child(3) { animation-delay: 0.44s; } .hero .copy > :nth-child(4) { animation-delay: 0.56s; }
+.hero .copy > :nth-child(5) { animation-delay: 0.68s; }
+.hero h1 .serif, .about h2 .serif { background: linear-gradient(90deg, #c9d4ff, #8ea2ff, #ffffff, #c9d4ff); background-size: 300% 100%;
+  -webkit-background-clip: text; background-clip: text; color: transparent; animation: sheen 7s ease-in-out infinite; }
+.kicker::before { animation: ping 2.4s cubic-bezier(0, 0, 0.2, 1) infinite; }
+
+/* Buttons: lift on hover, a light sweep across the primary one, a press. */
+.btn:hover { transform: translateY(-1px); }
+.btn:active { transform: translateY(1px) scale(0.99); }
+.btn.primary { position: relative; overflow: hidden; }
+.btn.primary::after { content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 40%; pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.35), transparent); transform: translateX(-130%) skewX(-20deg); }
+.btn.primary:hover::after { animation: shine 0.9s ease-out; }
+.btn.link:hover, .btn:disabled:hover { transform: none; }
+
+/* Party cards: the photo eases closer on hover. */
+.party-card .cover { overflow: hidden; }
+.party-card .cover img { transition: transform 0.8s cubic-bezier(0.2, 0.7, 0.2, 1); }
+.party-card:hover .cover img, .party-card:focus-visible .cover img { transform: scale(1.07); }
+.step, .tile, .req { transition: transform 0.25s, border-color 0.25s; }
+.step:hover { transform: translateY(-3px); border-color: rgba(109, 139, 255, 0.35); }
+
+/* Scroll reveals (home page). */
+/* A one-time animation (fill "backwards"), so hover effects keep working after it. --d staggers cards and steps. */
+.motion .reveal { opacity: 0; }
+.motion .reveal.in { opacity: 1; animation: rise 0.8s cubic-bezier(0.2, 0.7, 0.2, 1) backwards; animation-delay: var(--d, 0s); }
+
+/* Dashboard charts draw in once, on the first load. */
+.charts.animate rect { transform-box: fill-box; transform-origin: bottom; animation: grow 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.charts.animate svg.donut { animation: spin-in 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+
+/* Door verdict: a quick pop so the change is noticed, never a delay. */
+.verdict.full { animation: pop 0.12s ease-out both; }
+.tabs button { transition: background 0.2s, border-color 0.2s, color 0.2s; }
+.tile:hover { transform: translateY(-2px); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; animation-delay: 0s !important;
+    transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+  .hero-bg img { animation: none !important; }
+}

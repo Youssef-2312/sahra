@@ -156,9 +156,34 @@ var Sahra = (function () {
     });
     label();
     document.body.insertBefore(el("div", { class: "topbar-shell" }, el("header", { class: "topbar" }, brand, el("span", { class: "topbar-end" }, sw, account))), document.body.firstChild);
+    motion();
     // The door scanner shows only the camera and the result (brainstorm idea 12): no footer there.
     if (!opts || opts.footer !== false) document.body.appendChild(foot);
     if (renderFn) renderFn();
+  }
+
+  /**
+   * Motion: elements with class "reveal" fade up when they scroll into view
+   * (pages add them; a MutationObserver picks up every re-render). Skipped when
+   * the phone asks for reduced motion or the browser lacks the observers, and
+   * then nothing is hidden. The top bar gets a shadow once the page scrolls.
+   */
+  function motion() {
+    var shell = document.querySelector(".topbar-shell");
+    var onScroll = function () { if (shell) shell.classList.toggle("scrolled", window.scrollY > 8); };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    onScroll();
+    var still = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (still || !("IntersectionObserver" in window) || !("MutationObserver" in window)) return;
+    document.documentElement.classList.add("motion");
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); } });
+    }, { rootMargin: "0px 0px -8% 0px", threshold: 0.08 });
+    function scan() {
+      document.querySelectorAll(".reveal:not([data-seen])").forEach(function (n) { n.setAttribute("data-seen", ""); io.observe(n); });
+    }
+    new MutationObserver(scan).observe(document.body, { childList: true, subtree: true });
+    scan();
   }
 
   // Instagram glyph drawn as a plain outline (rounded square, lens, dot): an icon, not an emoji.

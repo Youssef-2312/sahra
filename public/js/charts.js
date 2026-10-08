@@ -8,6 +8,7 @@
 var SahraCharts = (function () {
   var t = Sahra.t, el = Sahra.el;
   var NS = "http://www.w3.org/2000/svg";
+  var drawn = false;
   // Calm category colours on the dark base; green, red and amber are kept for meaning.
   var PALETTE = ["#8ea2ff", "#6fd3c7", "#c9a2ff", "#7cc4ff", "#f0a0c8", "#e8e3d9"];
 
@@ -109,6 +110,9 @@ var SahraCharts = (function () {
   return {
     draw: function (node, stats, party) {
       Sahra.clear(node);
+      // Bars grow in on the first drawing only, not on every refresh.
+      node.classList.toggle("animate", !drawn);
+      drawn = true;
       [arrivalsChart(stats, party), requestsChart(stats, party), typesChart(stats)].forEach(function (c) { if (c) node.appendChild(c); });
     },
   };

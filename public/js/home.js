@@ -69,7 +69,7 @@
   function card(p, i) {
     var my = mine.filter(function (m) { return m.party_id === p.id && m.status !== "invalid"; })[0];
     var href = my ? my.link : "/signup.html?party=" + encodeURIComponent(p.id);
-    return el("a", { class: "party-card", attrs: { href: href } },
+    var a = el("a", { class: "party-card reveal", attrs: { href: href } },
       el("div", { class: "cover" },
         photo(COVERS[i % COVERS.length], false),
         el("div", { class: "date-block" },
@@ -80,10 +80,12 @@
         el("span", { class: "meta", text: Sahra.when(p.starts_at, p.time_zone) }),
         p.from_price ? el("span", { class: "meta", text: t("h_from", { amount: Sahra.amount(p.from_price) }) }) : null,
         el("span", { class: "tags" }, my ? myPill(my.status) : statePill(p))));
+    a.style.setProperty("--d", (i % 3) * 90 + "ms"); // CSSOM: allowed under the page's style policy
+    return a;
   }
 
   function partiesSection() {
-    var list = [el("div", { class: "section-head", attrs: { id: "parties" } },
+    var list = [el("div", { class: "section-head reveal", attrs: { id: "parties" } },
       el("div", null, el("span", { class: "kicker", text: t("h_upcoming_kicker") }), el("h2", { text: t("h_upcoming") })),
       parties && parties.length ? el("span", { class: "small muted", text: t("h_count", { n: parties.length }) }) : null)];
     if (failed) list.push(el("p", { class: "notice no", text: failed }));
@@ -96,7 +98,7 @@
   function mineSection() {
     var shown = mine.filter(function (m) { return m.status !== "invalid"; });
     if (!shown.length) return null;
-    return [el("div", { class: "section-head", attrs: { id: "mine" } }, el("h2", { text: t("h_your_tickets") })),
+    return [el("div", { class: "section-head reveal", attrs: { id: "mine" } }, el("h2", { text: t("h_your_tickets") })),
       el("div", { class: "mine" }, shown.slice(0, 6).map(function (m) {
         return el("a", { attrs: { href: m.link } },
           el("span", null, el("strong", { text: m.party_name, attrs: { dir: "auto" } }), el("br"),
@@ -107,12 +109,14 @@
 
   function about() {
     var steps = [1, 2, 3].map(function (n) {
-      return el("div", { class: "step" },
+      var step = el("div", { class: "step reveal" },
         el("span", { class: "num", text: "0" + n }),
         el("h3", { text: t("h_step" + n + "_t") }),
         el("p", { text: t("h_step" + n + "_p") }));
+      step.style.setProperty("--d", (n - 1) * 110 + "ms");
+      return step;
     });
-    return el("section", { class: "about", attrs: { id: "about" } },
+    return el("section", { class: "about reveal", attrs: { id: "about" } },
       el("span", { class: "corner tl" }), el("span", { class: "corner tr" }), el("span", { class: "corner bl" }), el("span", { class: "corner br" }),
       el("span", { class: "kicker", text: t("h_about_kicker") }),
       el("h2", null, heading(t("h_about_title_a"), t("h_about_title_em"), "")),

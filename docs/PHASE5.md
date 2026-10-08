@@ -60,6 +60,15 @@ the `staging` branch; a finished piece the owner should try is pushed there too.
   with a Nova blue dot as its star, white on the dark base; the same family as
   Nova's white mark and blue dot. Files: public/img/sahra-mark.svg (top bar),
   public/favicon.svg, favicon.ico (16/32/48), apple-touch-icon.png (180).
+- Animations and motion design (asked 2026-10-08): calm and purposeful. Pages
+  rise in on load; hero photos arrive one by one, then drift slowly; the
+  heading, text and buttons rise in after them; the accent word has a slow
+  sheen; kicker dots pulse; home sections, party cards and steps fade up as
+  they scroll into view; buttons lift on hover, the primary one gets a light
+  sweep; card photos ease closer on hover; dashboard chart bars grow in on
+  the first load only; the top bar gains a shadow once scrolled. The door
+  verdict only gets a 0.12 s pop (never a delay). "Reduce motion" on the
+  phone turns it all off, and without JavaScript nothing stays hidden.
 - Hero photos: the owner has permission to use them; they are compressed
   (about 150 KB each) and slightly blurred before they go in public/img/hero.
 
