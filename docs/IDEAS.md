@@ -354,3 +354,15 @@ coordinator's session. Status: agreed, rejected or open.
 - Effort: medium (small per chart)
 - Free-tier cost: counts should be computed with a few cheap grouped reads and cached for a minute or so, so a busy dashboard does not burn the 5M rows read per day. Do not refresh charts in a tight loop.
 - Rule conflicts: none. Charts must never be the only way to see a number (the tiles from idea 10 stay).
+
+## 27. Sign-in page look: efferd auth-9 style
+
+- Status: agreed as a visual reference only (inspiration, static HTML, idea 22)
+- Owner's words: "this is nice aswell" (screenshot of efferd auth-9: a dark split page, a rounded hero panel on the left with a big headline, and on the right a short sign-in form with "Continue with Google", other provider buttons, an "OR" line and an email box)
+- For Sahra (staff sign-in for organisers and site owners):
+  - one button only: "Continue with Google" (the only sign-in that exists; no Vercel, GitHub or other providers);
+  - NO email box or "Continue with email": there are no passwords and no email sign-in. Door staff do not use this page at all; they join through their one-time invitation link;
+  - left panel: one of the owner's hero photos with a short headline and one line of plain text (no "trusted by" logos); on a phone the panel becomes a short strip above the button, so the button is visible without scrolling (idea 6);
+  - a line under the button that sign-in is by invitation only, so nobody expects to create their own account (decided: organisers join by invitation);
+  - separate sign-in pages for organisers and for the site owner stay separate (separate cookie, already built).
+- Needs: one static page per sign-in type. Effort: small. Free-tier cost: none. Rule conflicts: none (no passwords; Google sign-in as already built).
