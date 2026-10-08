@@ -68,6 +68,7 @@ const cases: Case[] = [
   ["test tickets, junk session", "POST", "/api/test/tickets", (h) => h.req("/api/test/tickets", { method: "POST", headers: JSON_H, cookies: junkCookie, body: "{}" })],
   ["test door invite, junk session", "POST", "/api/test/door-invite", (h) => h.req("/api/test/door-invite", { method: "POST", headers: JSON_H, cookies: junkCookie, body: "{}" })],
   ["test revoke door access, junk session", "POST", "/api/test/revoke-door-access", (h) => h.req("/api/test/revoke-door-access", { method: "POST", headers: JSON_H, cookies: junkCookie, body: "{}" })],
+  ["test party, junk session", "POST", "/api/test/party", (h) => h.req("/api/test/party", { method: "POST", headers: JSON_H, cookies: junkCookie, body: JSON.stringify({ session: newToken() }) })],
   ["test ledger check, junk session", "GET", "/api/test/ledger-check", (h) => h.req("/api/test/ledger-check", { cookies: junkCookie })],
   ["recovery holds, junk session", "GET", "/api/recovery/holds", (h) => h.req("/api/recovery/holds", { cookies: junkCookie })],
   ["release ticket hold, junk session", "POST", "/api/recovery/tickets/:id/release-hold", (h) => h.req("/api/recovery/tickets/0000000000000000/release-hold", { method: "POST", headers: JSON_H, cookies: junkCookie, body: JSON.stringify({ reason: "xyz" }) })],

@@ -81,6 +81,7 @@ export function createApp(deps: Deps) {
         d1_queries: driver.usage.queries,
         rows_read: driver.usage.rows_read,
         rows_written: driver.usage.rows_written,
+        ledger_rows_read: ledgerDriver.usage.rows_read,
         ledger_rows_written: ledgerDriver.usage.rows_written,
         jwks: deps.jwks.lastLookup,
         iso_req: isoReq,

@@ -154,12 +154,14 @@ export class TicketDb {
 
   /** Several approved, released test tickets in ONE batch (staging test endpoint). */
   async createTestTickets(sess: SessionRef, partyId: string, tickets: { id: string; guestName: string }[], people: number,
-    now: number, actor: string, op: string): Promise<boolean> {
+    now: number, actor: string, op: string, released = true): Promise<boolean> {
     const guard = sessionValid(sess, SCAN_ROLES, now);
+    const rel = released ? now : null;
+    const relBy = released ? actor : null;
     const rs = await this.driver.batch([
       ...tickets.map((t) => sql`INSERT INTO tickets (id, party_id, status, people, guest_name, created_at, approved_at, approved_by,
             released_at, released_by, last_op, last_action)
-        SELECT ${t.id}, ${partyId}, 'approved', ${people}, ${t.guestName}, ${now}, ${now}, ${actor}, ${now}, ${actor}, ${op}, 'ticket_created'
+        SELECT ${t.id}, ${partyId}, 'approved', ${people}, ${t.guestName}, ${now}, ${now}, ${actor}, ${rel}, ${relBy}, ${op}, 'ticket_created'
         WHERE ${guard}`),
       audit(now, actor, "ticket_created", "ticket", sql`SELECT party_id, id, rev FROM tickets WHERE last_op = ${op} AND party_id = ${partyId} AND created_at = ${now}`, "test"),
     ]);
