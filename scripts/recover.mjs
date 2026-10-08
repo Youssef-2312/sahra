@@ -98,6 +98,13 @@ async function main() {
       throw new Error("the Worker does not answer 'maintenance' yet; nothing else was changed. Run again in a minute.");
     }
     console.log("   every API request now answers 503 maintenance");
+    // A request that passed the maintenance check just before it began may still be
+    // running. Requests here are short (a few database round trips); give them time
+    // to finish before anything is copied. Anything they write after this is caught
+    // by the final replay and the final check.
+    const drainS = 60;
+    console.log(`   waiting ${drainS} s for requests that were already running to finish...`);
+    await new Promise((ok) => setTimeout(ok, drainS * 1000));
     const info = await wranglerOnce(["d1", "time-travel", "info", "DB", ...env, "--json"]);
     if (info.code === 0) console.log(`   current Time Travel bookmark (to undo the restore): ${info.stdout.trim()}`);
   }

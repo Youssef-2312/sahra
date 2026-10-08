@@ -13,7 +13,7 @@ import { D1Driver, type SqlDriver } from "../src/db/driver";
 import { TicketDb } from "../src/db/tickets";
 import { csrfFor, newId, newToken, parseToken, sha256hex } from "../src/lib/crypto";
 import { D1Ledger } from "../src/ledger";
-import { flushAll, newestByEntity, ledgerEntries, replay, verify } from "../src/recovery";
+import { flushAll, newestByEntity, ledgerEntries, reopenedTickets, replay, verify } from "../src/recovery";
 import { recover } from "../src/recovery/procedure";
 import { api, FlakyLedger, harness, openParty, scan, seedDoor, seedOwner, seedSession, testTickets, type Harness } from "./helpers";
 
@@ -279,6 +279,71 @@ describe("main database cannot be checked: unconfirmed changes are held until an
     expect(report.holds.map((x) => x.id)).toContain(id);
     expect(await env.DB.prepare("SELECT hold_at IS NOT NULL FROM tickets WHERE id = ?").bind(id).first()).toEqual({ "hold_at IS NOT NULL": 1 });
   });
+});
+
+
+describe("admission invariant: replay never clears an admission", () => {
+  it("admitted after the backup point, then party edits and a refused transfer: still used after restore and replay", async () => {
+    const w = await world();
+    const { h, party, os, door, tickets: t } = w;
+    await complete();
+    const snap = await snapshot();
+    expect((await scan(h, door, t[0]!.qr)).verdict).toBe("admit");
+    // Later changes around it: a party edit (logged party entity) and a transfer of the used ticket (refused).
+    await env.DB.prepare("UPDATE parties SET description = 'changed', rev = rev + 1, last_action = 'details_edited' WHERE id = ?").bind(party).run();
+    await complete();
+    const tr = await h.req(`/api/tickets/${t[0]!.id}/transfer`, api(os, { name: "Someone Else", op: newId() }));
+    expect(tr.status).not.toBe(200);
+    const report = await run(snap, h);
+    expect(report.finalOk).toBe(true);
+    expect(mine(report.holds, party)).toEqual([]);
+    const { door: d2 } = await reopen(h, party);
+    expect((await scan(h, d2, t[0]!.qr)).verdict).toBe("used");
+  });
+
+  it("an owner's logged admission reset after the admission is honoured: the ticket can be admitted again", async () => {
+    const w = await world();
+    const { h, party, ownerSess, owner, door, tickets: t } = w;
+    await complete();
+    const snap = await snapshot();
+    expect((await scan(h, door, t[1]!.qr)).verdict).toBe("admit");
+    expect(await new TicketDb(mainDriver()).resetAdmission(ownerSess, t[1]!.id, "scanned by mistake", h.clock.now(), owner.id, newId())).toBe(true);
+    await flushChangeLog(new Db(mainDriver()), w.ledger, h.clock.now(), [t[1]!.id]);
+    const report = await run(snap, h);
+    expect(report.finalOk).toBe(true);
+    const { door: d2 } = await reopen(h, party);
+    expect((await scan(h, d2, t[1]!.qr)).verdict).toBe("admit");
+  });
+
+  for (const order of ["newer state logged after the admission", "newer state logged before the admission record"] as const) {
+    it(`a change-log state that would clear an admission is never applied; the ticket is held (${order})`, async () => {
+      const w = await world();
+      const { h, party, door, tickets: t } = w;
+      await complete();
+      const snap = await snapshot();
+      expect((await scan(h, door, t[2]!.qr)).verdict).toBe("admit");
+      const row = (await env.DB.prepare("SELECT * FROM tickets WHERE id = ?").bind(t[2]!.id).first<Record<string, unknown>>())!;
+      const { logged_rev: _l, ...state } = row;
+      // An anomalous newer entry with the admission fields cleared (no reset).
+      const bad = { ...state, rev: Number(row.rev) + 1, used_scan_id: null, used_at: null, used_by: null, last_action: "approved" };
+      const ins = env.LEDGER.prepare(`INSERT INTO change_log (event_id, party_id, entity, entity_id, rev, action, logged_at, state)
+        VALUES (?, ?, 'ticket', ?, ?, 'approved', 0, ?)`).bind(`ticket:${t[2]!.id}:${bad.rev}`, party, t[2]!.id, bad.rev, JSON.stringify(bad));
+      if (order === "newer state logged before the admission record") {
+        await env.LEDGER.prepare("DELETE FROM change_log WHERE event_id = ?").bind(`ticket:${t[2]!.id}:${row.rev}`).run();
+        await ins.run();
+        await env.LEDGER.prepare(`INSERT INTO change_log (event_id, party_id, entity, entity_id, rev, action, logged_at, state)
+          VALUES (?, ?, 'ticket', ?, ?, 'admitted', 0, ?)`).bind(`ticket:${t[2]!.id}:${row.rev}`, party, t[2]!.id, row.rev, JSON.stringify(state)).run();
+      } else {
+        await ins.run();
+      }
+      const report = await run(snap, h);
+      expect(mine(report.holds, party).map((x) => x.id)).toContain(t[2]!.id);
+      expect(report.finalOk).toBe(true);
+      expect(await reopenedTickets(mainDriver(), ledgerDriver())).toEqual([]);
+      const { door: d2 } = await reopen(h, party);
+      expect((await scan(h, d2, t[2]!.qr)).verdict).not.toBe("admit");
+    });
+  }
 });
 
 describe("site-level records (site owners, organisers)", () => {
