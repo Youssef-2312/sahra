@@ -76,8 +76,12 @@ export async function loadBackup(t: Targets, src: BackupSource, log: (l: string)
   for (const spec of EXPORTED) {
     const d = targetOf(t, spec.db);
     if (!d) continue;
-    const have = (await d.all<{ n: number }>(sql`SELECT COUNT(*) AS n FROM ${raw(spec.table)}`)).results[0]?.n ?? 0;
+    // migrations/0009_health.sql seeds the reserved '_platform' party (needed by the
+    // outbox's foreign key); the backup carries its own copy, so it is replaced.
+    const seeded = spec.db === "main" && spec.table === "parties" ? sql` WHERE id != '_platform'` : sql``;
+    const have = (await d.all<{ n: number }>(sql`SELECT COUNT(*) AS n FROM ${raw(spec.table)}${seeded}`)).results[0]?.n ?? 0;
     if (Number(have) > 0) throw new Error(`${spec.db}.${spec.table} is not empty: restore only into a fresh database`);
+    if (spec.db === "main" && spec.table === "parties") await d.batch([sql`DELETE FROM parties WHERE id = '_platform'`]);
     const cols = await columnsOf(d, spec.table);
     const rows = await src.rows(spec.db, spec.table);
     for (const r of rows) {
