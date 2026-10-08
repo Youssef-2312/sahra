@@ -19,6 +19,7 @@
 //   node scripts/ops.mjs verify-ledger          (read-only, staging)
 //   node scripts/ops.mjs measure-cpu            (staging)
 //   node scripts/ops.mjs revoke-door-staging    (staging)
+//   node scripts/ops.mjs load-test              (staging, about 45 minutes)
 
 import { spawn } from "node:child_process";
 import { randomBytes, randomUUID } from "node:crypto";
@@ -297,6 +298,18 @@ const steps = {
   // Live CPU per endpoint, cold vs warm, on staging (wrangler tail + live-check traffic).
   async "measure-cpu"() {
     await new Promise((ok) => spawn(process.execPath, ["scripts/measure-cpu.mjs"], { stdio: "inherit" }).on("close", ok));
+  },
+
+  // Peak-load test (workstream H) run by the owner: the estimate first (nothing is
+  // sent), then the real run only after the owner types RUN. About 45 minutes; the
+  // report is printed and saved as load-test-report-<time>.json in this folder.
+  async "load-test"() {
+    const link = await ask("Door invitation link from STAGING (create one for 1 hour): ");
+    const run = (extra) => new Promise((ok) => spawn(process.execPath, ["scripts/load-test.mjs", "--invite", link, ...extra], { stdio: "inherit" }).on("close", ok));
+    await run([]);
+    const go = await ask("\nType RUN to start the test with these numbers (anything else cancels; Ctrl+C stops it cleanly later): ");
+    if (go !== "RUN") { console.log("Cancelled. Nothing was sent."); return; }
+    await run(["--yes", "--tail"]);
   },
 
   async checkpoint() {
