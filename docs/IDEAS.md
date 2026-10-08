@@ -193,6 +193,7 @@ coordinator's session. Status: agreed, rejected or open.
   - "Needs attention": health alerts (failed backup, database nearly full, unusual daily usage). Says "All good" when there is nothing;
   - "Parties": short list with organiser, status and ticket count, plus a switch to disable or re-enable a party;
   - "Organisers": invite one, change their party limit, disable one.
+- Amended by idea 19: the party switch becomes a labelled "Disable party..." action with a confirmation screen.
 - Needs: one screen on actions that already exist (Workstream B and F); no new data.
 - Effort: small to medium
 - Free-tier cost: a few reads per page view; the health status is read from the stored state, not recomputed
@@ -253,3 +254,21 @@ coordinator's session. Status: agreed, rejected or open.
 - Needs: one extra option on the import screen; reuse the existing release step. Effort: small on top of idea 9.
 - Free-tier cost: as idea 9
 - Rule conflicts: none
+
+## 18. Sign-up form starts with no extra questions (amends idea 3)
+
+- Status: agreed
+- Owner's words: "yes"
+- Source: outside review by another AI.
+- A new party's form has only the fixed fields (name, email, ticket type, people, payment screenshot). Organiser questions are added only when the organiser chooses. The form builder shows a short note: "Every question makes fewer guests finish signing up."
+- Needs: default of zero questions plus one line of text. Effort: small. Free-tier cost: none. Rule conflicts: none.
+
+## 19. Disabling a party is a labelled, confirmed action, not a switch (amends idea 13)
+
+- Status: agreed
+- Owner's words: "yes"
+- Source: outside review by another AI.
+- In the site-owner panel the party on/off switch is replaced by a button "Disable party..." that opens a screen explaining the effect in numbers, for example "Registration stops, admission pauses, and 86 guests cannot enter." The site owner types the party's name to confirm. Re-enabling is a single clear action, with a short explanation of what it brings back.
+- Needs: confirmation screen using counts the server already has; the existing disable-party action (which pauses the party and ends its sessions) and its change intent stay unchanged. Effort: small.
+- Free-tier cost: a couple of counts when the screen opens
+- Rule conflicts: none; consistent with fail closed (a disabled party admits nobody).
