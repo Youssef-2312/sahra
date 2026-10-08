@@ -5,7 +5,9 @@
 //   2. the Worker (src/index.ts) running locally in Miniflare on those databases,
 //      with a random BACKUP_KEY and random test-only master secrets
 //   3. data made through the real routes: tickets, an admission, guest sign-ups
-//      with screenshots (one of exactly 1.5 MB), approval, release, a cancel
+//      with screenshots (one of 600,000 bytes, the server maximum), approval, release, a cancel;
+//      two screenshots in a second files database (FILES_2); retention purges before and
+//      after the nightly backup
 //   4. backup/apps-script/Code.gs itself, run in a simulation of Apps Script
 //      (scripts/lib/apps-script-sim.mjs) with a tiny time limit per run, so the
 //      backup needs many runs and resumes each time; Drive is a local folder
@@ -45,7 +47,7 @@ async function main() {
   let sim = null;
   try {
     console.log(`1. fresh local databases in ${work}`);
-    const { persistTo } = freshLocalD1(ROOT, join(work, "live"));
+    const { persistTo } = freshLocalD1(ROOT, join(work, "live"), ["DB", "LEDGER", "FILES", "FILES_2"]);
 
     console.log("2. the Worker in Miniflare");
     const esbuild = join(ROOT, "node_modules", ".bin", process.platform === "win32" ? "esbuild.cmd" : "esbuild");
@@ -54,9 +56,10 @@ async function main() {
       "--external:cloudflare:*", `--outfile=${bundle}`, "--log-level=error"], { shell: process.platform === "win32" });
     const { Miniflare, convertV4MiniflareOptions } = await import(pathToFileURL(join(ROOT, "node_modules", "miniflare", "dist", "src", "index.js")).href);
     const backupKey = b64(32);
-    mf = new Miniflare(convertV4MiniflareOptions({
+    // Two screenshot databases (FILES, FILES_2); `files` picks which ones the Worker has bound.
+    const options = (files) => convertV4MiniflareOptions({
       modules: true, scriptPath: bundle, modulesRoot: work, compatibilityDate: "2026-08-01",
-      resourcePersistencePath: join(persistTo, "v3"), d1Databases: LOCAL_IDS,
+      resourcePersistencePath: join(persistTo, "v3"), d1Databases: Object.fromEntries(["DB", "LEDGER", ...files].map((b) => [b, LOCAL_IDS[b]])),
       // The Worker's request log lines: kept to count rows read by the backup.
       handleStructuredLogs: (l) => { workerLog.push(l.message); if (process.env.E2E_DEBUG) console.log(JSON.stringify(l).slice(0, 200)); },
       bindings: {
@@ -73,11 +76,14 @@ async function main() {
       outboundService: async (req) => req.url.startsWith("https://challenges.cloudflare.com/")
         ? new Response(JSON.stringify({ success: true, hostname: "sahra.test", action: "", "error-codes": [] }), { headers: { "content-type": "application/json" } })
         : new Response("no network in this test", { status: 502 }),
-    }));
+    });
+    mf = new Miniflare(options(["FILES", "FILES_2"]));
     const url = await mf.ready;
     const DB = await mf.getD1Database("DB");
     const LEDGER = await mf.getD1Database("LEDGER");
     const FILES = await mf.getD1Database("FILES");
+    const FILES_2 = await mf.getD1Database("FILES_2");
+
 
     console.log("3. data through the real routes");
     const call = async (path, init = {}) => {
@@ -121,13 +127,37 @@ async function main() {
       return { id: r.body.ticket_id, sha: sha(shot), size };
     };
     const shots = [];
-    for (const size of [1500, 48_000, 210_000, 1_500_000]) shots.push(await signupOne(size));
-    check(shots.length === 4, "4 sign-ups with screenshots (largest exactly 1,500,000 bytes)");
+    for (const size of [1500, 48_000, 210_000, 600_000]) shots.push(await signupOne(size));
+    check(shots.length === 4, "4 sign-ups with screenshots in FILES (largest 600,000 bytes, the server maximum)");
+    const eng = await loadModules(ROOT, work, `export { flushAll } from "@src/recovery/index"; export { D1Driver } from "@src/db/driver";
+      export { purgeOldScreenshots, FileStore } from "@src/storage/index";`);
+    // Screenshots in the second files database. A sign-up only moves there once FILES is
+    // past 70% of 500 MB (test/screenshots.test.ts covers that choice), which cannot be
+    // made locally; here they are stored with the storage module the sign-up uses
+    // (FileStore.put, key "f2:<id>") for test tickets, and the tickets updated like a change.
+    const shots2 = [];
+    for (const size of [30_000, 70_000]) {
+      const t = (await owner("/api/test/tickets", { count: 1, people: 1 })).body.tickets[0];
+      const bytes = randomBytes(size);
+      bytes.set([0xff, 0xd8, 0xff, 0xe0]);
+      const key = await new eng.FileStore(new eng.D1Driver(FILES_2), 2).put({
+        id: 1 + randomBytes(5).readUIntBE(0, 5), partyId: "drill-party", ticketId: t.id, type: "image/jpeg", bytes: new Uint8Array(bytes), now: Date.now() });
+      await DB.prepare("UPDATE tickets SET screenshot_key = ?, rev = rev + 1, last_op = ?, last_action = 'screenshot_added' WHERE id = ?").bind(key, crypto.randomUUID(), t.id).run();
+      shots2.push({ id: t.id, sha: sha(bytes), size });
+    }
+    for (const s2 of shots2) {
+      const key = await DB.prepare("SELECT screenshot_key FROM tickets WHERE id = ?").bind(s2.id).first("screenshot_key");
+      check(/^f2:/.test(key), `sign-up stored in the second files database (${key})`);
+    }
     check((await owner("/api/tickets/approve", { ids: shots.slice(0, 3).map((s) => s.id) })).status === 200, "3 approved");
     check((await owner("/api/tickets/release", { ids: shots.slice(0, 1).map((s) => s.id) })).status === 200, "1 released");
     check((await owner(`/api/tickets/${shots[2].id}/cancel`, { op: crypto.randomUUID() })).status === 200, "1 cancelled (with its intent)");
     // The party, its staff and the drill's sessions were inserted directly: log them as a route would have.
-    const eng = await loadModules(ROOT, work, `export { flushAll } from "@src/recovery/index"; export { D1Driver } from "@src/db/driver";`);
+    // Retention, BEFORE any backup: a cancelled ticket's screenshot in each database is emptied
+    // (the purge runs as if 31 days had passed): those are never copied, and restore as purged.
+    check((await owner(`/api/tickets/${shots2[1].id}/cancel`, { op: crypto.randomUUID() })).status === 200, "a FILES_2 ticket cancelled");
+    const purge1 = await eng.purgeOldScreenshots({ FILES, FILES_2 }, new eng.D1Driver(DB), Date.now() + 31 * 86_400_000);
+    check(JSON.stringify(purge1.databases.map((d) => d.deleted.cancelled ?? 0)) === "[1,1]", "purged before the first backup: one screenshot in each database");
     await eng.flushAll(new eng.D1Driver(DB), new eng.D1Driver(LEDGER), Date.now());
 
     console.log("4. Code.gs in the Apps Script simulation (a 60 ms limit per run, so it resumes many times)");
@@ -164,14 +194,21 @@ async function main() {
     const h1 = await health();
     check(h1.last_backup_at !== null && h1.last_backup_note.startsWith(`nightly ${first[0]}:`), `reported to the Worker (health_state: ${h1.last_backup_note})`);
     const sum1 = JSON.parse(readFileSync(join(drive, first[0], "summary.json"), "utf8"));
-    check(sum1.ok && sum1.screenshots.copied === 4 && sum1.screenshots.failed === 0, "4 screenshots copied, each verified by size and SHA-256 (and read back from Drive)");
-    check(sum1.database_size_bytes.main > 0 && sum1.database_size_bytes.files > 1_500_000, `summary holds measured sizes (main ${sum1.database_size_bytes.main} B, files ${sum1.database_size_bytes.files} B)`);
+    check(sum1.ok && sum1.screenshots.copied === 4 && sum1.screenshots.purged === 2 && sum1.screenshots.failed === 0,
+      "4 screenshots copied from 2 databases, each verified by size and SHA-256 (and read back from Drive); 2 purged ones skipped, not failures");
+    check(sum1.database_size_bytes.main > 0 && sum1.database_size_bytes.files > 600_000, `summary holds measured sizes (main ${sum1.database_size_bytes.main} B, files ${sum1.database_size_bytes.files} B)`);
+    const m1 = JSON.parse(readFileSync(join(drive, first[0], "manifest.json"), "utf8"));
+    check(m1.databases.files_2?.binding === "FILES_2" && m1.databases.files_2.size_bytes > 0, `manifest lists FILES_2 with its measured size (${m1.databases.files_2?.size_bytes} B)`);
     const index = JSON.parse(readFileSync(join(drive, "screenshots", "index.json"), "utf8"));
-    for (const shot of shots) {
-      const fid = Number((await DB.prepare("SELECT screenshot_key FROM tickets WHERE id = ?").bind(shot.id).first("screenshot_key")).split(":")[1]);
-      const e = index.files[String(fid)];
+    const keyIn = async (ticket) => {
+      const [, n, id] = /^f(\d):(\d+)$/.exec(await DB.prepare("SELECT screenshot_key FROM tickets WHERE id = ?").bind(ticket).first("screenshot_key"));
+      return n === "1" ? id : `files_${n}:${id}`;
+    };
+    for (const shot of [shots[0], shots[1], shots[3], shots2[0]]) {
+      const e = index.files[await keyIn(shot.id)];
       check(e && e.sha256 === shot.sha && sha(readFileSync(join(drive, "screenshots", e.name))) === shot.sha, `screenshot of ${shot.size} bytes in Drive: same SHA-256 as uploaded`);
     }
+    for (const shot of [shots[2], shots2[1]]) check(!index.files[await keyIn(shot.id)], "a screenshot purged before the backup is not in Drive");
 
     console.log("5. changes after the nightly, then an hourly backup (ledger + new screenshots)");
     const later = made.body.tickets.slice(3, 5);
@@ -179,6 +216,10 @@ async function main() {
     check((await owner(`/api/tickets/${made.body.tickets[6].id}/cancel`, { op: crypto.randomUUID() })).status === 200, "a ticket cancelled after the nightly");
     const newShot = await signupOne(90_000);
     check((await owner("/api/tickets/approve", { ids: [newShot.id] })).status === 200, "a new sign-up approved after the nightly");
+    // Purged AFTER the nightly copied it: the copy stays in Drive.
+    check((await owner(`/api/tickets/${shots[0].id}/cancel`, { op: crypto.randomUUID() })).status === 200, "a ticket with a backed-up screenshot cancelled");
+    const purge2 = await eng.purgeOldScreenshots({ FILES, FILES_2 }, new eng.D1Driver(DB), Date.now() + 31 * 86_400_000);
+    check(purge2.databases[0].deleted.cancelled === 1, "its screenshot purged after the nightly backup");
     // The nightly is not due again (it ran just now); the last backup was "2 hours ago".
     sim.props.set("LAST_SUCCESS_AT", String(Date.now() - 2 * 3600_000));
     const fetchesBefore = sim.fetches;
@@ -187,7 +228,9 @@ async function main() {
     check(Boolean(hourlyName) && !readdirSync(drive).some((n) => n.startsWith("INCOMPLETE")), `hourly backup complete: ${hourlyName}`);
     const sum2 = JSON.parse(readFileSync(join(drive, hourlyName, "summary.json"), "utf8"));
     check(sum2.kind === "hourly" && Object.keys(sum2.rows).every((k) => !k.startsWith("main.")), `only the ledger and the screenshot list (${Object.keys(sum2.rows).join(", ")})`);
-    check(sum2.screenshots.copied === 1 && sum2.screenshots.alreadyCopied === 4, `only the new screenshot copied (${runs2} runs, ${sim.fetches - fetchesBefore} requests)`);
+    check(sum2.screenshots.copied === 1 && sum2.screenshots.alreadyCopied === 4 && sum2.screenshots.purged === 2 && sum2.ok,
+      `only the new screenshot copied; the one purged after the nightly counts as already in Drive (${runs2} runs, ${sim.fetches - fetchesBefore} requests)`);
+    check(sha(readFileSync(join(drive, "screenshots", index.files[await keyIn(shots[0].id)].name))) === shots[0].sha, "the purged screenshot's copy is still in Drive");
     const h2 = await health();
     check(h2.last_backup_at > h1.last_backup_at - 3600_000 && h2.last_backup_note.startsWith(`hourly ${hourlyName.replace(/~\d+$/, "")}:`), "hourly backup reported");
 
@@ -208,9 +251,11 @@ async function main() {
     check(both.code === 0, "restore drill on nightly + hourly passed");
     const dj = JSON.parse(readFileSync(outJson, "utf8"));
     check(dj.applied >= 4 && dj.holds === 0 && dj.verify_after_ok, `the replay applied ${dj.applied} change(s) made after the nightly, 0 holds, every row matches the change log`);
+    check(JSON.stringify(dj.files_dbs) === '["files","files_2"]' && dj.purged_restored === 1 && dj.purged_without_bytes === 2,
+      "each files database restored into its own database; 1 purged screenshot restored from Drive, 2 restored as purged");
     const kept = /kept: (.*)/.exec(both.out)[1].trim();
     const { openLocalD1 } = await import(pathToFileURL(join(ROOT, "scripts", "lib", "local-d1.mjs")).href);
-    const restored = await openLocalD1(ROOT, join(kept, "state"));
+    const restored = await openLocalD1(ROOT, join(kept, "state"), ["DB", "LEDGER", "FILES", "FILES_2"]);
     try {
       for (const t of later) check((await restored.DB.prepare("SELECT used_at FROM tickets WHERE id = ?").bind(t.id).first("used_at")) !== null, `ticket admitted after the nightly is admitted in the restore`);
       check((await restored.DB.prepare("SELECT status FROM tickets WHERE id = ?").bind(made.body.tickets[6].id).first("status")) === "cancelled", "ticket cancelled after the nightly is cancelled in the restore");
@@ -218,6 +263,12 @@ async function main() {
       check(nt?.status === "approved", "sign-up made after the nightly exists, approved, in the restore");
       const blob = await restored.FILES.prepare("SELECT bytes FROM files WHERE id = ?").bind(Number(nt.screenshot_key.split(":")[1])).first("bytes");
       check(sha(Buffer.from(blob)) === newShot.sha, "its screenshot (copied by the hourly backup) restored byte-identical");
+      const id2 = Number((await keyIn(shots2[0].id)).split(":")[1]);
+      check(sha(Buffer.from(await restored.FILES_2.prepare("SELECT bytes FROM files WHERE id = ?").bind(id2).first("bytes"))) === shots2[0].sha, "FILES_2 screenshot restored byte-identical into its own database");
+      const id0 = Number(await keyIn(shots[0].id));
+      check(sha(Buffer.from(await restored.FILES.prepare("SELECT bytes FROM files WHERE id = ?").bind(id0).first("bytes"))) === shots[0].sha, "screenshot purged after the nightly restored with its bytes from Drive");
+      const id3 = Number((await keyIn(shots2[1].id)).split(":")[1]);
+      check((await restored.FILES_2.prepare("SELECT reason FROM file_tombstones WHERE id = ?").bind(id3).first("reason"))?.includes("cancelled"), "screenshot purged before any backup restored as purged (tombstone)");
     } finally {
       await restored.mf.dispose();
       rmSync(kept, { recursive: true, force: true });

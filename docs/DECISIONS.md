@@ -1291,18 +1291,57 @@ cannot bind parameters), which is not built.
   nightly of about 88,000. Apps Script time per hourly run drops accordingly
   (estimate: under a minute at that size).
 
+**Second follow-up: several screenshot databases and retention (2026-10-08)**
+
+- **Every bound files database is backed up** (`FILES` = backup db `files`,
+  `FILES_2..FILES_4` = `files_2..files_4`; `exportedFor()` in
+  src/backup/export.ts). The manifest lists each one with its binding, shard
+  number, migrations and measured size (`meta.size_after`); `/rows/files_N/files`
+  pages its list and `/file/:db/:id` serves its bytes (the old `/file/:id` is
+  gone; nothing used it outside this branch). An unbound database answers 404.
+  Code.gs reads each list (part files `files_N.files.NNNN.json.gz`), keeps database
+  1's screenshots under their id and the others as `files_N-<id>.<ext>` in
+  `screenshots/` (index key `files_N:<id>`). The drill restores each files
+  database into its own fresh local database and hashes every screenshot per
+  database, plus each database's largest one again through wrangler.
+- **Purged screenshots** (workstream C's retention, `file_tombstones`): the list
+  carries `purged_at` and `purged_reason` (LEFT JOIN, part of the same page
+  query); `/file/:db/:id` answers 410 `purged` and serves nothing. The script
+  does not download them and counts them as "purged", not as failures (a 410 for
+  a screenshot purged between list and download is counted the same way). A
+  screenshot copied before its purge stays in Drive and in the index. Restore: if
+  the backup has its bytes, they are restored (the next daily purge empties them
+  again); otherwise the row is restored as purged (empty bytes and its tombstone),
+  as in the live database. `file_tombstones` itself is not a separate table in the
+  backup (its rows travel in the list).
+- **Tested** (vitest, 24 backup tests): two databases, purges before and after an
+  export, 410s, restore of both into separate databases (rows, tombstones and
+  bytes identical; a screenshot purged after its export comes back with its
+  bytes). **Local end to end** (`node scripts/backup-e2e.mjs`): 4 screenshots in
+  FILES and 2 in FILES_2, one in each purged before the first backup and one
+  purged after the nightly; nightly copied 4 and skipped 2 purged, hourly copied
+  only the new one; the drill on nightly + hourly restored both databases
+  separately, the post-nightly purged screenshot with its bytes from Drive and
+  the earlier ones as purged. The second database's screenshots are stored with
+  the storage module (`FileStore.put`) for test tickets: a sign-up only moves to
+  FILES_2 once FILES is past 70% of 500 MB, which cannot be produced locally
+  (test/screenshots.test.ts covers that choice).
+- **Cost** (`test/backup-cost.test.ts`, 4,000 tickets): the purge-mark lookup adds
+  one row read per listed screenshot and per download. Full backup with counts and
+  all downloads: 100,268 rows read (was 92,243); hourly: 24,138 (was 20,113), about
+  579,000 a day, 11.6% of the daily reads.
+- The server maximum screenshot is now 600,000 bytes (workstream C); the tests and
+  the e2e use that size instead of 1.5 MB.
+
 **Open points (accepted as they are by the coordinator)**
 
 1. Outbox rows are not in the backup (they carry ticket links): emails awaiting
    the party owner's approval are lost in a restore from Drive. Accepted.
-2. Only one files database (`FILES`) is exported; when `sahra-files-2` exists,
-   the export and restore need its binding added to the table list.
-3. Trashed Drive folders count against the Drive quota for 30 days.
-4. `Code.gs` also accepts `http://127.0.0.1` / `localhost` as `BACKUP_URL`, only
+2. Trashed Drive folders count against the Drive quota for 30 days.
+3. `Code.gs` also accepts `http://127.0.0.1` / `localhost` as `BACKUP_URL`, only
    for the local simulation (Apps Script cannot reach those).
-5. Hourly reports also move `last_backup_at`, so F's 26 h check stays green
-   while hourly backups succeed even if the nightly fails; the script itself
-   emails the owner when the last FULL backup is over 30 hours old.
+4. Only nightly reports move `last_backup_at` (coordinator change at
+   integration); hourly ones update the note and `last_hourly_backup_at`.
 
 ## External audit follow-ups (2026-10-08)
 

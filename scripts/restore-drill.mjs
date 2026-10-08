@@ -32,7 +32,11 @@ import { gunzipSync } from "node:zlib";
 import { freshLocalD1, loadModules, npx, openLocalD1 } from "./lib/local-d1.mjs";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
-const PART = /^(main|ledger|files)\.([a-z_]+)\.(\d{4})\.json\.gz$/;
+const PART = /^(main|ledger|files(?:_[2-4])?)\.([a-z_]+)\.(\d{4})\.json\.gz$/;
+/** Backup name of each files database and its binding in the local restore. */
+const FILES_DBS = { files: "FILES", files_2: "FILES_2", files_3: "FILES_3", files_4: "FILES_4" };
+/** Key of a screenshot in Drive's screenshots/index.json (database 1 keeps the bare id; same rule as Code.gs). */
+const shotKey = (db, id) => (db === "files" ? String(id) : `${db}:${id}`);
 const NAME = /sahra-(backup|ledger)-(\d{4}-\d{2}-\d{2}T\d{4}Z)/;
 
 function args() {
@@ -57,7 +61,7 @@ function mixedSource(base, hourly) {
   return {
     tables: [...new Set([...base.tables.filter((t) => t.startsWith("main.")), ...hourly.tables])],
     rows: (db, table) => (db === "main" ? base : hourly).rows(db, table),
-    file: async (id) => (await hourly.file(id)) ?? base.file(id),
+    file: async (db, id) => (await hourly.file(db, id)) ?? base.file(db, id),
   };
 }
 
@@ -83,8 +87,8 @@ function backupSource(folder, shotsDir) {
       }
       return cache.get(k);
     },
-    async file(id) {
-      const e = index[String(id)];
+    async file(db, id) {
+      const e = index[shotKey(db, id)];
       if (!e) return null;
       const p = join(shotsDir, e.name);
       if (!existsSync(p)) return null;
@@ -121,7 +125,7 @@ async function main() {
     const t = (f) => NAME.exec(basename(f))?.[2] ?? "";
     if (t(o.ledger) < t(o.folder)) fail("the hourly backup must not be older than the nightly one");
     // The schema must be the same: the ledger and screenshot list come from the hourly backup.
-    for (const db of ["main", "ledger", "files"]) {
+    for (const db of ["main", "ledger", ...Object.keys(FILES_DBS)]) {
       if (JSON.stringify(manifest.databases[db]?.migrations) !== JSON.stringify(hourlyManifest.databases[db]?.migrations)) fail(`${db}: the two backups were made with different migrations`);
     }
   }
@@ -134,12 +138,16 @@ async function main() {
   let mf = null;
   try {
     log(`1. fresh local databases in ${work} (wrangler --local, migrations applied)`);
-    const { persistTo, config } = freshLocalD1(ROOT, work);
-    const local = await openLocalD1(ROOT, persistTo);
+    // Each files database in the backup goes into its own fresh database.
+    const filesDbs = [...new Set(order.filter((t) => t.db in FILES_DBS).map((t) => t.db))];
+    const bindings = ["DB", "LEDGER", ...filesDbs.map((d) => FILES_DBS[d])];
+    const { persistTo, config } = freshLocalD1(ROOT, work, bindings);
+    const local = await openLocalD1(ROOT, persistTo, bindings);
     mf = local.mf;
-    for (const [name, b] of [["main", local.DB], ["ledger", local.LEDGER], ["files", local.FILES]]) {
+    const filesManifest = hourlyManifest ?? manifest;
+    for (const [name, b, mf2] of [["main", local.DB, manifest], ["ledger", local.LEDGER, filesManifest], ...filesDbs.map((d) => [d, local[FILES_DBS[d]], filesManifest])]) {
       const have = (await b.prepare("SELECT name FROM d1_migrations ORDER BY id").all()).results.map((r) => r.name);
-      const want = manifest.databases[name]?.migrations;
+      const want = mf2.databases[name]?.migrations;
       if (want && JSON.stringify(have) !== JSON.stringify(want)) {
         fail(`${name}: the backup was made with migrations ${want.join(", ")}; this checkout has ${have.join(", ")}. Check out the matching commit.`);
       }
@@ -152,43 +160,45 @@ async function main() {
       export { D1Driver } from "@src/db/driver";`);
     const targets = {
       main: new m.D1Driver(local.DB), ledger: new m.D1Driver(local.LEDGER),
-      files: manifest.databases.files?.configured === false ? null : new m.D1Driver(local.FILES),
+      files: Object.fromEntries(filesDbs.map((d) => [d, new m.D1Driver(local[FILES_DBS[d]])])),
     };
 
     log("2. loading the backup (one INSERT per row; one statement per screenshot, bytes bound as a BLOB)");
     const load = await m.loadBackup(targets, src, (l) => log(`   ${l}`));
-    log(`   screenshots: ${load.files} restored, ${load.file_bytes} bytes`);
-    for (const p of load.file_problems) fail(`screenshot ${p.id}: ${p.problem}`);
+    log(`   screenshots: ${load.files} restored (${load.file_bytes} bytes) into ${filesDbs.length} files database(s); purged by retention: ${load.purged_restored} restored from Drive, ${load.purged_without_bytes} never copied (restored as purged)`);
+    for (const p of load.file_problems) fail(`screenshot ${p.db}:${p.id}: ${p.problem}`);
 
     log("3. reading everything back and comparing with the backup");
     const cmp = await m.compareRestore(targets, src);
     for (const [k, v] of Object.entries(cmp.tables)) {
       if (v.different) fail(`${k}: ${v.different} row(s) differ (backup ${v.backup}, restored ${v.restored})`);
     }
-    log(`   ${Object.keys(cmp.tables).length} tables identical; ${cmp.blobs_checked} screenshot(s) hashed after the restore, ${cmp.blob_mismatches.length} mismatch(es)`);
+    log(`   ${Object.keys(cmp.tables).length} tables identical; ${cmp.blobs_checked} screenshot(s) hashed after the restore, ${cmp.blob_mismatches.length} mismatch(es); ${cmp.purged} purged (no bytes, tombstone restored)`);
     for (const id of cmp.blob_mismatches) fail(`screenshot ${id}: restored bytes hash differently`);
 
     // Screenshots referenced by tickets but not in the backup (a sign-up during the backup run).
-    const fileIds = new Set((await src.rows("files", "files")).map((f) => Number(f.id)));
-    const missing = (await src.rows("main", "tickets")).filter((t) => t.screenshot_key && !fileIds.has(Number(String(t.screenshot_key).split(":")[1])));
+    const fileIds = new Set();
+    for (const d of filesDbs) for (const f of await src.rows(d, "files")) fileIds.add(`${d}:${f.id}`);
+    const keyOf = (k) => { const x = /^(?:f([1-4]):|1:)?(\d+)$/.exec(String(k)); return x ? `${x[1] && x[1] !== "1" ? `files_${x[1]}` : "files"}:${x[2]}` : null; };
+    const missing = (await src.rows("main", "tickets")).filter((t) => t.screenshot_key && !fileIds.has(keyOf(t.screenshot_key)));
     if (missing.length) log(`   note: ${missing.length} ticket(s) refer to a screenshot newer than this backup's file list`);
 
-    // Independent check through wrangler itself: the largest screenshot, hashed from wrangler's own output.
-    if (targets.files) {
-      const big = await local.FILES.prepare("SELECT id, size FROM files ORDER BY size DESC LIMIT 1").first();
-      if (big) {
-        // hex() of the whole BLOB would be over SQLite's 2 MB string limit in D1 (SQLITE_TOOBIG): read it in 500 KB slices.
-        const hash = createHash("sha256");
-        for (let at = 1; at <= Number(big.size); at += 500_000) {
-          const out = npx(ROOT, ["wrangler", "d1", "execute", "FILES", "--local", "--persist-to", persistTo, "-c", config, "--json",
-            "--command", `SELECT hex(substr(bytes, ${at}, 500000)) AS h FROM files WHERE id = ${Number(big.id)}`]);
-          hash.update(Buffer.from(JSON.parse(out.slice(out.search(/^\[\s*$/m)))[0].results[0].h, "hex"));
-        }
-        const sha = hash.digest("hex");
-        const want = (await src.file(Number(big.id)))?.sha256;
-        if (sha !== want) fail(`screenshot ${big.id} (${big.size} bytes): wrangler reads different bytes`);
-        else log(`   largest screenshot (${big.size} bytes) read back through wrangler: SHA-256 identical`);
+    // Independent check through wrangler itself: each database's largest screenshot, hashed from wrangler's own output.
+    for (const d of filesDbs) {
+      const binding = FILES_DBS[d];
+      const big = await local[binding].prepare("SELECT id, size FROM files WHERE length(bytes) > 0 ORDER BY size DESC LIMIT 1").first();
+      if (!big) continue;
+      // hex() of the whole BLOB would be over SQLite's 2 MB string limit in D1 (SQLITE_TOOBIG): read it in 500 KB slices.
+      const hash = createHash("sha256");
+      for (let at = 1; at <= Number(big.size); at += 500_000) {
+        const out = npx(ROOT, ["wrangler", "d1", "execute", binding, "--local", "--persist-to", persistTo, "-c", config, "--json",
+          "--command", `SELECT hex(substr(bytes, ${at}, 500000)) AS h FROM files WHERE id = ${Number(big.id)}`]);
+        hash.update(Buffer.from(JSON.parse(out.slice(out.search(/^\[\s*$/m)))[0].results[0].h, "hex"));
       }
+      const sha = hash.digest("hex");
+      const want = (await src.file(d, Number(big.id)))?.sha256;
+      if (sha !== want) fail(`screenshot ${d}:${big.id} (${big.size} bytes): wrangler reads different bytes`);
+      else log(`   ${d}: largest screenshot (${big.size} bytes) read back through wrangler: SHA-256 identical`);
     }
 
     log("4. recovery engine (src/recovery): restored database against the restored change log");
@@ -201,7 +211,8 @@ async function main() {
     if (!after.ok) for (const x of after.mismatches.slice(0, 20)) fail(`after replay: ${x.entity} ${x.id} ${x.problem}`);
     log(`   verify after replay: ${after.ok ? "OK, every row matches the change log" : `${after.mismatches.length} mismatch(es)`}`);
     if (r.holds.length) log("   (holds are what a controlled recovery would put on hold for the owner; the drill reports them, it does not fail on them)");
-    if (o.json) writeFileSync(o.json, JSON.stringify({ applied: r.applied, holds: r.holds.length, verify_before: before.mismatches.length, verify_after_ok: after.ok }));
+    if (o.json) writeFileSync(o.json, JSON.stringify({ applied: r.applied, holds: r.holds.length, verify_before: before.mismatches.length, verify_after_ok: after.ok,
+      files_dbs: filesDbs, files: load.files, purged_restored: load.purged_restored, purged_without_bytes: load.purged_without_bytes, blobs_checked: cmp.blobs_checked }));
   } finally {
     if (mf) await mf.dispose();
     if (o.keep) log(`kept: ${work}`);
