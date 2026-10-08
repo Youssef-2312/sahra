@@ -318,3 +318,23 @@ details > summary::-webkit-details-marker { display: none; }
   .verdict .lines { font-size: 1.8rem; }
   .qr-box { max-width: 26rem; }
 }
+
+/* Approval queue (piece 7): one card per request, the main action obvious. */
+.tabs { display: flex; gap: 8px; margin: var(--gap) 0; overflow-x: auto; }
+.tabs button { flex: none; min-height: 40px; padding: 6px 16px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--text); font: inherit; font-weight: 600; cursor: pointer; }
+.tabs button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+.req { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 16px; margin: 12px 0; }
+.req .head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+.req .who { font-weight: 700; font-size: 1.1rem; overflow-wrap: anywhere; }
+.req .shot img { display: block; width: 100%; max-height: 70vh; object-fit: contain; border-radius: 12px; background: #000; margin-top: 10px; }
+.req .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; }
+.req .actions .btn + .btn { margin-top: 0; }
+.req .actions .main { grid-column: 1 / -1; }
+.req .check input { width: 22px; height: 22px; }
+.req.done { opacity: 0.7; }
+.bulkbar { position: sticky; bottom: 0; background: var(--bg); border-top: 1px solid var(--line); padding: 12px 0; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+@media (min-width: 900px) {
+  .reqs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+  .reqs .req { margin: 0; }
+  .req .actions .btn { width: 100%; min-width: 0; }
+}

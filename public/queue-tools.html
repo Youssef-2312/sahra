@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Sahra approvals</title></head>
+<body>
+<header><span id="account"><a href="/">Sign in</a></span> | <a href="https://nova.example/" id="nova" rel="noopener">Made by Nova</a></header>
+<main>
+<h1>Queue tools (old test page)</h1>
+<p><a href="/dashboard.html">Dashboard</a> | <a href="/guests.html">Find a guest</a></p>
+<p>Show <select id="status"><option>pending</option><option>approved</option><option>rejected</option><option>cancelled</option></select>
+ <button id="reload" type="button">Reload</button></p>
+<table id="list"><thead><tr><th></th><th>Name</th><th>Email</th><th>People</th><th>Type</th><th>Answers</th><th>Status</th><th>Screenshot</th></tr></thead><tbody></tbody></table>
+<p><button id="more" type="button" hidden>More</button></p>
+<p>Selected (up to 20):
+ <button id="approve" type="button">Approve</button>
+ <button id="reject" type="button">Reject</button> reason <input id="reason" maxlength="300">
+ <button id="release" type="button">Send QR</button></p>
+<p><img id="zoom" alt="" hidden></p>
+<p id="zoom-note"></p>
+
+<h2>Old pending requests</h2>
+<form id="stale">Reject every pending request older than <input name="hours" type="number" min="1" max="720" value="72" required> hours,
+ reason (shown to the guests) <input name="reason" maxlength="300" required size="40"> <button>Reject them</button></form>
+
+<h2>One ticket</h2>
+<form id="one"><input name="id" placeholder="ticket id" required size="18">
+<select name="action"><option value="cancel">cancel</option><option value="reissue">reissue</option><option value="transfer">name transfer</option></select>
+ new name <input name="name" maxlength="80"> new email <input name="email" type="email"> <button>Apply</button></form>
+
+<h2>Sign-up form</h2>
+<p>Questions and screenshot rule (JSON). Guests sign up at <code>/signup.html?party=<span id="party-id"></span></code>.</p>
+<textarea id="form" rows="10" cols="80"></textarea><br><button id="save-form" type="button">Save form</button>
+
+<h2>Export</h2>
+<button id="export" type="button">Download guest list (CSV)</button>
+<pre id="out" role="status"></pre>
+</main>
+<script src="/js/common.js"></script>
+<script src="/js/queue-tools.js"></script>
+</body>
+</html>
