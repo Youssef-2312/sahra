@@ -65,13 +65,25 @@ testingRoutes.post("/door-invite", requireAuth(["owner", "admin", "door"]), asyn
 testingRoutes.get("/ledger-check", requireAuth(["owner", "admin", "door"]), async (c) => {
   const p = c.var.auth.info.party_id;
   const main = c.var.db.driver;
-  const [admitted, outcomes, used, records] = await Promise.all([
+  const [admitted, outcomes, used, records, ticketLog, ticketRows] = await Promise.all([
     main.all<{ ticket_id: string; ticket_rev: number }>(sql`SELECT ticket_id, ticket_rev FROM scans WHERE party_id = ${p} AND outcome = 'admitted'`),
     main.all<{ outcome: string; n: number }>(sql`SELECT outcome, COUNT(*) AS n FROM scans WHERE party_id = ${p} GROUP BY outcome`),
     main.all<{ n: number }>(sql`SELECT COUNT(*) AS n FROM tickets WHERE party_id = ${p} AND used_scan_id IS NOT NULL`),
     c.var.ledgerDriver.all<{ entity_id: string; rev: number }>(
       sql`SELECT entity_id, rev FROM change_log WHERE party_id = ${p} AND entity = 'ticket' AND action = 'admitted'`),
+    c.var.ledgerDriver.all<{ entity_id: string; rev: number; used: number }>(
+      sql`SELECT entity_id, rev, json_extract(state, '$.used_scan_id') IS NOT NULL AS used FROM change_log WHERE party_id = ${p} AND entity = 'ticket'`),
+    main.all<{ id: string; used: number }>(sql`SELECT id, used_scan_id IS NOT NULL AS used FROM tickets WHERE party_id = ${p}`),
   ]);
+  // After a controlled recovery: a ticket whose newest change-log state is "used"
+  // must be used in the database too (nothing reopens).
+  const newest = new Map<string, { rev: number; used: number }>();
+  for (const e of ticketLog.results) {
+    const cur = newest.get(e.entity_id);
+    if (!cur || e.rev > cur.rev) newest.set(e.entity_id, { rev: e.rev, used: e.used });
+  }
+  const usedNow = new Map(ticketRows.results.map((t) => [t.id, t.used]));
+  const reopened = [...newest].filter(([id, e]) => e.used === 1 && usedNow.get(id) !== 1).map(([id]) => id);
   const recordKeys = new Set(records.results.map((r) => `${r.entity_id}:${r.rev}`));
   const admittedKeys = new Set(admitted.results.map((a) => `${a.ticket_id}:${a.ticket_rev}`));
   const missing = admitted.results.filter((a) => !recordKeys.has(`${a.ticket_id}:${a.ticket_rev}`));
@@ -84,8 +96,11 @@ testingRoutes.get("/ledger-check", requireAuth(["owner", "admin", "door"]), asyn
     ledger_records: records.results.length,
     missing: missing.length,
     orphan: orphan.length,
-    examples: { missing: missing.slice(0, 10), orphan: orphan.slice(0, 10) },
+    reopened: reopened.length,
+    examples: { missing: missing.slice(0, 10), orphan: orphan.slice(0, 10), reopened: reopened.slice(0, 10) },
     ok: missing.length === 0 && orphan.length === 0 && admitted.results.length === records.results.length,
+    // Scan rows newer than a restore point are gone after a recovery (orphans are expected then); this must stay 0.
+    nothing_reopened: reopened.length === 0,
   });
 });
 

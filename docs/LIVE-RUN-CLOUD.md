@@ -35,3 +35,16 @@ staging-only endpoints that the Worker itself serves (404 in production):
   revokes every door invitation and ends every door session of the party, writes
   the change log for every revoked invitation (also any earlier one not yet
   recorded), and ends its own session last.
+
+## Recovery rehearsal (Checkpoint C, docs/SETUP.md part E)
+
+```sh
+node scripts/live-check.mjs --invite "<link 1>" --save before.json   # report the time it prints
+node scripts/live-check.mjs --invite "<link 2>" --save after.json
+# ... the owner runs setup.bat step 20 (restore to the time from link 1) ...
+node -e 'const f=require("fs");const a=JSON.parse(f.readFileSync("before.json"));const b=JSON.parse(f.readFileSync("after.json"));f.writeFileSync("all.json",JSON.stringify({tickets:[...a.tickets,...b.tickets]}))'
+node scripts/live-check.mjs --invite "<link 3>" --verify-used all.json
+```
+
+Every saved ticket must say "used" and the ledger check must report
+`nothing_reopened`. The saved files hold staging test codes only; never commit them.
