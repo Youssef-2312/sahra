@@ -5,12 +5,13 @@
 import { applyD1Migrations, env } from "cloudflare:test";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { canonical, signedHeaders, SIG_HEADER, TIME_HEADER } from "../src/backup/auth";
-import { EXCLUDED, EXPORTED, INTERNAL_TABLE, PAGE_MAX, schedule } from "../src/backup/export";
+import { EXCLUDED, EXPORTED, INTERNAL_TABLE, PAGE_MAX, schedule, tablesFor } from "../src/backup/export";
+import { BUDGET_STOP_AT } from "../src/limits";
 import { compareRestore, loadBackup, sha256hexBytes } from "../src/backup/restore";
 import { D1Driver, type SqlDriver } from "../src/db/driver";
 import { newId } from "../src/lib/crypto";
 import { flushAll, replay, verify } from "../src/recovery";
-import { api, backupGet, exportAll, guestParty, harness, JPEG, openParty, ORIGIN, scan, seedDoor, signup, testTickets, type Harness } from "./helpers";
+import { api, backupGet, backupPost, exportAll, guestParty, harness, JPEG, openParty, ORIGIN, scan, seedDoor, signup, testTickets, type Harness } from "./helpers";
 
 let logs: string[] = [];
 beforeEach(() => {
@@ -288,7 +289,7 @@ describe("schedule", () => {
   const now = Date.UTC(2026, 9, 10, 12);
   const fake = (parties: Record<string, unknown>[], lastAudit: number | null): SqlDriver => ({
     usage: { rows_read: 0, rows_written: 0, queries: 0 },
-    all: async (q) => ({ results: (q.text.includes("FROM parties") ? parties : lastAudit === null ? [] : [{ at: lastAudit }]) as never[], meta: { changes: 0, rows_read: 0, rows_written: 0 } }),
+    all: async (q) => ({ results: (q.text.includes("health_state") ? [{ ok: 1 }] : q.text.includes("FROM parties") ? parties : lastAudit === null ? [] : [{ at: lastAudit }]) as never[], meta: { changes: 0, rows_read: 0, rows_written: 0 } }),
     batch: async () => { throw new Error("read-only"); },
   });
   const party = (o: Record<string, unknown> = {}) => ({ id: "p", admission_state: "paused", starts_at: null, ends_at: null, disabled_at: null, ...o });
@@ -302,19 +303,31 @@ describe("schedule", () => {
     expect((await schedule(fake([party({ starts_at: now + 13 * HOUR })], now - 30 * HOUR), now)).frequency).toBe("nightly");
     // Selling: a party that is not over, and a change in the last 24 hours.
     const s = await schedule(fake([party({ starts_at: now + 10 * 24 * HOUR })], now - 2 * HOUR), now);
-    expect(s).toEqual({ frequency: "hourly", reasons: ["selling: changes in the last 24 hours"] });
+    expect(s).toEqual({ frequency: "hourly", reasons: ["selling: changes in the last 24 hours"], budget_ok: true });
     expect((await schedule(fake([party({ starts_at: now - 10 * 24 * HOUR })], now - 2 * HOUR), now)).frequency).toBe("nightly");
     // A switched-off party never makes it hourly.
     expect((await schedule(fake([party({ admission_state: "open", disabled_at: 1 })], now - HOUR), now)).frequency).toBe("nightly");
   });
 
-  it("the endpoint reads the parties and one audit row", async () => {
+  it("the endpoint reads the parties, one audit row and the health row", async () => {
     logs = [];
     const r = (await (await backupGet(h, "/api/backup/schedule")).json()) as { frequency: string; reasons: string[] };
     expect(r.frequency).toBe("hourly");
     expect(r.reasons.some((x) => x.startsWith("admission open"))).toBe(true);
     const parties = Number(await env.DB.prepare("SELECT COUNT(*) AS n FROM parties").first("n"));
-    expect(Number(parsed("backup").at(-1)!.main_rows_read)).toBeLessThanOrEqual(parties + 1);
+    expect(Number(parsed("backup").at(-1)!.main_rows_read)).toBeLessThanOrEqual(parties + 2);
+  });
+
+  it("says when workstream F's daily budget stops non-essential work (the script then skips hourly backups)", async () => {
+    const day = Math.floor(h.clock.now() / 86_400_000);
+    const get = async () => ((await (await backupGet(h, "/api/backup/schedule")).json()) as { budget_ok: boolean }).budget_ok;
+    expect(await get()).toBe(true);
+    await env.DB.prepare("UPDATE health_state SET usage_day = ?, usage_est = ? WHERE id = 'main'").bind(day, BUDGET_STOP_AT).run();
+    expect(await get()).toBe(false);
+    // Yesterday's estimate does not count.
+    await env.DB.prepare("UPDATE health_state SET usage_day = ? WHERE id = 'main'").bind(day - 1).run();
+    expect(await get()).toBe(true);
+    await env.DB.prepare("UPDATE health_state SET usage_day = 0, usage_est = 0 WHERE id = 'main'").run();
   });
 });
 
@@ -383,4 +396,78 @@ describe("export -> restore into fresh databases", () => {
     const used = await env.RESTORE_MAIN.prepare("SELECT used_at FROM tickets WHERE id = ?").bind(tk!.id).first("used_at");
     expect(used).not.toBeNull();
   }, 30_000);
+});
+
+describe("hourly backups: ledger and screenshot list only", () => {
+  it("the manifest for an hourly backup lists the screenshot list and the ledger, never the main tables", async () => {
+    const m = (await (await backupGet(h, "/api/backup/manifest?kind=hourly")).json()) as { kind: string; order: { db: string; table: string }[] };
+    expect(m.kind).toBe("hourly");
+    expect(m.order.map((o) => `${o.db}.${o.table}`)).toEqual(["files.files", "ledger.party_control", "ledger.intents", "ledger.change_log"]);
+    expect(tablesFor("nightly")).toEqual(EXPORTED);
+  });
+});
+
+describe("POST /api/backup/done", () => {
+  const folderAt = (ms: number, prefix = "sahra-backup-") => `${prefix}${new Date(ms).toISOString().slice(0, 13)}${new Date(ms).toISOString().slice(14, 16)}Z`;
+  const good = (o: Record<string, unknown> = {}) => ({ kind: "nightly", folder: folderAt(h.clock.now() - 20 * 60_000), rows: 44060, files: 4000, bytes: 812345678, ...o });
+  const state = () => env.DB.prepare("SELECT last_backup_at, last_backup_note FROM health_state WHERE id = 'main'").first<{ last_backup_at: number | null; last_backup_note: string | null }>();
+
+  it("records a verified backup: one row written, the backup's start time from the signed folder name", async () => {
+    await env.DB.prepare("UPDATE health_state SET last_backup_at = NULL, last_backup_note = NULL WHERE id = 'main'").run();
+    logs = [];
+    const body = good();
+    const r = await backupPost(h, "/api/backup/done", body);
+    expect(r.status).toBe(200);
+    const at = Math.floor((h.clock.now() - 20 * 60_000) / 60_000) * 60_000;
+    expect(await r.json()).toEqual({ recorded: true, last_backup_at: at });
+    expect(await state()).toEqual({ last_backup_at: at, last_backup_note: `nightly ${body.folder}: 44060 rows, 4000 screenshots (812345678 bytes)` });
+    const req = parsed("req").at(-1)!;
+    expect(req.rows_written).toBe(1);
+    expect(req.ledger_rows_written).toBe(0);
+    // An hourly (ledger) backup later moves it forward; an older report never moves it back.
+    const later = folderAt(h.clock.now() - 5 * 60_000, "sahra-ledger-");
+    expect((await backupPost(h, "/api/backup/done", good({ kind: "hourly", folder: later }))).status).toBe(200);
+    expect((await state())!.last_backup_note).toMatch(/^hourly sahra-ledger-/);
+    const older = (await (await backupPost(h, "/api/backup/done", good({ folder: folderAt(h.clock.now() - 3600_000) }))).json()) as { recorded: boolean };
+    expect(older.recorded).toBe(false);
+    expect((await state())!.last_backup_note).toMatch(/^hourly sahra-ledger-/);
+  });
+
+  it("strict: wrong fields, kinds, folder names, numbers or times are refused, writing nothing", async () => {
+    const bad: Record<string, unknown>[] = [
+      good({ extra: 1 }), { kind: "nightly", folder: good().folder, rows: 1, files: 1 }, good({ kind: "weekly" }),
+      good({ kind: "hourly" }), good({ folder: "sahra-backup-2026-13-01T0000Z" }), good({ folder: "sahra-backup-2026-02-30T0000Z" }),
+      good({ folder: "../sahra-backup-2026-10-01T0000Z" }), good({ folder: "x".repeat(40) }), good({ rows: -1 }), good({ files: 1.5 }),
+      good({ bytes: "12" }), good({ rows: 2e9 }), good({ folder: folderAt(h.clock.now() + 3600_000) }), good({ folder: folderAt(h.clock.now() - 4 * 86_400_000) }),
+    ];
+    const before = await state();
+    logs = [];
+    for (const b of bad) {
+      const r = await backupPost(h, "/api/backup/done", b);
+      expect(r.status, JSON.stringify(b)).toBe(400);
+    }
+    expect((await backupPost(h, "/api/backup/done", good(), { contentType: "text/plain" })).status).toBe(400);
+    expect((await backupPost(h, "/api/backup/done", { ...good(), pad: "x".repeat(2000) })).status).toBe(413);
+    for (const r of parsed("req")) expect(r.rows_written).toBe(0);
+    expect(await state()).toEqual(before);
+  });
+
+  it("signature covers the body and the method; unsigned, wrong key, or no BACKUP_KEY: nothing written", async () => {
+    const before = await state();
+    const body = JSON.stringify(good({ folder: folderAt(h.clock.now() - 60_000) }));
+    const hd = await signedHeaders(env.BACKUP_KEY!, "POST", `${ORIGIN}/api/backup/done`, h.clock.now(), body);
+    const post = (headers: Record<string, string>, b = body) => h.req("/api/backup/done", { method: "POST", body: b, headers: { "content-type": "application/json", ...headers } });
+    // The body changed after signing.
+    expect((await post(hd, body.replace("44060", "44061"))).status).toBe(401);
+    // A GET signature for the same path.
+    expect((await post(await signedHeaders(env.BACKUP_KEY!, "GET", `${ORIGIN}/api/backup/done`, h.clock.now()))).status).toBe(401);
+    expect((await post({})).status).toBe(401);
+    expect((await post(await signedHeaders("b3RoZXIta2V5LW90aGVyLWtleS1vdGhlci1rZXktb3RoZXI", "POST", `${ORIGIN}/api/backup/done`, h.clock.now(), body))).status).toBe(401);
+    expect((await backupPost(h, "/api/backup/done", good(), { at: h.clock.now() - 6 * 60_000 })).status).toBe(401);
+    const h2 = await harness({ env: { BACKUP_KEY: undefined } });
+    expect((await backupPost(h2, "/api/backup/done", good(), { key: env.BACKUP_KEY! })).status).toBe(503);
+    expect(await state()).toEqual(before);
+    // The correctly signed one goes through.
+    expect((await post(hd)).status).toBe(200);
+  });
 });

@@ -3,9 +3,13 @@
 // database, identical bytes"). Takes one backup folder downloaded from Google
 // Drive and restores it into FRESH LOCAL databases; never touches Cloudflare.
 //
-//   node scripts/restore-drill.mjs <backup-folder> [--screenshots <dir>] [--keep] [--allow-incomplete]
+//   node scripts/restore-drill.mjs <backup-folder> [--ledger <hourly-folder>] [--screenshots <dir>] [--keep] [--allow-incomplete]
 //
-//   <backup-folder>   a "sahra-backup-YYYY-MM-DDTHHmmZ" folder from Drive (download it whole)
+//   <backup-folder>   a nightly "sahra-backup-YYYY-MM-DDTHHmmZ" folder from Drive (download it whole)
+//   --ledger          a later hourly "sahra-ledger-..." folder: its change log, intents, control
+//                     objects and screenshot list replace the nightly's, and the replay brings
+//                     every change made after the nightly into the restored main database
+//                     (this is how a restore from Drive is done: newest nightly + newest hourly)
 //   --screenshots     the Drive "screenshots" folder (default: next to the backup folder)
 //   --keep            keep the local databases (the path is printed) instead of deleting them
 //
@@ -20,7 +24,7 @@
 // Exit code 0 only if every check passed.
 
 import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -29,19 +33,32 @@ import { freshLocalD1, loadModules, npx, openLocalD1 } from "./lib/local-d1.mjs"
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const PART = /^(main|ledger|files)\.([a-z_]+)\.(\d{4})\.json\.gz$/;
+const NAME = /sahra-(backup|ledger)-(\d{4}-\d{2}-\d{2}T\d{4}Z)/;
 
 function args() {
   const [folder, ...rest] = process.argv.slice(2);
   if (!folder || folder.startsWith("--")) throw new Error("usage: restore-drill.mjs <backup-folder> [--screenshots <dir>] [--keep] [--allow-incomplete]");
-  const o = { folder: resolve(folder), keep: false, allowIncomplete: false, screenshots: null };
+  const o = { folder: resolve(folder), keep: false, allowIncomplete: false, screenshots: null, ledger: null };
   for (let i = 0; i < rest.length; i++) {
     if (rest[i] === "--keep") o.keep = true;
     else if (rest[i] === "--allow-incomplete") o.allowIncomplete = true;
     else if (rest[i] === "--screenshots") o.screenshots = resolve(rest[++i]);
+    else if (rest[i] === "--ledger") o.ledger = resolve(rest[++i]);
+    else if (rest[i] === "--json") o.json = resolve(rest[++i]);
     else throw new Error(`unknown option ${rest[i]}`);
   }
   o.screenshots ??= join(dirname(o.folder), "screenshots");
   return o;
+}
+
+/** A nightly backup, optionally with a later hourly one supplying the ledger and the screenshot list. */
+function mixedSource(base, hourly) {
+  if (!hourly) return base;
+  return {
+    tables: [...new Set([...base.tables.filter((t) => t.startsWith("main.")), ...hourly.tables])],
+    rows: (db, table) => (db === "main" ? base : hourly).rows(db, table),
+    file: async (id) => (await hourly.file(id)) ?? base.file(id),
+  };
 }
 
 /** The backup as the restore module reads it (src/backup/restore.ts BackupSource). */
@@ -82,19 +99,36 @@ async function main() {
   const problems = [];
   const fail = (s) => { problems.push(s); log(`  PROBLEM: ${s}`); };
 
-  log(`Restore drill: ${o.folder}`);
-  const manifest = JSON.parse(readFileSync(join(o.folder, "manifest.json"), "utf8"));
-  const summaryPath = join(o.folder, "summary.json");
-  if (!existsSync(summaryPath)) {
-    if (!o.allowIncomplete) throw new Error("no summary.json: this backup did not finish (use --allow-incomplete to try anyway)");
-    log("  (incomplete backup: no summary.json)");
-  } else {
-    const s = JSON.parse(readFileSync(summaryPath, "utf8"));
-    log(`  backup ${s.backup}, ${s.frequency}, finished ${s.finished_at}; measured sizes main ${s.database_size_bytes.main} B, ledger ${s.database_size_bytes.ledger} B, files ${s.database_size_bytes.files} B`);
-    if (!s.ok) fail("the backup's own summary reports problems");
+  log(`Restore drill: ${o.folder}${o.ledger ? `\n  with the later hourly backup ${o.ledger}` : ""}`);
+  const readBackup = (folder, want) => {
+    const manifest = JSON.parse(readFileSync(join(folder, "manifest.json"), "utf8"));
+    const kind = manifest.kind ?? "nightly";
+    if (kind !== want) throw new Error(`${basename(folder)} is a ${kind} backup; expected ${want}${want === "nightly" ? " (the base must be a full sahra-backup-... folder)" : ""}`);
+    const summaryPath = join(folder, "summary.json");
+    if (!existsSync(summaryPath)) {
+      if (!o.allowIncomplete) throw new Error(`${basename(folder)} has no summary.json: this backup did not finish (use --allow-incomplete to try anyway)`);
+      log(`  (incomplete backup: no summary.json in ${basename(folder)})`);
+    } else {
+      const s = JSON.parse(readFileSync(summaryPath, "utf8"));
+      log(`  ${s.backup}, ${s.kind}, finished ${s.finished_at}; measured sizes main ${s.database_size_bytes.main} B, ledger ${s.database_size_bytes.ledger} B, files ${s.database_size_bytes.files} B`);
+      if (!s.ok) fail(`${basename(folder)}: the backup's own summary reports problems`);
+    }
+    return manifest;
+  };
+  const manifest = readBackup(o.folder, "nightly");
+  const hourlyManifest = o.ledger ? readBackup(o.ledger, "hourly") : null;
+  if (hourlyManifest) {
+    const t = (f) => NAME.exec(basename(f))?.[2] ?? "";
+    if (t(o.ledger) < t(o.folder)) fail("the hourly backup must not be older than the nightly one");
+    // The schema must be the same: the ledger and screenshot list come from the hourly backup.
+    for (const db of ["main", "ledger", "files"]) {
+      if (JSON.stringify(manifest.databases[db]?.migrations) !== JSON.stringify(hourlyManifest.databases[db]?.migrations)) fail(`${db}: the two backups were made with different migrations`);
+    }
   }
-  const src = backupSource(o.folder, o.screenshots);
-  for (const t of manifest.order) if (!src.tables.includes(`${t.db}.${t.table}`)) fail(`no part file for ${t.db}.${t.table}`);
+  const nightlySrc = backupSource(o.folder, o.screenshots);
+  const src = mixedSource(nightlySrc, o.ledger ? backupSource(o.ledger, o.screenshots) : null);
+  const order = [...manifest.order.filter((t) => !hourlyManifest || t.db === "main"), ...(hourlyManifest?.order ?? [])];
+  for (const t of order) if (!src.tables.includes(`${t.db}.${t.table}`)) fail(`no part file for ${t.db}.${t.table}`);
 
   const work = mkdtempSync(join(tmpdir(), "sahra-restore-drill-"));
   let mf = null;
@@ -167,6 +201,7 @@ async function main() {
     if (!after.ok) for (const x of after.mismatches.slice(0, 20)) fail(`after replay: ${x.entity} ${x.id} ${x.problem}`);
     log(`   verify after replay: ${after.ok ? "OK, every row matches the change log" : `${after.mismatches.length} mismatch(es)`}`);
     if (r.holds.length) log("   (holds are what a controlled recovery would put on hold for the owner; the drill reports them, it does not fail on them)");
+    if (o.json) writeFileSync(o.json, JSON.stringify({ applied: r.applied, holds: r.holds.length, verify_before: before.mismatches.length, verify_after_ok: after.ok }));
   } finally {
     if (mf) await mf.dispose();
     if (o.keep) log(`kept: ${work}`);

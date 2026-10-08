@@ -11,6 +11,7 @@
 
 import type { SqlDriver } from "../db/driver";
 import { sql, raw, join, type Sql } from "../db/sql";
+import { budgetOk } from "../limits";
 
 export type BackupDb = "main" | "ledger" | "files";
 
@@ -60,6 +61,18 @@ export const EXCLUDED: readonly { db: BackupDb; table: string; reason: string }[
 
 /** D1's and SQLite's own tables, never ours. */
 export const INTERNAL_TABLE = /^(_cf_|sqlite_)/;
+
+/**
+ * Nightly: everything. Hourly: what the recovery replay needs and what cannot be
+ * rebuilt, i.e. the ledger (change log, intents, control objects) and the
+ * screenshot list (the script then copies only screenshots it does not have).
+ * A restore from Drive = the newest nightly's main tables + the newest hourly's
+ * ledger and screenshots, then replay (newest rev per entity wins).
+ */
+export type BackupKind = "nightly" | "hourly";
+export function tablesFor(kind: BackupKind): readonly TableSpec[] {
+  return kind === "hourly" ? EXPORTED.filter((t) => t.db !== "main") : EXPORTED;
+}
 
 export function specOf(db: string, table: string): TableSpec | null {
   return EXPORTED.find((t) => t.db === db && t.table === table) ?? null;
@@ -186,9 +199,10 @@ export const RECENT_MS = 24 * HOUR;
  * otherwise (brief section 9). Reads the parties table (small) and one audit row.
  * "Selling" is approximated without reading tickets: the newest audit row (every
  * sign-up, approval and change writes one) is under 24 hours old and some party
- * is neither switched off nor over.
+ * is neither switched off nor over. Also reads health_state (one row) for the
+ * daily budget.
  */
-export async function schedule(d: SqlDriver, now: number): Promise<{ frequency: Frequency; reasons: string[] }> {
+export async function schedule(d: SqlDriver, now: number): Promise<{ frequency: Frequency; reasons: string[]; budget_ok: boolean }> {
   const parties = (await d.all<{ id: string; admission_state: string; starts_at: number | null; ends_at: number | null; disabled_at: number | null }>(
     sql`SELECT id, admission_state, starts_at, ends_at, disabled_at FROM parties`)).results;
   const last = (await d.all<{ at: number }>(sql`SELECT at FROM audit ORDER BY id DESC LIMIT 1`)).results[0]?.at ?? null;
@@ -204,5 +218,9 @@ export async function schedule(d: SqlDriver, now: number): Promise<{ frequency: 
     return end === null || end > now;
   });
   if (notOver && last !== null && now - last < RECENT_MS) reasons.push("selling: changes in the last 24 hours");
-  return { frequency: reasons.length ? "hourly" : "nightly", reasons: reasons.slice(0, 20) };
+  // Workstream F's daily budget (src/limits): past about half of the day's rows
+  // written, non-essential work stops. Hourly backups are skipped then; the
+  // nightly one never is.
+  const budget = (await d.all<{ ok: number }>(sql`SELECT ${budgetOk(now)} AS ok`)).results[0];
+  return { frequency: reasons.length ? "hourly" : "nightly", reasons: reasons.slice(0, 20), budget_ok: Number(budget?.ok ?? 0) === 1 };
 }

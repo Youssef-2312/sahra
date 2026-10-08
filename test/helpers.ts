@@ -485,6 +485,14 @@ export async function backupGet(h: Harness, path: string, o: { key?: string; at?
   return h.req(path, { headers });
 }
 
+/** A POST signed with BACKUP_KEY (the signature covers the body). */
+export async function backupPost(h: Harness, path: string, body: unknown, o: { key?: string; at?: number; contentType?: string } = {}) {
+  const { signedHeaders } = await import("../src/backup/auth");
+  const text = JSON.stringify(body);
+  const headers = { ...(await signedHeaders(o.key ?? env.BACKUP_KEY!, "POST", `${ORIGIN}${path}`, o.at ?? h.clock.now(), text)), "content-type": o.contentType ?? "application/json" };
+  return h.req(path, { method: "POST", body: text, headers });
+}
+
 type BackupRow = Record<string, unknown>;
 
 /**
@@ -492,9 +500,9 @@ type BackupRow = Record<string, unknown>;
  * page (ledger last), then every screenshot, checking each file's SHA-256 and
  * size header against the bytes received. Returns an in-memory backup.
  */
-export async function exportAll(h: Harness, limit = 200) {
+export async function exportAll(h: Harness, limit = 200, o: { kind?: "nightly" | "hourly"; files?: boolean } = {}) {
   const { sha256hexBytes } = await import("../src/backup/restore");
-  const m = await backupGet(h, "/api/backup/manifest?counts=1");
+  const m = await backupGet(h, o.kind === "hourly" ? "/api/backup/manifest?kind=hourly" : "/api/backup/manifest?counts=1");
   if (m.status !== 200) throw new Error(`manifest ${m.status}`);
   const manifest = (await m.json()) as { order: { db: string; table: string }[]; databases: Record<string, unknown> };
   const tables = new Map<string, BackupRow[]>();
@@ -514,7 +522,7 @@ export async function exportAll(h: Harness, limit = 200) {
     tables.set(`${t.db}.${t.table}`, rows);
   }
   const files = new Map<number, { bytes: Uint8Array; sha256: string }>();
-  for (const f of tables.get("files.files") ?? []) {
+  for (const f of o.files === false ? [] : tables.get("files.files") ?? []) {
     const r = await backupGet(h, `/api/backup/file/${f.id}`);
     requests++;
     const bytes = new Uint8Array(await r.arrayBuffer());

@@ -9,11 +9,16 @@
 //   4. backup/apps-script/Code.gs itself, run in a simulation of Apps Script
 //      (scripts/lib/apps-script-sim.mjs) with a tiny time limit per run, so the
 //      backup needs many runs and resumes each time; Drive is a local folder
-//   5. a second backup after one more sign-up: only the new screenshot is copied
-//   6. scripts/restore-drill.mjs on that folder: fresh databases, identical rows,
-//      identical screenshot bytes, change log verified by src/recovery
+//      (the first backup is the nightly, full one); it reports to POST /api/backup/done
+//   5. changes after the nightly (admissions, a cancel, a new sign-up with its
+//      screenshot, an approval), then an HOURLY backup: ledger + screenshot list,
+//      only the new screenshot copied
+//   6. scripts/restore-drill.mjs: the nightly alone, then nightly + hourly
+//      (--ledger): fresh databases, identical rows and screenshot bytes, and the
+//      changes made after the nightly come back through the recovery replay
 //   7. the drill must FAIL on a backup whose screenshot copy was altered
-//   8. a wrong key: the run fails and the owner gets an alert email (simulated)
+//   8. past workstream F's daily budget the hourly backup is skipped, never the nightly
+//   9. a wrong key: the run fails and the owner gets an alert email (simulated)
 //
 //   node scripts/backup-e2e.mjs [--keep]
 
@@ -142,17 +147,22 @@ async function main() {
       return runs;
     };
     const logStart = workerLog.length;
-    const runs1 = runAll("backupNow");
+    const runs1 = runAll("hourly");
     // The simulated script blocks this thread while it runs; let the Worker's log lines arrive.
     await new Promise((ok) => setTimeout(ok, 500));
     const usage = workerLog.slice(logStart).filter((l) => l.startsWith('{"evt":"backup"')).map((l) => JSON.parse(l));
     const read = usage.reduce((a, x) => a + x.main_rows_read + x.ledger_rows_read + x.files_rows_read, 0);
-    check(usage.every((x) => x.rows_written === 0), `backup wrote nothing (${usage.length} requests, ${read} rows read in total)`);
+    const written = usage.reduce((a, x) => a + x.rows_written, 0);
+    check(usage.filter((x) => x.route !== "/api/backup/done").every((x) => x.rows_written === 0) && written === 1,
+      `the export wrote nothing; the final report wrote 1 row (${usage.length} requests, ${read} rows read in total)`);
     check(runs1 > 1, `first backup finished after ${runs1} runs (resumed from Script Properties)`);
     check(!sim.triggers.some((t) => t.handler === "continueBackup"), "no continuation trigger left");
     const folders = () => readdirSync(drive).filter((n) => n.startsWith("sahra-backup-")).sort();
     const first = folders();
-    check(first.length === 1, `one dated folder: ${first[0]}`);
+    check(first.length === 1, `one nightly (full) folder: ${first[0]}`);
+    const health = () => DB.prepare("SELECT last_backup_at, last_backup_note FROM health_state WHERE id = 'main'").first();
+    const h1 = await health();
+    check(h1.last_backup_at !== null && h1.last_backup_note.startsWith(`nightly ${first[0]}:`), `reported to the Worker (health_state: ${h1.last_backup_note})`);
     const sum1 = JSON.parse(readFileSync(join(drive, first[0], "summary.json"), "utf8"));
     check(sum1.ok && sum1.screenshots.copied === 4 && sum1.screenshots.failed === 0, "4 screenshots copied, each verified by size and SHA-256 (and read back from Drive)");
     check(sum1.database_size_bytes.main > 0 && sum1.database_size_bytes.files > 1_500_000, `summary holds measured sizes (main ${sum1.database_size_bytes.main} B, files ${sum1.database_size_bytes.files} B)`);
@@ -163,28 +173,56 @@ async function main() {
       check(e && e.sha256 === shot.sha && sha(readFileSync(join(drive, "screenshots", e.name))) === shot.sha, `screenshot of ${shot.size} bytes in Drive: same SHA-256 as uploaded`);
     }
 
-    console.log("5. a second backup after one more sign-up");
-    shots.push(await signupOne(90_000));
+    console.log("5. changes after the nightly, then an hourly backup (ledger + new screenshots)");
+    const later = made.body.tickets.slice(3, 5);
+    for (const t of later) check((await door("/api/scan", { scan_id: crypto.randomUUID(), qr: t.qr })).body.verdict === "admit", "a guest admitted after the nightly");
+    check((await owner(`/api/tickets/${made.body.tickets[6].id}/cancel`, { op: crypto.randomUUID() })).status === 200, "a ticket cancelled after the nightly");
+    const newShot = await signupOne(90_000);
+    check((await owner("/api/tickets/approve", { ids: [newShot.id] })).status === 200, "a new sign-up approved after the nightly");
+    // The nightly is not due again (it ran just now); the last backup was "2 hours ago".
+    sim.props.set("LAST_SUCCESS_AT", String(Date.now() - 2 * 3600_000));
     const fetchesBefore = sim.fetches;
-    const runs2 = runAll("backupNow");
-    // Two backups in the same minute share a name in Drive; on disk the second gets a "~2" suffix.
-    const second = folders().find((n) => n !== first[0]);
-    check(Boolean(second) && !readdirSync(drive).some((n) => n.startsWith("INCOMPLETE")), "second backup complete");
-    const sum2 = JSON.parse(readFileSync(join(drive, second, "summary.json"), "utf8"));
+    const runs2 = runAll("hourly");
+    const hourlyName = readdirSync(drive).find((n) => n.startsWith("sahra-ledger-"));
+    check(Boolean(hourlyName) && !readdirSync(drive).some((n) => n.startsWith("INCOMPLETE")), `hourly backup complete: ${hourlyName}`);
+    const sum2 = JSON.parse(readFileSync(join(drive, hourlyName, "summary.json"), "utf8"));
+    check(sum2.kind === "hourly" && Object.keys(sum2.rows).every((k) => !k.startsWith("main.")), `only the ledger and the screenshot list (${Object.keys(sum2.rows).join(", ")})`);
     check(sum2.screenshots.copied === 1 && sum2.screenshots.alreadyCopied === 4, `only the new screenshot copied (${runs2} runs, ${sim.fetches - fetchesBefore} requests)`);
+    const h2 = await health();
+    check(h2.last_backup_at > h1.last_backup_at - 3600_000 && h2.last_backup_note.startsWith(`hourly ${hourlyName.replace(/~\d+$/, "")}:`), "hourly backup reported");
 
-    console.log("6. restore drill on the second backup");
-    const target = join(drive, second);
-    const drill = (folder) => {
+    console.log("6. restore drill: the nightly alone, then nightly + hourly");
+    const drill = (args, root = drive) => {
       try {
-        return { code: 0, out: execFileSync(process.execPath, [join(ROOT, "scripts", "restore-drill.mjs"), folder, "--screenshots", join(drive, "screenshots")], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }) };
+        return { code: 0, out: execFileSync(process.execPath, [join(ROOT, "scripts", "restore-drill.mjs"), ...args, "--screenshots", join(root, "screenshots")], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }) };
       } catch (e) {
         return { code: e.status, out: `${e.stdout}${e.stderr}` };
       }
     };
-    const ok = drill(target);
-    console.log(ok.out.split("\n").map((l) => `    | ${l}`).join("\n"));
-    check(ok.code === 0, "restore drill passed");
+    const show = (r) => console.log(r.out.split("\n").map((l) => `    | ${l}`).join("\n"));
+    const alone = drill([join(drive, first[0])]);
+    check(alone.code === 0, "restore drill on the nightly alone passed");
+    const outJson = join(work, "drill.json");
+    const both = drill([join(drive, first[0]), "--ledger", join(drive, hourlyName), "--keep", "--json", outJson]);
+    show(both);
+    check(both.code === 0, "restore drill on nightly + hourly passed");
+    const dj = JSON.parse(readFileSync(outJson, "utf8"));
+    check(dj.applied >= 4 && dj.holds === 0 && dj.verify_after_ok, `the replay applied ${dj.applied} change(s) made after the nightly, 0 holds, every row matches the change log`);
+    const kept = /kept: (.*)/.exec(both.out)[1].trim();
+    const { openLocalD1 } = await import(pathToFileURL(join(ROOT, "scripts", "lib", "local-d1.mjs")).href);
+    const restored = await openLocalD1(ROOT, join(kept, "state"));
+    try {
+      for (const t of later) check((await restored.DB.prepare("SELECT used_at FROM tickets WHERE id = ?").bind(t.id).first("used_at")) !== null, `ticket admitted after the nightly is admitted in the restore`);
+      check((await restored.DB.prepare("SELECT status FROM tickets WHERE id = ?").bind(made.body.tickets[6].id).first("status")) === "cancelled", "ticket cancelled after the nightly is cancelled in the restore");
+      const nt = await restored.DB.prepare("SELECT status, screenshot_key FROM tickets WHERE id = ?").bind(newShot.id).first();
+      check(nt?.status === "approved", "sign-up made after the nightly exists, approved, in the restore");
+      const blob = await restored.FILES.prepare("SELECT bytes FROM files WHERE id = ?").bind(Number(nt.screenshot_key.split(":")[1])).first("bytes");
+      check(sha(Buffer.from(blob)) === newShot.sha, "its screenshot (copied by the hourly backup) restored byte-identical");
+    } finally {
+      await restored.mf.dispose();
+      rmSync(kept, { recursive: true, force: true });
+    }
+    check(drill([join(drive, hourlyName)]).code === 1, "the drill refuses an hourly folder as the base");
 
     console.log("7. the drill catches an altered screenshot copy");
     const bad = join(work, "bad");
@@ -194,15 +232,21 @@ async function main() {
     const bytes = readFileSync(p);
     bytes[bytes.length - 1] ^= 0xff;
     writeFileSync(p, bytes);
-    const badRun = (() => {
-      try {
-        execFileSync(process.execPath, [join(ROOT, "scripts", "restore-drill.mjs"), join(bad, second), "--screenshots", join(bad, "screenshots")], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
-        return { code: 0, out: "" };
-      } catch (e) { return { code: e.status, out: `${e.stdout}` }; }
-    })();
+    const badRun = drill([join(bad, first[0])], bad);
     check(badRun.code === 1 && /do not match the recorded SHA-256/.test(badRun.out), "drill FAILS when a screenshot copy differs by one byte");
 
-    console.log("8. a wrong key: the run fails and the owner is alerted");
+    console.log("8. past the daily budget: hourly skipped, nightly not");
+    const day = Math.floor(Date.now() / 86_400_000);
+    await DB.prepare("UPDATE health_state SET usage_day = ?, usage_est = 50000 WHERE id = 'main'").bind(day).run();
+    sim.props.set("LAST_SUCCESS_AT", String(Date.now() - 2 * 3600_000));
+    const foldersBefore = readdirSync(drive).length;
+    check(sim.call("hourly") === "skipped_budget" && readdirSync(drive).length === foldersBefore, "hourly backup skipped while the budget says stop");
+    sim.props.set("LAST_FULL_AT", String(Date.now() - 27 * 3600_000));
+    check(runAll("hourly") >= 1 && JSON.parse(readFileSync(join(drive, folders().filter((n) => n.startsWith("sahra-backup-")).at(-1), "summary.json"), "utf8")).kind === "nightly",
+      "the nightly backup still runs past the budget");
+    await DB.prepare("UPDATE health_state SET usage_day = 0, usage_est = 0 WHERE id = 'main'").run();
+
+    console.log("9. a wrong key: the run fails and the owner is alerted");
     sim.props.set("BACKUP_KEY", b64(32));
     sim.props.set("LAST_SUCCESS_AT", "0");
     const r = sim.call("hourly");
