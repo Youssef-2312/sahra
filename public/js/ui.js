@@ -17,8 +17,8 @@ var Sahra = (function () {
   var KEY = "sahra_lang";
   var NOVA_URL = "https://bynova.vercel.app/";
   var NOVA_INSTAGRAM = "https://www.instagram.com/nova.dev26/";
-  // Nova's logo (white N, blue dot, dark rounded square): a copy in the project once the owner hands it over.
-  var NOVA_LOGO = "/img/nova-logo.png";
+  // Nova's logo: a copy of https://bynova.vercel.app/favicon.svg kept in the project (nothing loads from Nova at run time).
+  var NOVA_LOGO = "/img/nova-logo.svg";
   var csrf = null;
   var renderFn = null;
 

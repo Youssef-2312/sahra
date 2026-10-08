@@ -163,8 +163,13 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, .btn:focus-vi
 .check { display: flex; gap: 10px; align-items: flex-start; }
 .check input { width: 22px; height: 22px; margin-top: 2px; flex: none; }
 
+fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+input[type="file"] { width: 100%; color: var(--muted); font: inherit; font-size: 0.95rem; padding: 8px 0; }
+details > summary { cursor: pointer; color: var(--accent); font-weight: 600; padding: 12px 0; list-style: none; }
+details > summary::-webkit-details-marker { display: none; }
+
 /* Choices (ticket types): big tappable cards with a radio inside. */
-.choice {
+.field label.choice, .choice {
   display: flex;
   gap: 12px;
   align-items: flex-start;
@@ -179,6 +184,9 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, .btn:focus-vi
 .choice:has(input:checked) { border-color: var(--accent); }
 .choice.off { opacity: 0.6; cursor: default; }
 .choice .grow { flex: 1; min-width: 0; }
+.choice .grow > span { display: block; }
+.choice .grow > .row { display: flex; }
+.choice .grow > span + span { margin-top: 4px; }
 .price { font-weight: 700; white-space: nowrap; }
 
 /* The ticket QR: as large as the screen allows, white with a quiet zone. */

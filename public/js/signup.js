@@ -70,9 +70,9 @@
     var d = data.details || {};
     var timeLine = d.starts_at ? Sahra.when(d.starts_at, d.time_zone) + (d.ends_at ? " - " + Sahra.time(d.ends_at, d.time_zone) : "") : null;
     return el("section", null,
-      el("h1", { text: data.party.name }),
+      el("h1", { text: data.party.name, attrs: { dir: "auto" } }),
       timeLine ? el("p", { class: "muted", text: timeLine }) : null,
-      d.description ? el("p", { class: "pre", text: d.description }) : null);
+      d.description ? el("p", { class: "pre", text: d.description, attrs: { dir: "auto" } }) : null);
   }
 
   function addressCard() {
@@ -80,7 +80,7 @@
     if (!d) return null;
     var body;
     if (d.address || d.venue_name) {
-      body = [d.venue_name ? el("p", { text: d.venue_name }) : null, d.address ? el("p", { class: "pre", text: d.address }) : null,
+      body = [d.venue_name ? el("p", { text: d.venue_name, attrs: { dir: "auto" } }) : null, d.address ? el("p", { class: "pre", text: d.address, attrs: { dir: "auto" } }) : null,
         d.map_url ? el("a", { text: t("open_map"), attrs: { href: d.map_url, rel: "noopener", target: "_blank" } }) : null];
     } else if (d.reveal && d.reveal.mode === "at_time" && d.reveal.at) {
       body = el("p", { text: t("addr_at_time", { rel: Sahra.rel(d.reveal.at) }) });
@@ -95,7 +95,7 @@
   function rulesCard() {
     var d = data.details;
     if (!d || !d.rules) return null;
-    return el("section", { class: "card" }, el("p", { class: "small muted", text: t("rules") }), el("p", { class: "pre", text: d.rules }));
+    return el("section", { class: "card" }, el("p", { class: "small muted", text: t("rules") }), el("p", { class: "pre", text: d.rules, attrs: { dir: "auto" } }));
   }
 
   function typeStatus(x) {
@@ -119,8 +119,8 @@
         input.addEventListener("change", function () { paymentRefresh(form); });
         return el("label", { class: "choice" + (x.on_sale ? "" : " off") }, input,
           el("span", { class: "grow" },
-            el("span", { class: "row" }, el("strong", { text: x.name }), el("span", { class: "price", text: x.price ? Sahra.money(x.price) + " " + t("per_person") : t("free") })),
-            x.description ? el("span", { class: "small muted pre", text: x.description }) : null,
+            el("span", { class: "row" }, el("strong", { text: x.name, attrs: { dir: "auto" } }), el("span", { class: "price", text: x.price ? Sahra.money(x.price) + " " + t("per_person") : t("free") })),
+            x.description ? el("span", { class: "small muted pre", text: x.description, attrs: { dir: "auto" } }) : null,
             el("span", null, typeStatus(x))));
       }));
   }
@@ -136,13 +136,13 @@
       input = el("input", { attrs: { type: "checkbox" } });
       input.dataset.q = q.id;
       input.dataset.kind = "yesno";
-      return el("div", { class: "field" }, el("label", { class: "check" }, input, el("span", { text: q.label })));
+      return el("div", { class: "field" }, el("label", { class: "check" }, input, el("span", { text: q.label, attrs: { dir: "auto" } })));
     } else {
       input = el("input", { attrs: { type: "text", maxlength: 500, required: q.required } });
     }
     input.dataset.q = q.id;
     return el("div", { class: "field" },
-      el("label", null, q.label + (q.required ? "" : " (" + t("optional") + ")"), input));
+      el("label", null, el("span", { text: q.label, attrs: { dir: "auto" } }), q.required ? "" : " (" + t("optional") + ")", input));
   }
 
   // Payment instructions and the total follow the chosen ticket and the number of people.
@@ -155,7 +155,7 @@
     var people = Math.max(1, Number(form.elements.people.value) || 1);
     Sahra.clear(box);
     if (type && type.price) box.appendChild(el("p", { class: "price", text: t("total_due", { amount: Sahra.money(type.price * people) }) }));
-    if (how) box.appendChild(el("p", { class: "pre", text: how }));
+    if (how) box.appendChild(el("p", { class: "pre", text: how, attrs: { dir: "auto" } }));
     box.hidden = !box.firstChild;
   }
 
@@ -219,7 +219,9 @@
       btn.disabled = false;
       Sahra.clear(out).appendChild(el("p", { class: "notice " + (r.ok ? "yes" : "no"), text: r.ok ? t("link_on_way") : Sahra.errorText(r) }));
     });
-    return el("section", null, el("h2", { text: t("lost_title") }), f);
+    var box = el("details", null, el("summary", { text: t("lost_title") }), f);
+    box.addEventListener("toggle", function () { if (box.open) mountTurnstile(); });
+    return el("section", null, box);
   }
 
   function doneView() {
@@ -282,7 +284,9 @@
   function mountTurnstile() {
     if (!turnstileReady || !data || !data.turnstile_site_key || !window.turnstile) return;
     [["signup", "#turnstile-signup"], ["resend", "#turnstile-resend"]].forEach(function (w) {
-      if (widgets[w[0]] === undefined && document.querySelector(w[1])) {
+      var at = document.querySelector(w[1]);
+      // A closed "Lost your ticket link?" box gets its widget when it is opened.
+      if (widgets[w[0]] === undefined && at && at.offsetParent !== null) {
         widgets[w[0]] = window.turnstile.render(w[1], { sitekey: data.turnstile_site_key, language: Sahra.lang() });
       }
     });

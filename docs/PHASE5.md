@@ -25,6 +25,14 @@ the `staging` branch; a finished piece the owner should try is pushed there too.
   No external fonts or libraries at run time; a library we need is copied into
   `public/vendor/` with its licence.
 - No hosting-plan wording in anything guests or organisers see.
+- Look (brainstorm ideas 24-28): dark charcoal base with ONE calm accent
+  (periwinkle `#8ea2ff`), the same all year (nothing seasonal). Plain static
+  HTML/CSS/JS only (no React, no build step); efferd blocks are inspiration only.
+- Top bar: sign-in / account at the start, language switch at the end. Footer
+  on every page: Privacy, Terms, copyright, and in the corner "Built by Nova"
+  with Nova's logo (`public/img/nova-logo.svg`, a copy of
+  https://bynova.vercel.app/favicon.svg) and an Instagram icon next to it
+  linking to https://www.instagram.com/nova.dev26/ (Sahra has no Instagram).
 
 ## Shared pieces
 
@@ -41,7 +49,8 @@ the `staging` branch; a finished piece the owner should try is pushed there too.
 | # | Piece | Status |
 |---|-------|--------|
 | 1 | Foundation: stylesheet, wording (EN/AR), helpers, language switch | done |
-| 2 | Guest sign-up page (`/signup.html?party=`): party, address status, ticket types, short form | in progress |
+| 2 | Guest sign-up page (`/signup.html?party=`): party, address status, ticket types, short form | done |
+| 2b | Privacy and Terms pages (agreed, idea 28; text from what Sahra really stores; owner approves) | next |
 | 3 | Guest ticket page (`/ticket.html#t=`): big QR, name/type/group, party, address or countdown | |
 | 4 | Home page: party cards with the guest's own status; "Find my tickets" (needs backend) | |
 | 5 | Door scanner: camera, full-screen verdicts, sound and vibration | |
@@ -61,15 +70,30 @@ the `staging` branch; a finished piece the owner should try is pushed there too.
   `<link rel="stylesheet" href="/css/sahra.css">` in head, `<main id="app">`,
   then `/js/i18n.js`, `/js/ui.js`, the page script.
 
+- Piece 2: `GET /api/guest/parties/:party` now also returns `details` (the
+  public party view). New `public/signup.html` + `public/js/signup.js`
+  (replaced the test page; old version in git history). Organiser text uses
+  `dir="auto"`. A language switch reloads the page (Turnstile widgets cannot
+  move) keeping name/email/people in sessionStorage. Confirmed links are
+  remembered in localStorage `sahra_tickets` ([{party, link, at}], newest
+  first, max 20) for piece 4. "Lost your ticket link?" is a collapsed
+  `<details>`; its bot check mounts when opened.
+- Local check: `wrangler dev --env staging --persist-to <dir>` with a sample
+  party, screenshots with Playwright (installed in the scratchpad, not the
+  project) at 390x844, English and Arabic.
+
+## Open questions for the owner
+
+- Nova logo: the site's favicon.svg has a dark navy dot (hard to see on the
+  dark footer); the owner's image has a bright blue dot. Use as is, brighten
+  the dot (owner's OK needed), or the owner supplies the PNG/SVG.
+- Hero photos (idea 20) and the sign-in page look (idea 27): photos still to be
+  handed over.
+
 ## Next
 
-Piece 2, the guest sign-up page:
-1. Backend: `GET /api/guest/parties/:party` also returns the public party
-   details (`visiblePartyDetails(..., {kind:"public"})`), so the page needs one
-   request, not two (requests are the tighter daily allowance).
-2. Move the old `public/signup.html` + `js/signup.js` to `public/test/`.
-3. New `public/signup.html` + `public/js/signup.js`: order = party name, date
-   and time; address status; ticket types (price, sold out, sale ends in N
-   days); the short form (name, email, people, organiser questions, payment
-   instructions of the chosen type, screenshot); Turnstile; done screen with the
-   ticket link (remembered in the browser for piece 4); "Lost your ticket link?".
+Piece 2b: `public/privacy.html` and `public/terms.html`, short plain text from
+what the system stores (name, email, people, answers, payment screenshot
+deleted 30 days after the party, ticket and scan records), who sees it (the
+party's owner/admins; door staff see name, people and type only), that Sahra
+handles no money, and the organiser is the contact. Then piece 3 (ticket page).
