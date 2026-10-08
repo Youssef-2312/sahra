@@ -67,7 +67,9 @@ a { color: var(--accent); }
   padding: 12px var(--gap) 0;
   font-size: 0.95rem;
 }
-.brand { font-weight: 700; letter-spacing: 0.02em; color: var(--text); text-decoration: none; }
+.brand { font-weight: 800; font-size: 1.15rem; letter-spacing: 0.02em; color: var(--text); text-decoration: none; }
+.topbar-end { display: inline-flex; align-items: center; gap: 10px; }
+.btn.small-btn { width: auto; min-height: 36px; padding: 6px 14px; border-radius: 999px; font-size: 0.9rem; }
 .lang-switch {
   border: 1px solid var(--line);
   background: var(--surface);
@@ -247,3 +249,68 @@ details > summary::-webkit-details-marker { display: none; }
 .chart svg.donut { width: 160px; max-width: 60%; margin: 8px auto; }
 .chart .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 0.85rem; color: var(--muted); margin-top: 8px; }
 .chart .dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-inline-end: 6px; vertical-align: middle; }
+
+/* Home page: a short hero, the guest's own tickets, the party cards. */
+.hero { padding: 28px 0 8px; }
+.hero h1 { font-size: 2.1rem; letter-spacing: -0.01em; }
+.hero p { color: var(--muted); font-size: 1.05rem; max-width: 36rem; }
+.parties { display: grid; grid-template-columns: 1fr; gap: 14px; margin: var(--gap) 0; }
+.party-card { display: flex; gap: 14px; align-items: stretch; text-decoration: none; color: var(--text);
+  background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 14px; transition: border-color 0.15s; }
+.party-card:hover, .party-card:focus-visible { border-color: var(--accent); }
+.date-block { flex: none; width: 64px; border-radius: 12px; background: var(--surface-2); display: flex; flex-direction: column;
+  align-items: center; justify-content: center; padding: 8px 0; }
+.date-block .day { font-size: 1.6rem; font-weight: 800; line-height: 1; }
+.date-block .mon { font-size: 0.8rem; color: var(--muted); text-transform: uppercase; margin-top: 4px; }
+.party-card .grow { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.party-card .name { font-weight: 700; font-size: 1.1rem; overflow-wrap: anywhere; }
+.party-card .meta { color: var(--muted); font-size: 0.9rem; }
+.party-card .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.mine { display: grid; gap: 10px; }
+.mine a { display: flex; justify-content: space-between; align-items: center; gap: 12px; text-decoration: none; color: var(--text);
+  background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; }
+.empty { text-align: center; color: var(--muted); padding: 32px 0; }
+
+/* Sign-in page (brainstorm idea 27): a short panel, then one button per kind of sign-in. */
+.signin-panel { border-radius: 20px; padding: 28px 22px; margin: var(--gap) 0;
+  background: linear-gradient(135deg, #1e2235 0%, #171a22 60%, #121316 100%); border: 1px solid var(--line); }
+.signin-panel h1 { font-size: 1.8rem; }
+.signin-panel p { color: var(--muted); }
+.google { display: inline-block; width: 20px; height: 20px; }
+
+/* Larger screens: the same pages, wider and in columns (owner: phones first, but desktop must look good too). */
+@media (min-width: 900px) {
+  body { font-size: 17.5px; }
+  main, .topbar, .site-footer { max-width: 72rem; }
+  main { padding: 24px 32px 64px; }
+  .topbar { padding: 18px 32px 0; }
+  .site-footer { padding-inline: 32px; }
+  .hero { padding: 56px 0 16px; }
+  .hero h1 { font-size: 3.2rem; max-width: 44rem; }
+  .parties { grid-template-columns: repeat(3, 1fr); gap: 18px; }
+  .party-card { flex-direction: column; padding: 18px; }
+  .date-block { width: 100%; flex-direction: row; gap: 8px; justify-content: flex-start; padding: 10px 14px; }
+  .date-block .mon { margin-top: 0; }
+  .mine { grid-template-columns: repeat(2, 1fr); }
+  .tiles { grid-template-columns: repeat(4, 1fr); gap: 16px; }
+  .tile .big { font-size: 2.2rem; }
+  .btn { width: auto; min-width: 12rem; }
+  .btn.small-btn { min-width: 0; }
+  .btn + .btn { margin-top: 0; }
+  .stack.buttons { display: flex; flex-wrap: wrap; gap: 12px; }
+  .stack.buttons > * + * { margin-top: 0; }
+  form .btn.primary, .verdict .btn { width: 100%; }
+  .cols { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: 40px; align-items: start; }
+  .cols > .side { position: sticky; top: 24px; }
+  .charts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+  .charts > .card { margin: 0; }
+  .narrow { max-width: 46rem; margin-inline: auto; }
+  .signin-wrap { display: grid; grid-template-columns: 1.1fr 1fr; gap: 40px; align-items: center; min-height: 60vh; }
+  .signin-panel { padding: 56px 44px; min-height: 26rem; display: flex; flex-direction: column; justify-content: flex-end; }
+  .signin-panel h1 { font-size: 2.6rem; }
+  .viewfinder { max-width: 36rem; margin-inline: auto; }
+  .scan-wrap { max-width: 40rem; margin-inline: auto; }
+  .verdict .word { font-size: 5rem; }
+  .verdict .lines { font-size: 1.8rem; }
+  .qr-box { max-width: 26rem; }
+}

@@ -1,0 +1,87 @@
+// Home page (owner decision): all upcoming parties, with sign-in for organisers
+// and staff at the top right. A party card shows this browser's own ticket for
+// that party when it remembers one (brainstorm idea 4): the links saved by the
+// sign-up and ticket pages (localStorage sahra_tickets), checked in one call.
+"use strict";
+(function () {
+  var t = Sahra.t, el = Sahra.el;
+  var app = document.getElementById("app");
+  var parties = null, failed = null;
+  var mine = [];          // [{ link, status, party_id, party_name, starts_at, time_zone }]
+
+  function remembered() {
+    try {
+      var list = JSON.parse(Sahra.store.get("sahra_tickets") || "[]");
+      return Array.isArray(list) ? list.filter(function (x) { return x && typeof x.link === "string"; }) : [];
+    } catch (e) { return []; }
+  }
+  function tokenOf(link) { return (link.split("#t=")[1] || "").trim(); }
+
+  function datePart(ms, tz, opt) {
+    var loc = Sahra.lang() === "ar" ? "ar-EG-u-nu-latn" : "en-GB";
+    try { return new Intl.DateTimeFormat(loc, Object.assign({ timeZone: tz || undefined }, opt)).format(ms); } catch (e) { return ""; }
+  }
+
+  function statePill(p) {
+    if (p.state === "full") return el("span", { class: "pill no", text: t("h_state_full") });
+    if (p.state === "not_open_yet") return el("span", { class: "pill", text: t("h_state_not_open_yet", { rel: Sahra.rel(p.opens_at) }) });
+    if (p.state === "closed") return el("span", { class: "pill", text: t("h_state_closed") });
+    return el("span", { class: "pill yes", text: t("h_state_open") });
+  }
+  function myPill(status) {
+    var cls = status === "released" || status === "approved" ? "yes" : status === "rejected" || status === "cancelled" ? "no" : "maybe";
+    return el("span", { class: "pill " + cls, text: t("h_your_ticket", { status: t("my_" + status) }) });
+  }
+
+  function card(p) {
+    var my = mine.filter(function (m) { return m.party_id === p.id && m.status !== "invalid"; })[0];
+    var href = my ? my.link : "/signup.html?party=" + encodeURIComponent(p.id);
+    return el("a", { class: "party-card", attrs: { href: href } },
+      el("div", { class: "date-block" },
+        el("span", { class: "day", text: datePart(p.starts_at, p.time_zone, { day: "numeric" }) }),
+        el("span", { class: "mon", text: datePart(p.starts_at, p.time_zone, { month: "short" }) })),
+      el("div", { class: "grow" },
+        el("span", { class: "name", text: p.name, attrs: { dir: "auto" } }),
+        el("span", { class: "meta", text: Sahra.when(p.starts_at, p.time_zone) }),
+        p.from_price ? el("span", { class: "meta", text: t("h_from", { amount: Sahra.amount(p.from_price) }) }) : null,
+        el("span", { class: "tags" }, my ? myPill(my.status) : statePill(p))));
+  }
+
+  function render() {
+    Sahra.clear(app);
+    app.appendChild(el("section", { class: "hero" }, el("h1", { text: t("h_title") }), el("p", { text: t("h_sub") })));
+    var shown = mine.filter(function (m) { return m.status !== "invalid"; });
+    if (shown.length) {
+      app.appendChild(el("h2", { text: t("h_your_tickets") }));
+      app.appendChild(el("div", { class: "mine" }, shown.slice(0, 6).map(function (m) {
+        return el("a", { attrs: { href: m.link } },
+          el("span", null, el("strong", { text: m.party_name, attrs: { dir: "auto" } }), el("br"),
+            el("span", { class: "small muted", text: m.starts_at ? Sahra.when(m.starts_at, m.time_zone) : "" })),
+          myPill(m.status));
+      })));
+    }
+    app.appendChild(el("h2", { text: t("h_upcoming") }));
+    if (failed) { app.appendChild(el("p", { class: "notice no", text: failed })); return; }
+    if (!parties) { app.appendChild(el("p", { class: "muted", text: t("loading") })); return; }
+    if (!parties.length) { app.appendChild(el("p", { class: "empty", text: t("h_none") })); return; }
+    app.appendChild(el("div", { class: "parties" }, parties.map(card)));
+  }
+
+  async function load() {
+    var saved = remembered();
+    var reqs = [Sahra.api.get("/api/guest/parties")];
+    if (saved.length) reqs.push(Sahra.api.post("/api/guest/tickets/status", { links: saved.slice(0, 20).map(function (x) { return tokenOf(x.link); }) }));
+    var rs = await Promise.all(reqs);
+    if (rs[0].ok) parties = rs[0].body.parties; else failed = Sahra.errorText(rs[0]);
+    if (rs[1] && rs[1].ok) {
+      mine = rs[1].body.tickets.map(function (x, i) { return Object.assign({}, x, { link: saved[i].link }); });
+      // Forget links that no longer work (replaced by a newer one).
+      var keep = saved.filter(function (s, i) { return !mine[i] || mine[i].status !== "invalid"; });
+      if (keep.length !== saved.length) Sahra.store.set("sahra_tickets", JSON.stringify(keep));
+    }
+    render();
+  }
+
+  Sahra.boot({ render: render });
+  load();
+})();

@@ -65,7 +65,7 @@ the `staging` branch; a finished piece the owner should try is pushed there too.
 | 2 | Guest sign-up page (`/signup.html?party=`): party, address status, ticket types, short form | done |
 | 2b | Privacy and Terms pages (agreed, idea 28; text from what Sahra really stores; owner approves) | done (drafts) |
 | 3 | Guest ticket page (`/ticket.html#t=`): big QR, name/type/group, party, address or countdown | done |
-| 4 | Home page: party cards with the guest's own status; "Find my tickets" (needs backend) | waiting for the owner (brief vs idea 4) |
+| 4 | Home page: party cards with the guest's own status; sign-in page | done ("Find my tickets" across parties still to do) |
 | 5 | Door scanner: camera, full-screen verdicts, sound and vibration | done (first version) |
 | 6 | Organiser dashboard: top numbers and big buttons | done (first version) |
 | 7 | Approval queue: one card per request, "Approve and send QR" | |
@@ -140,6 +140,16 @@ the `staging` branch; a finished piece the owner should try is pushed there too.
 - Local staff-page check: sign in as the local test party's owner by setting
   the cookie from a page on `http://localhost:8799` (`document.cookie`, Secure
   is allowed on localhost; CDP refuses it), scratchpad `as-owner.mjs`.
+
+- Piece 4: `GET /api/guest/parties` (dated, not switched off, not over;
+  cached a minute in the isolate and the browser) and
+  `POST /api/guest/tickets/status` (remembered links, one read). New
+  `public/index.html` + `js/home.js` (hero, "Your tickets", party cards with
+  date block, price from, state or the guest's own ticket status) and
+  `public/signin.html` + `js/signin.js` (party team / organiser-or-site-owner,
+  each "Continue with Google"; invitation only; door staff use their link).
+  Top bar: Sahra at the start, language + Sign in at the end. Desktop rules
+  (>= 900px) in sahra.css: wider main, 3-column cards, 4 tiles, columns.
 
 ## Open questions for the owner
 

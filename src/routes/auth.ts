@@ -35,7 +35,7 @@ function htmlPage(c: Ctx, status: number, title: string, body: string, refreshTo
   return res;
 }
 
-const tryAgain = `<p><a href="/">Back to sign in</a></p>`;
+const tryAgain = `<p><a href="/signin.html">Back to sign in</a></p>`;
 
 const LOGIN_PURPOSE = "login-attempt";
 const PICK_PURPOSE = "party-pick";

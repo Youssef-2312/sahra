@@ -7,8 +7,9 @@
 //   Sahra.money(n)              "EGP 250" / "250 ج.م."; Sahra.when(ms, tz), Sahra.rel(ms)
 //   Sahra.boot({ render, me })  top bar, language switch and site footer; render() runs again on a switch
 //
-// Top bar: sign-in / account at the start (top-left in English), the language
-// switch at the end. Footer (brainstorm idea 28): Privacy and Terms, copyright,
+// Top bar (owner decision): "Sahra" (home) at the start; the language switch and
+// "Sign in" (or the signed-in person, linking to their dashboard) at the end,
+// top-right in English. Footer (brainstorm idea 28): Privacy and Terms, copyright,
 // and in the corner "Built by Nova" with Nova's logo and an Instagram icon next
 // to it (Nova's Instagram; Sahra has none). Both links open a new tab; nothing
 // loads from those sites until tapped.
@@ -135,7 +136,8 @@ var Sahra = (function () {
     renderFn = (opts && opts.render) || null;
     var me = (opts && opts.me) || null;
     applyLang();
-    var account = el("a", { class: "brand", attrs: { href: "/" } });
+    var brand = el("a", { class: "brand", text: "Sahra", attrs: { href: "/" } });
+    var account = el("a", { class: "btn small-btn", attrs: { href: me ? (me.staff.role === "door" ? "/scan.html" : "/dashboard.html") : "/signin.html" } });
     var sw = el("button", { class: "lang-switch", attrs: { type: "button" } });
     var foot = el("footer", { class: "site-footer" });
     function label() {
@@ -151,7 +153,7 @@ var Sahra = (function () {
       if (renderFn) renderFn();
     });
     label();
-    document.body.insertBefore(el("header", { class: "topbar" }, account, sw), document.body.firstChild);
+    document.body.insertBefore(el("header", { class: "topbar" }, brand, el("span", { class: "topbar-end" }, sw, account)), document.body.firstChild);
     // The door scanner shows only the camera and the result (brainstorm idea 12): no footer there.
     if (!opts || opts.footer !== false) document.body.appendChild(foot);
     if (renderFn) renderFn();
