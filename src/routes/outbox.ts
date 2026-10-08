@@ -6,6 +6,7 @@ import { Hono } from "hono/tiny";
 import { json, readJson, requireAuth, type AppEnv, type Ctx } from "../context";
 import { OUTBOX_BULK_MAX, OutboxAdmin, type Cursor, type Selection } from "../email/admin";
 import { isUuid } from "../lib/crypto";
+import { chargeStaff } from "../limits";
 
 export const outboxRoutes = new Hono<AppEnv>();
 
@@ -36,6 +37,10 @@ outboxRoutes.get("/", requireAuth(["owner", "admin"]), async (c) => {
 
 async function change(c: Ctx, which: "approve" | "cancel", s: Selection | null) {
   if (!s) return json(c, 400, { error: "invalid_request" });
+  if (which === "approve") {
+    const over = await chargeStaff(c, "outbox_approve", 1);
+    if (over) return over;
+  }
   const a = c.var.auth;
   const admin = new OutboxAdmin(c.var.db.driver);
   const sess = { hash: a.hash, partyId: a.info.party_id };

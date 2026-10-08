@@ -124,6 +124,9 @@ const cases: Case[] = [
   ["party counts, junk session", "GET", "/api/platform/parties", (h) => h.req("/api/platform/parties", { cookies: junkPlatform })],
   ["party disable, junk session", "POST", "/api/platform/parties/:id/disable", (h) => h.req("/api/platform/parties/some-party/disable", { method: "POST", headers: JSON_H, cookies: junkPlatform })],
   ["party disable, no session", "POST", "/api/platform/parties/:id/disable", (h) => h.req("/api/platform/parties/some-party/disable", { method: "POST", headers: JSON_H })],
+  ["health, no session", "GET", "/api/platform/health", (h) => h.req("/api/platform/health")],
+  ["health, junk session", "GET", "/api/platform/health", (h) => h.req("/api/platform/health", { cookies: junkPlatform })],
+  ["health, party staff cookie instead", "GET", "/api/platform/health", (h) => h.req("/api/platform/health", { cookies: junkCookie })],
   ["my parties, junk session", "GET", "/api/platform/my-parties", (h) => h.req("/api/platform/my-parties", { cookies: junkPlatform })],
   ["create party, junk session", "POST", "/api/platform/parties", (h) => h.req("/api/platform/parties", { method: "POST", headers: JSON_H, cookies: junkPlatform, body: JSON.stringify({ id: "new-party", name: "x", capacity: 10, staff_id: newId() }) })],
   ["create party, no session", "POST", "/api/platform/parties", (h) => h.req("/api/platform/parties", { method: "POST", headers: JSON_H, body: JSON.stringify({ id: "new-party", name: "x", capacity: 10, staff_id: newId() }) })],
@@ -169,7 +172,7 @@ describe("endpoints without a session write nothing", () => {
 
 async function counts() {
   const tables = ["parties", "staff", "invites", "sessions", "audit", "tickets", "scans", "outbox", "email_quota",
-    "platform_admins", "organisers", "organiser_invites", "platform_sessions"];
+    "platform_admins", "organisers", "organiser_invites", "platform_sessions", "party_usage", "health_checks", "health_state"];
   const out: Record<string, unknown> = {};
   for (const t of tables) out[t] = await env.DB.prepare(`SELECT COUNT(*) AS n, COALESCE(SUM(rev), 0) AS r FROM ${t}`).first().catch(async () => env.DB.prepare(`SELECT COUNT(*) AS n FROM ${t}`).first());
   out.outbox_status = await env.DB.prepare("SELECT status, COUNT(*) AS n FROM outbox GROUP BY status ORDER BY status").all().then((r) => r.results);

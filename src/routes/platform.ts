@@ -21,7 +21,9 @@ import { CONFIG } from "../env";
 import { clearCookie } from "../lib/http";
 import { csrfFor, isUuid, newId } from "../lib/crypto";
 import { COOKIE_PLATFORM, requirePlatform, type PCtx, type PlatformEnv } from "../platform/auth";
-import { MAX_PARTY_LIMIT, PLATFORM } from "../platform/db";
+import { MAX_PARTY_LIMIT, PLATFORM, siteOwnerValid } from "../platform/db";
+import { healthView } from "../health";
+import { LIMITS } from "../limits";
 
 export const platformRoutes = new Hono<PlatformEnv>();
 
@@ -97,6 +99,18 @@ platformRoutes.post("/organisers/:id/disable", requirePlatform(["site_owner"]), 
 platformRoutes.get("/parties", requirePlatform(["site_owner"]), async (c) => {
   const p = c.var.platform;
   return j(c, 200, await c.var.pdb.partyCounts(p.hash, p.info.site_owner_id!, c.var.deps.now()));
+});
+
+/**
+ * Health checks (workstream F, src/health/): each check's state, the latest run,
+ * recent alerts, the daily usage estimate and today's per-party counters with
+ * their limits. Read-only; the site owner check is inside every statement.
+ */
+platformRoutes.get("/health", requirePlatform(["site_owner"]), async (c) => {
+  const p = c.var.platform;
+  const now = c.var.deps.now();
+  const view = await healthView(c.var.db.driver, siteOwnerValid(p.hash, p.info.site_owner_id!, now), now);
+  return j(c, 200, { ...view, limits: LIMITS });
 });
 
 platformRoutes.post("/parties/:id/disable", requirePlatform(["site_owner"]), async (c) => {

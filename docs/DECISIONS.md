@@ -781,3 +781,140 @@ unauthenticated cases).
    owners).
 3. Non-Gmail, non-Workspace organiser addresses cannot sign in until email
    confirmation exists (same as staff).
+## Workstream F: health checks, alerts and per-party limits (Phase 4)
+
+Built on branch `claude/p4-f-health` (base e39097e). Only tested locally (workerd +
+local D1 in `npx vitest run`); nothing ran against Cloudflare. Code: `src/health/`
+(checks, alerts, estimate, site owner view), `src/limits/` (per-party counters),
+the cron hook in `src/index.ts`, `GET /api/platform/health`, a "Health checks"
+section on `public/platform.html`. Migration `migrations/0009_health.sql`. Tests:
+`test/health.test.ts` (19) + 3 cases in `test/unauth.test.ts`.
+
+**Checks and cadence.** The existing once-a-minute cron runs the checks on every
+minute divisible by 15 (`ctrl.scheduledTime`), in their own `waitUntil` next to
+the email sender, so email is not delayed. Nothing at all runs while
+`MAINTENANCE = "1"` (no query; tested on both the handler and the check runner).
+A lease row (`health_state.lease_until`, one conditional UPDATE) makes two
+overlapping runs impossible; a run that died is taken over after 10 minutes.
+
+| Check | What it does | Problem when |
+|---|---|---|
+| changelog | flushes rows with `rev > logged_rev` (parties, staff, invites, platform tables) exactly like `flushChangeLog` (idempotent, up to 3 x 20 entries per run); daily also tickets whose last change is not an admission (admitted tickets are normally `rev > logged_rev`: their record is the admission record) | the ledger refuses the write, or more than 60 are pending |
+| admissions | admissions (`tickets.used_at`) since the last run's cursor, up to 2 minutes ago (a scan may still be writing its record), at most 200 per run, only for parties whose control object is open or changed since the cursor (the ledger's `party_control`, one row per party), then a primary-key range lookup per ticket in `change_log` for an `admitted` entry. Missing ids are remembered (up to 50) and re-checked every run | an admitted ticket has no admission record |
+| outbox | counts via the `outbox_due` index | failed in the last 24 h; queued more than 1 h past due; "sending" 30 min past its claim deadline |
+| db_size | `meta.size_after` of `SELECT 1` on DB, LEDGER and FILES (D1 refuses `PRAGMA page_count`, `SQLITE_AUTH`, tested) | a database at 70% of 500 MB, or all bound databases at 70% of 5 GB |
+| backup | `health_state.last_backup_at` | older than 26 h; NULL is shown as "not set up" and not alerted |
+| usage | the app's estimate of today's rows written (below) | at or above 50,000 (50% of 100,000) |
+
+**For workstream E:** after each successful backup, write
+`UPDATE health_state SET last_backup_at = <unix ms>, last_backup_note = '<short text>' WHERE id = 'main'`.
+Until the first one is recorded, the backup check stays "not set up" without alerts.
+
+**Alerts.** To every site owner row with `disabled_at IS NULL` (its `email`),
+through `outboxInsert` (kind `health_alert`, queued, plain text, no emojis,
+link to `/platform`). Per problem: one alert when it starts, again only after 6
+hours if it persists, one "resolved" message when it clears; the 6-hour rule is
+decided inside the `health_checks` upsert and each outbox row requires that this
+run's op set `alert_op` (tested over 24 runs). Party owners are never emailed.
+The daily run (first run at or after 06:00 UTC) sends each site owner a short
+summary (kind `health_summary`): a missing summary is the only way to notice
+that the checks themselves stopped. Outbox rows need a party
+(`outbox.party_id REFERENCES parties`, enforced by D1, tested), so the migration
+adds a reserved, disabled, paused party row `_platform` (the id the change log and
+audit already use for site-level rows); it has no staff and no control object,
+is hidden from the site owner's party list, and its first change-log flush
+records it like any party. **If the alert emails cannot be sent** (no provider
+configured, provider down), the outbox check itself goes red, but only the page
+shows it: an email alert cannot report that email is broken.
+
+**Per-party limits** (`src/limits/`, table `party_usage`, one row per party per
+kind per UTC day). The counter is one UPSERT whose WHERE holds the cap (and, for
+staff routes, the session check), written before the action's own batch: two
+requests at once never both pass the cap (8 concurrent, cap 3: exactly 3 pass,
+tested); a request refused later still counts (errs on the safe side). Answer:
+429 `party_limit` with "This party has reached today's limit of N ... It resets
+at 00:00 UTC."
+
+| Kind | Where | Cap per party per day | Essential |
+|---|---|---|---|
+| signup | guest sign-up, after Turnstile, not for a retry of a stored sign-up | 1,000 | yes |
+| resend_link | "resend my link", after Turnstile, counted whether or not the address has a ticket | 300 | yes |
+| release | "Send QR", per ticket | 1,000 | yes |
+| notice | party edit with `notify_guests` (up to 1,000 emails each) | 3 | no |
+| outbox_approve | outbox approval request | 50 | no |
+| export | export page (up to 500 tickets) | 200 | no |
+
+Why these numbers: each kind on its own keeps one party at or below about 7-9% of
+the account's 100,000 daily writes (sign-up 7 rows, release about 8, a notice up
+to 3,000 + 2 per approved row); one party using every cap to the full could still
+reach about 30%. Non-essential kinds also answer 429 `daily_budget` ("paused until
+00:00 UTC; scanning is not affected") while the estimate is at or above 50,000;
+sign-up, resend and release keep only their per-party cap. The scan path, door
+join and every other route are not counted and never limited. This reduces the
+risk; it is not a guarantee (requests without a session, Cloudflare's own request
+limit and rows read are not covered, see "Accepted risks").
+
+**The daily estimate** (`health_state.usage_est`, per UTC day) is built by the cron
+from cheap aggregates, multiplied by measured rows per event: new audit rows x 6
+(primary-key range; sign-up writes 7 per audit row, approval 5, a party edit 4),
+new outbox rows x 3 (`outbox_party` index), admissions checked x 4 (2 main + 1
+ledger + 1 margin for denials and retries), emails sent today x 5 (`email_quota`),
+plus the run's own writes. Not counted: denied scans, session revocations, outbox
+approvals, and anything on staging (the allowance is per account).
+
+**Rows read/written (measured locally, D1 meta).**
+
+| What | Main queries / read / written | Ledger queries / read / written |
+|---|---|---|
+| Health run, steady state (nothing changed) | 6 / 25 / 2 | 1 / 1 / 0 |
+| Health run, first run (6 check rows created, 1 change-log entry flushed) | 7 / 26 / 9 | 1 / 0 / 1 |
+| Health run with 200 new admissions (first run of that test: check rows created) | 7 / 452 / 8 | 2 / 602 / 0 |
+| Per alert, per site owner | +3 written (outbox row + 2 index entries), +5 when sent | - |
+| `GET /api/platform/health` | 2 / 18 / 0 | 0 |
+| Sign-up (with the counter) | 5 / 52 / 5 (was 4 / 51 / 4) | ledger 1, files 1 (unchanged) |
+| Release 1 ticket (with the counter) | 6 / 26 / 7 (was 5 / 24 / 6) | 1 (unchanged) |
+| Scan, admit | 1 / 18 / 2 (unchanged) | 1 written (unchanged) |
+
+Per day: 96 runs x 2 rows = about 192 rows written and about 2,500 main rows read
+when idle, plus one summary per site owner (3 rows) and any alerts. Rows read grow
+with the parties/staff/invites tables (the change-log check scans them for
+`rev > logged_rev`, as every change already does) and, while parties are open,
+with their tickets (index range on `party_id`) plus about 3 ledger rows read per
+new admission. Bounded per run: at most 200 admissions; main queries at most 13
+plus one per 40 parties open at once (lease, check rows, up to 3 change-log rounds
+of 2 plus the daily ticket query, admissions, outbox, estimate, site owners, final
+batch); ledger queries at most 5 (3 change-log writes, party list, one lookup
+batch). Each run logs a line `{"evt":"health", ...}` with these counts.
+
+**What local tests cannot prove.** Real D1 sizes and whether `meta.size_after`
+matches the dashboard; the account's true daily usage (the estimate leaves out
+the cases above, and staging shares the allowance); real CPU time of a cron run
+(at most 200 admissions and a few small queries; measure with `wrangler tail` on
+the scheduled invocations on staging); that alert emails arrive (no real email
+here). The exact figures exist only in Cloudflare's dashboard or its GraphQL
+Analytics API (`d1AnalyticsAdaptiveGroups`: rows read/written per database per
+day). **Option for later (not built):** the owner creates a read-only API token
+with "Account Analytics: Read" and stores it as a secret; the daily run would
+then replace the estimate with the real account-wide numbers (one HTTPS request a
+day, no D1 rows).
+
+**Shared files changed (minimal):** `src/index.ts` (cron), `src/routes/platform.ts`
+(the health route), `src/platform/db.ts` (the party list hides `_platform`),
+`src/routes/guests.ts`, `src/routes/tickets.ts`, `src/routes/party.ts`,
+`src/routes/outbox.ts` (one counter call each), `public/platform.html` and
+`public/js/platform.js` (health section; also fixed `getElementById("owner")`,
+the section id is `site_owner`, so the site owner section never showed),
+`test/unauth.test.ts` (3 cases; counted tables now include the new ones),
+`test/guests.test.ts` (release now makes one more query: the counter).
+
+**Open questions.**
+1. The reserved `_platform` party row (needed for the outbox foreign key) is data
+   in a migration; the alternative is a separate alert table with its own sender,
+   which would bypass the outbox. Coordinator to confirm.
+2. The caps and the 26-hour backup age are first guesses; the owner may change
+   them in `src/limits/index.ts` and `src/health/index.ts` (`HEALTH`).
+3. Recovery (`src/recovery/`) does not know `health_state`/`party_usage`; a restore
+   brings back older counters and cursors, which only re-checks some admissions
+   and may let a party do a little more that day.
+4. Old outbox rows of `_platform` (alerts, summaries) are never deleted, like
+   other outbox rows; a general outbox cleanup would cover them.

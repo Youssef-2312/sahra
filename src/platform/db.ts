@@ -217,7 +217,7 @@ o.party_limit, ${activeParties(sql`o.id`)} AS active_parties,
       sql`SELECT p.id, p.name, p.capacity, p.created_at, p.disabled_at, p.admission_state, p.organiser_id, o.name AS organiser_name,
           (SELECT COUNT(*) FROM staff st WHERE st.party_id = p.id AND st.disabled_at IS NULL) AS staff,
           (SELECT COUNT(*) FROM sessions s WHERE s.party_id = p.id AND s.revoked_at IS NULL AND s.expires_at > ${now}) AS active_sessions
-        FROM parties p LEFT JOIN organisers o ON o.id = p.organiser_id WHERE ${ok} ORDER BY p.created_at`,
+        FROM parties p LEFT JOIN organisers o ON o.id = p.organiser_id WHERE p.id != ${PLATFORM} AND ${ok} ORDER BY p.created_at`,
       sql`SELECT party_id, status, COUNT(*) AS n FROM tickets WHERE ${ok} GROUP BY party_id, status`,
       sql`SELECT party_id, status, COUNT(*) AS n FROM outbox WHERE ${ok} GROUP BY party_id, status`,
     ]);

@@ -16,6 +16,10 @@
 
 <section id="site_owner" hidden>
 <h2>Site owner</h2>
+<h3>Health checks</h3>
+<p>Run automatically every 15 minutes. Problems are emailed to every site owner (at most once per problem every 6 hours, and once when resolved), plus a short daily summary. Party owners are never emailed by this. Rows written today is the app's own estimate; the exact figures are in the Cloudflare dashboard.</p>
+<pre id="health"></pre>
+<button id="health-refresh" type="button">Refresh health</button>
 <h3>Organisers</h3>
 <pre id="organisers"></pre>
 <form id="invite"><input name="name" placeholder="Name" required> <input name="email" type="email" placeholder="Gmail address" required> <button>Invite organiser</button></form>

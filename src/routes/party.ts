@@ -11,6 +11,7 @@ import { Hono } from "hono/tiny";
 import { flushChangeLog } from "../changelog";
 import { json, readJson, requireAuth, type AppEnv } from "../context";
 import { newId } from "../lib/crypto";
+import { chargeStaff } from "../limits";
 import { PartyDb } from "../party/db";
 import { doorView, staffView, visiblePartyDetails, type Viewer } from "../party/details";
 import { parseEdit, TIME_OR_PLACE } from "../party/input";
@@ -50,6 +51,8 @@ partyRoutes.post("/details", requireAuth(["owner", "admin"]), async (c) => {
     const cur = await db.get(a.info.party_id);
     if (!cur) return json(c, 404, { error: "not_found" });
     notice = noticeText({ ...cur, ...(parsed.values as Partial<typeof cur>) });
+    const over = await chargeStaff(c, "notice", 1);
+    if (over) return over;
   }
   const r = await db.edit({ hash: a.hash, partyId: a.info.party_id }, a.info.staff_id, parsed.values, now, newId(), notice);
   if (r.status === "rejected") {

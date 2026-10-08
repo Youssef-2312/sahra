@@ -45,7 +45,22 @@
   });
 
   if (me.site_owner) {
-    document.getElementById("owner").hidden = false;
+    document.getElementById("site_owner").hidden = false;
+    var loadHealth = async function () {
+      var h = await get("/api/platform/health");
+      if (!h || !h.checks) { document.getElementById("health").textContent = JSON.stringify(h, null, 2); return; }
+      var t = (h.last_run_at ? "Last run: " + new Date(h.last_run_at).toISOString() : "The checks have not run yet") + "\n\n";
+      h.checks.forEach(function (c) { t += (c.status === "problem" ? "PROBLEM  " : c.status === "ok" ? "ok       " : "not set  ") + c.title + ": " + c.summary + "\n"; });
+      t += "\nRows written today (estimate): " + h.usage.estimated_rows_written_today + " of " + h.usage.daily_allowance
+        + "; guest notices, email approvals and exports stop at " + h.usage.non_essential_stop_at + "\n";
+      t += "\nRecent alerts:\n";
+      h.alerts.forEach(function (a) { t += "  " + new Date(a.at).toISOString() + "  " + a.subject + "  " + JSON.stringify(a.statuses) + "\n"; });
+      t += "\nPer-party counters today (limits per party per UTC day):\n";
+      h.party_usage_today.forEach(function (u) { t += "  " + u.party_id + "  " + u.kind + "  " + u.n + " of " + h.limits[u.kind].cap + "\n"; });
+      document.getElementById("health").textContent = t;
+    };
+    loadHealth();
+    document.getElementById("health-refresh").addEventListener("click", loadHealth);
     var loadOwner = async function () {
       document.getElementById("organisers").textContent = JSON.stringify(await get("/api/platform/organisers"), null, 2);
       document.getElementById("parties").textContent = JSON.stringify(await get("/api/platform/parties"), null, 2);

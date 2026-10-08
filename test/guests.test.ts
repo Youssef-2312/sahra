@@ -254,8 +254,8 @@ describe("approval queue, release, screenshots", () => {
       [ids[0]!]: "already", [ids[1]!]: "done", [ids[2]!]: "done", [ids[3]!]: "done", [ids[4]!]: "refused",
     });
     const rlBulk = lastReq();
-    // Session check + read for the emails + the release batch + change log (2) = same count as approving 4.
-    expect(rlBulk.d1_queries).toBe(apOne.d1_queries + 1);
+    // Session check + per-party counter (src/limits/) + read for the emails + the release batch + change log (2).
+    expect(rlBulk.d1_queries).toBe(apOne.d1_queries + 2);
     for (const [i, id] of ids.entries()) {
       const rows = await outbox(id);
       expect(rows, `ticket ${i}`).toHaveLength(i < 4 ? 1 : 0);

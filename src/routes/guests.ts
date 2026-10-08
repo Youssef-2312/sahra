@@ -26,6 +26,7 @@ import { linkPath, signLink, verifyLink } from "../guests/link";
 import { turnstileConfigured, verifyTurnstile } from "../guests/turnstile";
 import { base32, parseToken, sha256, sha256hex } from "../lib/crypto";
 import { clientIp, rateLimited, sameOrigin } from "../lib/http";
+import { chargeGuest } from "../limits";
 import { PartyDb } from "../party/db";
 import { visiblePartyDetails } from "../party/details";
 import { signQr } from "../qr";
@@ -166,6 +167,9 @@ guestRoutes.post("/parties/:party/signup", async (c) => {
   if (pf.screenshot === "none" && shot) return json(c, 400, { error: "screenshot_not_wanted" });
   // Early answer when already full (the insert below re-checks in the same statement).
   if (party.held + people > party.capacity) return json(c, 409, { error: "full" });
+  // Per-party daily cap (src/limits/); a retry of a stored sign-up is not counted.
+  const over = await chargeGuest(c, partyId, "signup");
+  if (over) return over;
 
   let screenshotKey: string | null = null;
   if (shot) {
@@ -200,6 +204,9 @@ guestRoutes.post("/parties/:party/resend", async (c) => {
   if (await rateLimited(c.env.RL_AUTH, `resend-email:${await sha256hex(`${partyId}|${email}`)}`)) return json(c, 429, { error: "rate_limited" });
   const bot = await verifyTurnstile(c.var.deps.fetch, c.env, b?.turnstile, ip);
   if (bot !== "ok") return turnstileAnswer(c, bot);
+  // Per-party daily cap, counted whether or not the address has a ticket (the answer must not tell).
+  const over = await chargeGuest(c, partyId, "resend_link");
+  if (over) return over;
 
   const gdb = new GuestDb(c.var.db.driver);
   const tickets = await gdb.ticketsByEmail(partyId, email);

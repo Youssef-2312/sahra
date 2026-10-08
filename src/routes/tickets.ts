@@ -22,6 +22,7 @@ import { linkEmail, releasedEmail } from "../guests/emails";
 import { parseForm, storedForm } from "../guests/form";
 import { linkPath, signLink } from "../guests/link";
 import { isBase32, isUuid, newId } from "../lib/crypto";
+import { chargeStaff } from "../limits";
 import type { OutboxRow } from "../outbox";
 import { FileStore } from "../storage";
 import { guestEmail } from "./guests";
@@ -93,6 +94,8 @@ ticketRoutes.get("/export", requireAuth(MANAGERS), async (c) => {
   const limit = intParam(c.req.query("limit"), 200, 500);
   const after = c.req.query("after") ?? "";
   if (!limit || (after !== "" && !isTicketId(after))) return json(c, 400, { error: "invalid_request" });
+  const over = await chargeStaff(c, "export", 1, MANAGERS);
+  if (over) return over;
   const { sess, now } = sessOf(c);
   const rows = await new GuestDb(c.var.db.driver).exportPage(sess, after, limit, now);
   return json(c, 200, {
@@ -140,6 +143,8 @@ ticketRoutes.post("/reject", requireAuth(MANAGERS), async (c) => {
 ticketRoutes.post("/release", requireAuth(MANAGERS), async (c) => {
   const ids = ticketIds((await readJson(c))?.ids);
   if (!ids) return json(c, 400, { error: "invalid_request", max: MAX_BULK });
+  const over = await chargeStaff(c, "release", ids.length, MANAGERS);
+  if (over) return over;
   const { sess, actor, now } = sessOf(c);
   const gdb = new GuestDb(c.var.db.driver);
   const env = envRecord(c);
