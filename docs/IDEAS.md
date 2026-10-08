@@ -241,3 +241,15 @@ coordinator's session. Status: agreed, rejected or open.
 - Effort: small
 - Free-tier cost: none
 - Rule conflicts: none
+
+## 17. Cash import: confirm summary and "send now or later" (change to idea 9)
+
+- Status: agreed (amends idea 9)
+- Owner's words: "yes thats ok"
+- Source: outside review suggested not sending QRs on import; the owner kept the one-go flow with a safety step instead.
+- The preview screen ends with a plain summary (for example "Add 120 guests, paid in cash, send 120 QR emails") and one "Confirm and send" button. Nothing is created before it is tapped.
+- A choice on that screen: "Send QRs now" (selected by default) or "Add only, send later". "Add only" puts the guests in the approved list with QRs not yet released; the organiser can release them later (all at once or one by one).
+- The preview still flags duplicates, bad emails, over-capacity rows and over the max-tickets-per-email.
+- Needs: one extra option on the import screen; reuse the existing release step. Effort: small on top of idea 9.
+- Free-tier cost: as idea 9
+- Rule conflicts: none
