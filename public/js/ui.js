@@ -162,7 +162,7 @@ var Sahra = (function () {
     if (renderFn) renderFn();
   }
 
-  /** The top bar floats over the page once it scrolls, so only then does it cast a shadow. */
+  /** The top bar gets a shadow once the page scrolls (it then floats over the content). */
   function motion() {
     var shell = document.querySelector(".topbar-shell");
     var onScroll = function () { if (shell) shell.classList.toggle("scrolled", window.scrollY > 8); };

@@ -86,6 +86,22 @@ the `staging` branch; a finished piece the owner should try is pushed there too.
   (approved of capacity, or inside of approved on the night) with a bar that
   fills to its share once, three secondary numbers. Motion: one staggered load
   reveal on the home hero; micro-interactions immediate (60 ms colour changes).
+- Later the same day the owner rejected the second direction ("I dont like
+  the font and the white color ... bring back the font and the original nova
+  design"): the Nova-style look is back (dark base, Space Grotesk / Inter,
+  photo-grid hero, Nova blue), without scroll animations, and with:
+  - the owner's logo (a ticket with a starburst, wordmark "sahra" in Quicksand
+    Bold as outlines, "Party tickets" removed) in the site colours: light
+    ticket, Nova blue star. Files: img/sahra-logo.svg, img/sahra-mark.svg,
+    favicon.svg/.ico, apple-touch-icon.png (generator kept in scratch: logo.mjs);
+  - no gradients in the hero (flat tiles, a flat dark veil);
+  - party cards after the owner's reference (an events row): a row that
+    scrolls sideways with arrows, each card with the party's flyers on the
+    start side as a small grid (one large, up to two small) and the details on
+    the end side, aligned to the start (date | time, name, status dot with the
+    price, Request a ticket). No flyers yet: a plain date tile, never stock
+    photos. The flyer backend (upload, public read, list field `flyers`) is
+    being built on branch claude/p5-flyers.
 - Hero photos: the owner has permission to use them; they are compressed
   (about 150 KB each) and slightly blurred before they go in public/img/hero.
 
