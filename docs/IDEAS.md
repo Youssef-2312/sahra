@@ -47,3 +47,14 @@ coordinator's session. Status: agreed, rejected or open.
 - Effort: medium
 - Free-tier cost: none beyond sign-up writes already counted (answers are part of the ticket row; keep answer length capped)
 - Rule conflicts: none
+
+## 4. Home page: party cards with the guest's own status on the card
+
+- Status: open (waiting for the owner to confirm the "same browser only" limit)
+- Owner's words: "let them get a status page but that status is displayed under the party they signed up for example ... Consider this the hero ... Party A Party B Party C ... I sign up at party A ... Party A Party B Party C awaiting"
+- Meaning: the home page shows the parties side by side as the hero. After a guest signs up to a party, that party's card shows the guest's status (awaiting, approved, ticket ready, rejected with the organiser's reason). Other cards are unchanged.
+- How it would work without accounts or passwords: the browser remembers each ticket link (the signed link already used for the guest ticket page) and asks the server for the status of each. The guest cannot see status on another device except through the emailed link or "resend my ticket link".
+- Needs: home page screen; a small browser store of ticket links; a status read per remembered ticket (could be one batched read). No new data.
+- Effort: medium
+- Free-tier cost: one read per remembered ticket per visit; keep the status request batched and cached briefly so a busy page does not burn the 100K requests/day
+- Rule conflicts: none (no passwords, no accounts; the hidden address must still not appear on cards before reveal)
