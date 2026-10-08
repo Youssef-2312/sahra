@@ -374,12 +374,12 @@ coordinator's session. Status: agreed, rejected or open.
 - Owner's words: "the footer aswell with the instagram and a website showcasing it was built by nova and novas logo in the middle" and then "I meant corner" (screenshot of efferd footer-5: a dark multi-column footer, round social icons, app-store buttons, a copyright line)
 - Footer for Sahra, simple and uncluttered (idea 12):
   - Nova's logo in a corner of the footer (owner correction: "I meant corner", not the middle) with "Built by Nova", linking to Nova's website; on a phone, where there are no corners, it sits at the bottom, small and left-aligned or right-aligned;
-  - an Instagram icon linking to Sahra's Instagram;
+  - an Instagram icon linking to NOVA's Instagram (owner correction: "sahra doesnt have instagram nova does its by nova"; Sahra has no Instagram of its own), placed next to the Nova credit in the corner;
   - a very short row of links: Privacy and Terms (see below);
   - a copyright line;
   - NOT taken from the screenshot: the four link columns, the Google Play and App Store buttons, and the other social icons (Sahra has no app, and only Instagram is wanted).
 - Phone first: everything stacks in one centred column; the icons and links are large enough to tap.
 - Recommendation: add two short plain pages, "Privacy" (what Sahra stores: name, email, payment screenshot, answers to organiser questions; who sees it; how long it is kept) and "Terms" (Sahra is a ticketing tool, the organiser sets the price, refund policy and rules, the organiser is the contact for problems). Guests hand over payment screenshots and personal details, so a clear privacy page matters. The coordinator should draft the text from what the system really stores; the owner approves it. Not yet agreed by the owner.
-- Needs from the owner: Sahra's Instagram link, Nova's website link, and Nova's logo file (PNG or SVG, ideally a version that works on a dark background).
+- Needs from the owner: Nova's Instagram link, Nova's website link, and Nova's logo file (PNG or SVG, ideally a version that works on a dark background).
 - Needs (build): one shared footer used on every public page; the logo stored in the project as a static file (small size). Links to Instagram and Nova open in a new tab and load nothing from those sites until tapped. No embedded Instagram feed or widget (extra weight, tracking, outside dependency).
 - Effort: small. Free-tier cost: none (static). Rule conflicts: none; icons are drawn shapes, not emojis.
