@@ -218,6 +218,12 @@ needs them.
 - **Approvals belong to each party's owner/admins**: ticket approvals, the
   "message all guests" email, reissues. Nothing is sent or approved in the
   platform owner's name.
+- **Changed by the owner (2026-10-08): a site owner can manage any party.**
+  From the site owner page they enter a party as an owner and can then do
+  everything its owners can (details, approvals, emails, staff, admission,
+  tickets). They act under their own name: their staff row there is shown as
+  "<name> (site owner)" and every change is audited under it. The party's own
+  owners still run it day to day; this does not count as the party's owner.
 - **Per-party limits**, so one party cannot use up the account-wide free
   allowances that every party shares (requests, D1 rows read/written, storage).
 - **Unattended checks with alerts to the platform admin** (scheduled Worker; Cron
@@ -774,6 +780,26 @@ table `platform_admins` (change-log entity `platform_admin`), the route prefix
   Two site owners removing each other at once: exactly one is removed (the
   second statement finds its own session no longer valid).
 
+- **Managing any party** (owner decision, `POST /api/platform/parties/:id/manage`,
+  site owner only; button "Manage this party" on the site owner page). Two
+  steps: (1) one batch makes an ordinary owner staff row for the site owner's
+  Google account in that party, marked `staff.site_owner_id` (named "<name>
+  (site owner)", created_by the site owner, audited "site_owner_access"), or, if
+  they already have a row there, makes it owner, active and marked; it is
+  confirmed in the change log; (2) one batch creates an ordinary owner session
+  (12 hours, same hourly cap) and the response sets the normal party session
+  cookie, so the page opens the party dashboard. Every party feature then runs
+  with its own authority checks, unchanged. Site owner valid, party not
+  disabled, row not on a recovery hold: all inside the statements. Marked rows
+  do not count as the party's owner (`no_active_owner` and the owner invitation
+  ignore them; the party list shows `site_owners_managing`). The party's own
+  owner can disable the row like any staff member; entering again restores it
+  (audited). Removing the site owner disables all their marked rows in the same
+  batch (sessions revoked, intents "staff_disabled" first, audit "site owner
+  removed"), so their access ends on the next request. New migration
+  `migrations/0010_site_owner_access.sql` (ADD COLUMN `staff.site_owner_id`),
+  apply before deploying.
+
 **Storage (migration `migrations/0006_organisers.sql`, additive; not applied
 anywhere yet)**
 
@@ -803,7 +829,7 @@ anywhere yet)**
 **Shared files changed** (minimal): `src/db/index.ts` (unlogged/markLogged lines;
 `activeStaffForSub` and `createGoogleSession` now skip a disabled party),
 `src/routes/auth.ts` (platform start + one branch in the callback),
-`src/app.ts` (route), `test/helpers.ts`, `test/unauth.test.ts` (25 cases; the
+`src/app.ts` (route), `test/helpers.ts`, `test/unauth.test.ts` (27 cases; the
 counted tables now include the platform tables and ledger intents). After the
 authority audit (below), the "already" answers of createGoogleInvite,
 createDoorInvite, revokeInvite, changeRole and disableStaff also require the
@@ -854,7 +880,9 @@ sign-up (unauthenticated by design, Turnstile).
 | POST /api/platform/parties/:id/enable | 4 | 17 | 3 | 1 |
 | POST /api/platform/parties/:id/owner-invite | 4 | 31 | 11 | 2 |
 | GET /api/platform/site-owners | 2 | 6 | 0 | 0 |
-| POST /api/platform/site-owners/:id/remove (1 session) | 4 | 23 | 4 | 2 |
+| POST /api/platform/site-owners/:id/remove (1 session) | 5 | 32 | 4 | 2 |
+| POST /api/platform/parties/:id/manage (first time) | 5 | 38 | 11 | 1 |
+| POST /api/platform/parties/:id/manage (again) | 4 | 43 | 5 | 0 |
 
 Rows read grow with the database: the change-log check (`unlogged()`) scans the
 parties, staff, invites and the three platform tables on every change (as
@@ -862,7 +890,7 @@ before), and the counts page reads every ticket, session and outbox row once
 (GROUP BY; opened by hand, not polled). Disabling a party also writes one row
 per revoked session and two per revoked invitation (row + audit), and one
 change-log entry per invitation; more than 20 pending entries answer "pending"
-and the retry continues. Requests without a session write nothing (all 25 new
+and the retry continues. Requests without a session write nothing (all 27 new
 unauthenticated cases).
 
 **What local tests cannot prove**
