@@ -6,7 +6,7 @@
 import { env } from "cloudflare:test";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { newId, newToken } from "../src/lib/crypto";
-import { backupGet, googleLogin, harness, ORIGIN, platformLogin, seedParty, signupInit, type Harness } from "./helpers";
+import { backupGet, backupPost, googleLogin, harness, ORIGIN, platformLogin, seedParty, signupInit, type Harness } from "./helpers";
 
 let logs: string[] = [];
 beforeEach(() => {
@@ -145,6 +145,9 @@ const cases: Case[] = [
   ["backup rows, unsigned", "GET", "/api/backup/rows/:db/:table", (h) => h.req("/api/backup/rows/main/tickets")],
   ["backup rows, expired signature", "GET", "/api/backup/rows/:db/:table", (h) => backupGet(h, "/api/backup/rows/main/tickets", { at: h.clock.now() - 10 * 60_000 })],
   ["backup file, unsigned", "GET", "/api/backup/file/:id", (h) => h.req("/api/backup/file/1")],
+  ["backup done, unsigned", "POST", "/api/backup/done", (h) => h.req("/api/backup/done", { method: "POST", headers: JSON_H, body: JSON.stringify({ kind: "nightly", folder: "sahra-backup-2026-10-01T0300Z", rows: 1, files: 0, bytes: 0 }) })],
+  ["backup done, forged signature", "POST", "/api/backup/done", (h) => h.req("/api/backup/done", { method: "POST", headers: { ...JSON_H, "x-sahra-backup-time": String(Math.floor(h.clock.now() / 1000)), "x-sahra-backup-signature": "0".repeat(64) }, body: JSON.stringify({ kind: "nightly", folder: "sahra-backup-2026-10-01T0300Z", rows: 1, files: 0, bytes: 0 }) })],
+  ["backup done, BACKUP_KEY not set", "POST", "/api/backup/done", () => withEnv({ BACKUP_KEY: undefined }, (h) => backupPost(h, "/api/backup/done", { kind: "nightly", folder: "sahra-backup-2026-10-01T0300Z", rows: 1, files: 0, bytes: 0 }, { key: env.BACKUP_KEY! }))],
   ["unknown API path", "GET", "/api/*", (h) => h.req("/api/nothing-here")],
 ];
 

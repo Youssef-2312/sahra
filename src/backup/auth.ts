@@ -3,6 +3,7 @@
 // the same secret BACKUP_KEY in its Script Properties.
 //
 //   string    = "SAHRA-BACKUP-1\n" + METHOD + "\n" + host + "\n" + path + "\n" + query + "\n" + time
+//               (+ "\n" + hex SHA-256 of the body, for POST)
 //   signature = lowercase hex HMAC-SHA256(BACKUP_KEY bytes, string)
 //
 // `query` is the raw query string as sent, without "?" (the client only uses
@@ -11,9 +12,11 @@
 //
 // Stateless on purpose (no nonce table): a request older or newer than 5 minutes
 // is refused, and inside that window a captured request can only be sent again
-// to read the same page it already read. Every backup endpoint is a GET that
-// writes nothing, so a replay inside the window gains nothing a capture did not
-// already give; keeping nonces would need a database write per request.
+// to read the same page it already read. The export endpoints are GETs that write
+// nothing. The one write, POST /api/backup/done, signs its body too and only
+// moves "last backup" forward to the time in the signed folder name, so sending
+// it again inside the window writes the same values again. A nonce table would
+// cost a database write per request.
 // The signature covers method, host, path and query, so a signed request for one
 // page, table, file or environment (staging vs production host) is useless for
 // any other.
@@ -27,8 +30,14 @@ export const TIME_HEADER = "x-sahra-backup-time";
 const enc = new TextEncoder();
 const QUERY_RE = /^[A-Za-z0-9_.=&-]*$/;
 
-export function canonical(method: string, host: string, path: string, query: string, time: string): string {
-  return ["SAHRA-BACKUP-1", method.toUpperCase(), host.toLowerCase(), path, query, time].join("\n");
+export function canonical(method: string, host: string, path: string, query: string, time: string, bodySha256?: string): string {
+  const lines = ["SAHRA-BACKUP-1", method.toUpperCase(), host.toLowerCase(), path, query, time];
+  if (method.toUpperCase() !== "GET") lines.push(bodySha256 ?? "");
+  return lines.join("\n");
+}
+
+async function sha256hexOf(body: Uint8Array): Promise<string> {
+  return hex(new Uint8Array(await crypto.subtle.digest("SHA-256", body)));
 }
 
 /** The key's bytes, or null when BACKUP_KEY is missing or shorter than 32 bytes (the endpoints then answer 503). */
@@ -49,8 +58,8 @@ export async function signature(raw: string, keyBytes: Uint8Array, text: string)
 
 export type Verdict = { ok: true } | { ok: false; status: 401 | 503; error: string };
 
-/** Checks a request's signature. Never touches a database. */
-export async function verifyBackupRequest(env: { BACKUP_KEY?: string }, req: Request, now: number): Promise<Verdict> {
+/** Checks a request's signature (`body`: the raw body of a POST). Never touches a database. */
+export async function verifyBackupRequest(env: { BACKUP_KEY?: string }, req: Request, now: number, body?: Uint8Array): Promise<Verdict> {
   const keyBytes = backupKeyBytes(env.BACKUP_KEY);
   if (!keyBytes) return { ok: false, status: 503, error: "backup_not_configured" };
   const sig = req.headers.get(SIG_HEADER) ?? "";
@@ -60,17 +69,19 @@ export async function verifyBackupRequest(env: { BACKUP_KEY?: string }, req: Req
   const url = new URL(req.url);
   const query = url.search.replace(/^\?/, "");
   if (!QUERY_RE.test(query)) return { ok: false, status: 401, error: "bad_signature" };
-  const want = await signature(env.BACKUP_KEY!, keyBytes, canonical(req.method, url.host, url.pathname, query, time));
+  const bodyHash = req.method === "GET" ? undefined : await sha256hexOf(body ?? new Uint8Array());
+  const want = await signature(env.BACKUP_KEY!, keyBytes, canonical(req.method, url.host, url.pathname, query, time, bodyHash));
   if (!timingSafeEqualStr(sig, want)) return { ok: false, status: 401, error: "bad_signature" };
   return { ok: true };
 }
 
 /** Headers for a signed request (tests and the local Apps Script simulation; Code.gs does the same). */
-export async function signedHeaders(key: string, method: string, url: string, now: number): Promise<Record<string, string>> {
+export async function signedHeaders(key: string, method: string, url: string, now: number, body?: string): Promise<Record<string, string>> {
   const keyBytes = backupKeyBytes(key);
   if (!keyBytes) throw new Error("BACKUP_KEY must be base64url of at least 32 bytes");
   const u = new URL(url);
   const time = String(Math.floor(now / 1000));
-  const sig = await signature(key, keyBytes, canonical(method, u.host, u.pathname, u.search.replace(/^\?/, ""), time));
+  const bodyHash = method.toUpperCase() === "GET" ? undefined : await sha256hexOf(enc.encode(body ?? ""));
+  const sig = await signature(key, keyBytes, canonical(method, u.host, u.pathname, u.search.replace(/^\?/, ""), time, bodyHash));
   return { [TIME_HEADER]: time, [SIG_HEADER]: sig };
 }

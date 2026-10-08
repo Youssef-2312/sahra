@@ -76,6 +76,10 @@ it("rows read by a full backup of 4,000 tickets with screenshots", async () => {
     expect(total).toBeLessThan(rows * 2 + TICKETS + 2000);
     report[`page_${limit}`] = { requests: u.requests, rows_read: total, main: u.main, ledger: u.ledger, files: u.files };
   }
+  // Hourly: ledger + screenshot list, no new screenshot to download.
+  logs = [];
+  await exportAll(h, PAGE_MAX, { kind: "hourly", files: false });
+  report.hourly = usage();
   logs = [];
   await backupGet(h, "/api/backup/manifest");
   report.manifest_without_counts = usage();
@@ -86,10 +90,16 @@ it("rows read by a full backup of 4,000 tickets with screenshots", async () => {
   const first = await backupGet(h, `/api/backup/rows/ledger/change_log?limit=${PAGE_MAX}`);
   const body = await first.text();
   report.change_log_page_max = { ...usage(), response_bytes: body.length };
-  // Measured (docs/DECISIONS.md, workstream E): 44,060 rows in the backup; a full export with
-  // counts and every screenshot downloaded reads 92,232 rows (main 48,202, ledger 32,019,
-  // files 12,011) whatever the page size; the manifest's counts alone read 44,160; without
-  // counts the manifest reads 100. A change-log page of 500 rows is about 313 KB of JSON.
+  // Measured (docs/DECISIONS.md, workstream E): 44,061 rows in the backup; a full export with
+  // counts and every screenshot downloaded reads 92,243 rows (main 48,213, ledger 32,019,
+  // files 12,011) whatever the page size; the manifest's counts alone read 44,170; without
+  // counts the manifest reads 109. A change-log page of 500 rows is about 313 KB of JSON.
   expect(report.manifest_without_counts).toMatchObject({ requests: 1, written: 0 });
+  // Hourly (ledger + screenshot list, nothing new to download; 500-row pages): 20,113 rows read
+  // (main 83: manifest and schedule, ledger 16,019, files 4,011) in 45 requests.
+  const hourly = report.hourly as { main: number; ledger: number; files: number; written: number };
+  expect(hourly.written).toBe(0);
+  expect(hourly.main).toBeLessThan(200);
+  expect(hourly.ledger + hourly.files).toBeLessThan(rows / 2);
   expect((report.change_log_page_max as { ledger: number }).ledger).toBeLessThanOrEqual(PAGE_MAX);
 }, 180_000);

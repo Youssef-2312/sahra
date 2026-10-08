@@ -8,16 +8,26 @@ while the site runs; a restore goes into new databases with
 
 ## What it does
 
-- Every hour (one trigger) it asks the Worker `GET /api/backup/schedule`:
-  - **hourly** while a party's admission is open, on a party night (12 hours
-    before the start until 6 hours after the end), or while a party is selling
-    (a party that is not switched off and not over, and some change in the last
-    24 hours);
-  - **nightly** otherwise: one backup from 03:00 in the script's time zone (or
-    as soon as the last one is more than 26 hours old).
+- Every hour (one trigger) it asks the Worker `GET /api/backup/schedule`.
+  - **Nightly (full) backup** (`sahra-backup-...`): every table and the
+    screenshots, from 03:00 in the script's time zone, or as soon as the last
+    full one is more than 26 hours old. Never skipped.
+  - **Hourly backup** (`sahra-ledger-...`): only the ledger (change log, intents,
+    control objects), the screenshot list and NEW screenshots; while a party's
+    admission is open, on a party night (12 hours before the start until 6 hours
+    after the end), or while a party is selling (not switched off, not over, a
+    change in the last 24 hours). Skipped while the Worker says the site is past
+    about half of its free daily limits (`budget_ok: false`).
+  - A restore from Drive uses the newest nightly plus the newest hourly:
+    `node scripts/restore-drill.mjs <sahra-backup-...> --ledger <sahra-ledger-...>`;
+    the recovery replay brings back every change made after the nightly.
 - A backup = `manifest.json` (tables, measured database sizes, migrations), every
   table page by page (`/api/backup/rows/...`, ledger last), then the screenshots.
   Each part file is gzipped JSON.
+- After a backup passed every check, the script reports it to the Worker
+  (`POST /api/backup/done`, signed like every call). The Worker's health check
+  tells the site owners when the last reported backup is more than 26 hours old,
+  so a script that stopped running is noticed too.
 - Screenshots are stored once in `screenshots/` (they never change). Each new one
   is downloaded, its SHA-256 compared with the Worker's, its size with the list,
   then saved to Drive, read back from Drive and checked again. Progress is saved
@@ -26,8 +36,8 @@ while the site runs; a restore goes into new databases with
 - `summary.json` and `SUMMARY.txt` in each backup folder: rows per table,
   screenshots copied / already there / failed, the measured database sizes (D1's
   own `size_after`), time taken.
-- Keeps every backup for 48 hours, then the newest of each day for 30 days.
-  Screenshots are never deleted.
+- Keeps every backup for 48 hours, then the newest nightly of each day for 30
+  days (hourly ones are deleted after 48 hours). Screenshots are never deleted.
 - Email to the owner (from this account to itself, or `ALERT_EMAIL`), at most one
   per problem per 6 hours: a backup could not start; failed 3 runs in a row
   (abandoned, the next hour starts a new one); a screenshot failed its check; no
@@ -74,11 +84,14 @@ while the site runs; a restore goes into new databases with
    (it continues by itself if it needs more than 5 minutes). Then check the
    folder: a `sahra-backup-...` folder with `SUMMARY.txt`, and `screenshots/`.
 7. **Restore drill** (on your computer, nothing touches Cloudflare): download the
-   backup folder and the `screenshots` folder from Drive into one folder, then
+   newest `sahra-backup-...` folder, the newest `sahra-ledger-...` folder (if any)
+   and the `screenshots` folder from Drive into one folder, then
 
    ```
-   node scripts/restore-drill.mjs "<download>/sahra-backup-YYYY-MM-DDTHHmmZ"
+   node scripts/restore-drill.mjs "<download>/sahra-backup-YYYY-MM-DDTHHmmZ" --ledger "<download>/sahra-ledger-YYYY-MM-DDTHHmmZ"
    ```
+
+   (without `--ledger` if there is no hourly backup yet).
 
    It must end with "Restore drill OK". Do this once after installing, and again
    after big changes (a new migration).

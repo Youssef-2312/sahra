@@ -992,7 +992,7 @@ against Cloudflare or Google.
 - Shared files: `src/app.ts` (route), `src/env.ts` (`BACKUP_KEY`),
   `vitest.config.ts` (test-only `BACKUP_KEY` and three empty restore databases),
   `test/env.d.ts`, `test/helpers.ts` (`backupGet`, `exportAll`),
-  `test/unauth.test.ts` (8 cases). No migration.
+  `test/unauth.test.ts` (11 cases). No migration.
 
 **Schedule (Worker decides, script follows):** hourly while any party's admission
 is open, on a party night (12 h before the start until 6 h after the end), or while
@@ -1020,8 +1020,9 @@ downloaded (main 48,202, ledger 32,019, files 12,011), the same with 200- or
 500-row pages. Split: the rows themselves about 44,100; the manifest counts
 44,160; one per screenshot download (only NEW screenshots are downloaded after
 the first backup). So an hourly backup (no counts, no new screenshots) reads about
-44,100 rows, a nightly one about 88,000. **A day of hourly backups at that size is
-about 1.1 million rows read, 22% of the account's 5 million per day.** A 500-row
+44,100 rows, a nightly one about 88,000. (Full hourly backups all day would be
+about 1.1 million rows read, 22% of the account's 5 million per day; hourly
+backups are therefore ledger-only, see the follow-up below.) A 500-row
 change-log page is about 313 KB of JSON; serializing it took 0.5 ms (median) in
 Node's V8, SHA-256 of a 1.5 MB screenshot 1.3 ms; Workers CPU per request is not
 measurable locally.
@@ -1084,20 +1085,54 @@ here is into LOCAL databases only; restoring into new remote D1 databases needs 
 owner's credential and a parameterized writer for BLOBs (wrangler's `d1 execute`
 cannot bind parameters), which is not built.
 
-**Open questions for the owner/coordinator**
+**Follow-up (coordinator decisions, 2026-10-08)**
 
-1. Rows read: hourly backups all day at 4,000 tickets use about 22% of the
-   account's daily reads. Options: accept; or hourly runs copy only the ledger
-   (change log, intents, control objects: about 40% of the rows, enough to rebuild
-   every logged entity by replay) and the full tables nightly; or let the quota
-   workstream skip backups past 50% of the daily limit (backups are non-essential).
-2. Outbox rows are not in the backup (they carry ticket links). Emails awaiting
-   the party owner's approval are lost in a restore from Drive. Acceptable?
-3. If the script itself stops (trigger deleted, Google account problem), it
-   cannot email. The planned Worker health check "backup succeeded" cannot see
-   backups (the endpoints write nothing); it could if the script reported each
-   finished backup to a small signed write endpoint (one row per backup). Decide
-   whether that write is wanted.
-4. Only one files database (`FILES`) is exported; when `sahra-files-2` exists,
+- **Hourly = ledger + new screenshots; nightly = everything.** An hourly backup
+  (`sahra-ledger-...` folder, manifest `?kind=hourly`) copies the screenshot list,
+  `party_control`, `intents` and `change_log`, and downloads only screenshots not
+  yet in Drive. The nightly (`sahra-backup-...`) copies every table, with row
+  counts. The script runs the nightly from 03:00 (or when the last full one is
+  over 26 h old) whatever the schedule says; hourly ones only in hourly mode.
+  **Restore from Drive = newest nightly's main tables + newest hourly's ledger
+  and screenshots, then the recovery replay**:
+  `node scripts/restore-drill.mjs <nightly> --ledger <hourly>`. Tested end to end:
+  two admissions, a cancel, and a new sign-up with its screenshot, all made after
+  the nightly, come back through the replay (4 entries applied, 0 holds, final
+  verify OK; the new screenshot byte-identical). Rows not in the change log
+  (audit, scans) are as of the nightly.
+- **Daily budget:** `/api/backup/schedule` returns `budget_ok` from workstream F's
+  `budgetOk()` (src/limits; one health_state row read). While false, the script
+  skips hourly backups ("skipped_budget"); the nightly is never skipped (tested).
+- **`POST /api/backup/done`** (the only write in this workstream): same signature
+  scheme, method POST, plus the SHA-256 of the body as a seventh signed line; body
+  at most 1 KB (read with a cap, before the signature check, before any
+  database access); strictly `{kind, folder, rows, files, bytes}` (no other keys,
+  kind `nightly` with a `sahra-backup-` folder or `hourly` with `sahra-ledger-`,
+  a real UTC date, non-negative integers with upper bounds). It runs
+  `UPDATE health_state SET last_backup_at = ?, last_backup_note = ? WHERE id =
+  'main' AND (last_backup_at IS NULL OR last_backup_at <= ?)`: **1 row written**;
+  the time is the backup's START (from the signed folder name), never more than 5
+  minutes ahead or 3 days behind, and it never moves back (an older report
+  answers `recorded: false`). A replay inside the 5 minutes writes the same
+  values again. The script calls it only after a backup passed every check; a
+  failed report is kept in Script Properties and retried next run. F's check
+  (26 h) then alerts the site owners when backups stop.
+- **Measured, hourly backup at 4,000 tickets** (500-row pages, no new
+  screenshots): **20,113 rows read** (ledger 16,019, screenshot list 4,011,
+  manifest and schedule 83) in 45 requests; 24 a day = about 483,000 rows, 9.7%
+  of the account's daily reads (was 22% with full hourly backups); plus one
+  nightly of about 88,000. Apps Script time per hourly run drops accordingly
+  (estimate: under a minute at that size).
+
+**Open points (accepted as they are by the coordinator)**
+
+1. Outbox rows are not in the backup (they carry ticket links): emails awaiting
+   the party owner's approval are lost in a restore from Drive. Accepted.
+2. Only one files database (`FILES`) is exported; when `sahra-files-2` exists,
    the export and restore need its binding added to the table list.
-5. Trashed Drive folders count against the Drive quota for 30 days.
+3. Trashed Drive folders count against the Drive quota for 30 days.
+4. `Code.gs` also accepts `http://127.0.0.1` / `localhost` as `BACKUP_URL`, only
+   for the local simulation (Apps Script cannot reach those).
+5. Hourly reports also move `last_backup_at`, so F's 26 h check stays green
+   while hourly backups succeed even if the nightly fails; the script itself
+   emails the owner when the last FULL backup is over 30 hours old.

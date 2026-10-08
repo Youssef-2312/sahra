@@ -129,7 +129,7 @@ export function loadAppsScript(o) {
   const http = syncHttp();
   const drive = new Drive(o.driveDir);
   const props = new Map(Object.entries(o.props));
-  const sim = { mails: [], triggers: [], logs: [], fetches: 0, http, drive, props };
+  const sim = { mails: [], triggers: [], logs: [], fetches: 0, requests: [], http, drive, props };
   const tz = o.timeZone ?? "Africa/Cairo";
   const formatDate = (date, zone, fmt) => {
     const parts = Object.fromEntries(new Intl.DateTimeFormat("en-GB", { timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
@@ -142,7 +142,9 @@ export function loadAppsScript(o) {
     UrlFetchApp: {
       fetch(url, opts = {}) {
         sim.fetches++;
-        const r = http.fetch(url, { method: (opts.method ?? "get").toUpperCase(), headers: opts.headers ?? {}, redirect: opts.followRedirects === false ? "manual" : "follow" });
+        const headers = { ...(opts.headers ?? {}), ...(opts.contentType ? { "content-type": opts.contentType } : {}) };
+        const r = http.fetch(url, { method: (opts.method ?? "get").toUpperCase(), headers, body: opts.payload, redirect: opts.followRedirects === false ? "manual" : "follow" });
+        sim.requests.push({ method: (opts.method ?? "get").toUpperCase(), url, status: r.status, payload: opts.payload ?? null });
         const body = Buffer.from(r.body);
         if (r.status >= 400 && !opts.muteHttpExceptions) throw new Error(`Request failed for ${url} returned code ${r.status}`);
         return {
