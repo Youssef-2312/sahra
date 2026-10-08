@@ -4,7 +4,8 @@
 // client round-trip latency. CPU per endpoint: setup.bat step 12 (it runs this).
 //
 //   node scripts/live-check.mjs --invite "https://sahra-staging.<you>.workers.dev/join#t=..." \
-//     [--scans 100] [--races 30] [--join-rounds 30] [--keep true]
+//     [--scans 100] [--races 30] [--join-rounds 30] [--keep true] [--save tickets.json]
+//   node scripts/live-check.mjs --invite "<link>" --verify-used tickets.json   (after a recovery)
 //
 // Before running: open admission for the party on the staging dashboard.
 //  1. Join race: 8 simultaneous joins on the given invitation -> exactly one session.
@@ -18,6 +19,7 @@
 //     invitation and session of the party, with change-log records. --keep true skips it.
 
 import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { readFileSync, writeFileSync } from "node:fs";
 
 const args = Object.fromEntries(process.argv.slice(2).reduce((acc, a, i, all) => {
   if (a.startsWith("--")) acc.push([a.slice(2), all[i + 1]]);
@@ -90,6 +92,26 @@ if (!adm.body.open) {
   process.exit(1);
 }
 
+// After a controlled recovery (Checkpoint C): every ticket admitted before it must
+// still say "used" (nothing reopens), and the ledger check must find none reopened.
+if (args["verify-used"]) {
+  const saved = JSON.parse(readFileSync(args["verify-used"], "utf8"));
+  const v = {};
+  for (const t of saved.tickets) {
+    const r = (await call("POST", "/api/scan", { scan_id: randomUUID(), qr: t.qr }, H, "scan")).body.verdict;
+    v[r] = (v[r] ?? 0) + 1;
+  }
+  check(`after recovery: all ${saved.tickets.length} tickets admitted before it still say "used" (admitted before and after the backup point)`,
+    v.used === saved.tickets.length, JSON.stringify(v));
+  const lc = await call("GET", "/api/test/ledger-check", undefined, H, "ledger-check");
+  check("after recovery: no ticket reopened (every ticket the change log says is used is used in the database)",
+    lc.status === 200 && lc.body.nothing_reopened === true, lc.status === 200 ? `reopened=${lc.body.reopened}` : `HTTP ${lc.status}`);
+  const rv = await call("POST", "/api/test/revoke-door-access", {}, H, "cleanup");
+  console.log(`\nCleanup: HTTP ${rv.status}.`);
+  console.log(`\n${failures === 0 ? "All checks passed." : failures + " check(s) FAILED."}`);
+  process.exit(failures === 0 ? 0 : 1);
+}
+
 // 2. Join rounds: each gives one more phone.
 const phones = [main];
 let roundsOk = 0;
@@ -115,9 +137,12 @@ const scanOnce = (sess, qr, scanId = randomUUID()) => call("POST", "/api/scan", 
 // 3. Sequential checks.
 const v = {};
 const count = (k) => { v[k] = (v[k] ?? 0) + 1; };
+const admittedQrs = [];
 for (const t of await tickets(SCANS)) {
   const id = randomUUID();
-  count("first:" + (await scanOnce(main, t.qr, id)).verdict);
+  const verdict = (await scanOnce(main, t.qr, id)).verdict;
+  if (verdict === "admit") admittedQrs.push({ qr: t.qr });
+  count("first:" + verdict);
   count("retry_same_id:" + (await scanOnce(main, t.qr, id)).verdict);
   count("second:" + (await scanOnce(phones[1 % phones.length], t.qr)).verdict);
   count("forged:" + (await scanOnce(main, t.qr.slice(0, -1) + (t.qr.endsWith("0") ? "1" : "0"))).verdict);
@@ -142,6 +167,12 @@ const pct = (xs, p) => { const s = [...xs].sort((a, b) => a - b); return s[Math.
 console.log("\nclient round trip (includes your network):");
 for (const [k, xs] of Object.entries(lat)) console.log(`  ${k.padEnd(12)} n=${String(xs.length).padStart(4)}  p50=${pct(xs, 0.5)} ms  p95=${pct(xs, 0.95)} ms  p99=${pct(xs, 0.99)} ms`);
 if (networkRetries) console.log(`\nNetwork retries (client side): ${networkRetries}`);
+// For a recovery rehearsal: the admitted tickets, kept to scan again after the restore.
+if (args.save) {
+  writeFileSync(args.save, JSON.stringify({ saved_at: new Date().toISOString(), tickets: admittedQrs }));
+  console.log(`\nSaved ${admittedQrs.length} admitted tickets to ${args.save} at ${new Date().toISOString()} (staging test codes only).`);
+}
+
 // 5. Ledger check (what setup.bat step 11 does): every admission has its ledger record.
 const lc = await call("GET", "/api/test/ledger-check", undefined, headersFor(main), "ledger-check");
 if (lc.status === 200) {

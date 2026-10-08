@@ -255,3 +255,34 @@ staging only (`migrations-staging/*/0002_drop_proto.sql`).
 6. Revoke the invitation. Camera test: `docs/qr-camera-test/README.md` (open it on
    GitHub on one phone at low brightness, scan with another phone's camera).
 7. Then setup.bat **step 3** (production migrations), **step 4** (status), merge.
+
+---
+
+## E. Phase 3 (Checkpoint C): controlled recovery rehearsal on staging
+
+Pull request "Phase 3" adds `migrations/0003_recovery.sql`, `migrations/0004_outbox.sql`
+and `migrations-ledger/0003_intents.sql` (all additive).
+
+1. `git pull`, then setup.bat **step 2** (staging migrations). Tell Claude; Claude
+   pushes `staging` (it deploys).
+2. Staging dashboard: **Open admission**, **Invite door staff** (1 hour); send the
+   link. A Claude cloud session runs the live checks and saves the admitted test
+   tickets (`live-check.mjs --save before.json`); it reports the time it finished.
+   That time is the **backup point**.
+3. About two minutes later, a second link: the same run again
+   (`--save after.json`). These admissions happen AFTER the backup point, so only
+   the ledger knows them.
+4. On your computer: setup.bat **step 20** (controlled recovery on STAGING). Type
+   RECOVER, then at "Restore to which moment?" type the backup point (for example
+   `2026-10-08T01:23:45Z`), then RESTORE, then confirm wrangler's question. The
+   script turns maintenance on (the site answers "maintenance" meanwhile), pauses
+   every party, completes the ledger, restores with Time Travel, replays, ends every
+   session, revokes unused invitations, turns maintenance off. Send Claude its output.
+5. Sign in again on the staging dashboard (everyone was signed out), **Open
+   admission**, **Invite door staff** (1 hour); send the link. The cloud session
+   scans every saved ticket again (`--verify-used`): each must say **used**, both
+   those admitted before and after the backup point, and the ledger check must
+   find **no ticket reopened**.
+
+To undo a restore, the script printed the Time Travel bookmark from before it;
+`npx wrangler d1 time-travel restore DB --env staging --bookmark=<it>`.
