@@ -18,16 +18,31 @@
     widgets.resend = turnstile.render("#turnstile-resend", { sitekey: siteKey });
   };
 
-  // About 1600 px on the long side, JPEG, so amounts and references stay readable at about 200 KB.
+  // Target about 250 KB (server maximum 600,000 bytes): longest side about 1600 px,
+  // JPEG, quality stepped down until it fits. An image already small enough (and of
+  // an accepted type) is sent as it is, so amounts and references stay sharp.
+  var TARGET = 250 * 1000;
+  var ACCEPTED = ["image/jpeg", "image/png", "image/webp"];
   async function compress(file) {
+    if (file.size <= TARGET && ACCEPTED.indexOf(file.type) >= 0) return file;
     var bmp = await createImageBitmap(file);
     var scale = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
     var c = document.createElement("canvas");
     c.width = Math.round(bmp.width * scale);
     c.height = Math.round(bmp.height * scale);
-    c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
-    return new Promise(function (resolve) { c.toBlob(resolve, "image/jpeg", 0.8); });
+    var g = c.getContext("2d");
+    // JPEG has no transparency: white behind it, not black.
+    g.fillStyle = "#fff";
+    g.fillRect(0, 0, c.width, c.height);
+    g.drawImage(bmp, 0, 0, c.width, c.height);
+    var blob = null;
+    for (var q = 0.85; q >= 0.4; q -= 0.1) {
+      blob = await new Promise(function (resolve) { c.toBlob(resolve, "image/jpeg", q); });
+      if (blob && blob.size <= TARGET) break;
+    }
+    return blob;
   }
+  function kb(n) { return Math.round(n / 1000) + " KB"; }
 
   async function load() {
     var r = await fetch("/api/guest/parties/" + encodeURIComponent(party));
@@ -82,14 +97,20 @@
     fd.set("people", f.people.value);
     fd.set("answers", JSON.stringify(answers));
     fd.set("cf-turnstile-response", turnstile.getResponse(widgets.signup) || "");
-    if (f.screenshot.files[0]) fd.set("screenshot", await compress(f.screenshot.files[0]), "screenshot.jpg");
-    show(result, "Sending...");
+    var sizeNote = "";
+    if (f.screenshot.files[0]) {
+      var original = f.screenshot.files[0];
+      var shot = await compress(original);
+      fd.set("screenshot", shot, shot === original ? original.name : "screenshot.jpg");
+      sizeNote = "Screenshot: " + kb(shot.size) + (shot === original ? " (sent as it is)" : " (made smaller from " + kb(original.size) + ")") + "\n";
+    }
+    show(result, sizeNote + "Sending...");
     var r = await fetch("/api/guest/parties/" + encodeURIComponent(party) + "/signup", { method: "POST", body: fd, credentials: "same-origin" });
     var j = await r.json().catch(function () { return {}; });
     turnstile.reset(widgets.signup);
     if (r.ok) {
       Sahra.store.del(tokenKey);
-      result.textContent = "Request received. Keep this link private and open it to see your ticket: ";
+      result.textContent = sizeNote + "Request received. Keep this link private and open it to see your ticket: ";
       var a = document.createElement("a");
       a.href = j.link;
       a.textContent = location.origin + j.link;

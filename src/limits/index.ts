@@ -23,7 +23,7 @@ import type { SqlDriver } from "../db/driver";
 import { sessionValid, type Role } from "../db";
 import { sql, type Sql } from "../db/sql";
 
-export type LimitKind = "signup" | "resend_link" | "release" | "notice" | "outbox_approve" | "export";
+export type LimitKind = "signup" | "resend_link" | "release" | "notice" | "outbox_approve" | "export" | "reject_stale";
 
 export const DAY_MS = 86_400_000;
 
@@ -50,6 +50,8 @@ export const LIMITS: Record<LimitKind, { cap: number; essential: boolean; label:
   outbox_approve: { cap: 50, essential: false, label: "email approvals" },
   // Reads up to 500 tickets per page, writes nothing besides this counter.
   export: { cap: 200, essential: false, label: "export pages" },
+  // "Reject old pending requests": up to 20 tickets per call, about 5 rows each (ticket, index, audit, logged_rev, ledger).
+  reject_stale: { cap: 100, essential: false, label: "bulk rejections of old requests" },
 };
 
 export const dayOf = (now: number) => Math.floor(now / DAY_MS);

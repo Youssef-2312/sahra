@@ -202,8 +202,8 @@ export class GuestDb {
 
   /** Approved, unreleased tickets among `ids` (to prepare their emails before the release batch). */
   async releasable(sess: SessionRef, ids: string[], now: number) {
-    const r = await this.driver.all<{ id: string; guest_email: string | null; guest_name: string | null; link_version: number; party_name: string }>(
-      sql`SELECT t.id, t.guest_email, t.guest_name, t.link_version, p.name AS party_name FROM tickets t JOIN parties p ON p.id = t.party_id
+    const r = await this.driver.all<{ id: string; guest_email: string | null; guest_name: string | null; people: number; link_version: number; party_name: string }>(
+      sql`SELECT t.id, t.guest_email, t.guest_name, t.people, t.link_version, p.name AS party_name FROM tickets t JOIN parties p ON p.id = t.party_id
         WHERE t.party_id = ${sess.partyId} AND t.id IN (${inList(ids)}) AND t.status = 'approved' AND t.released_at IS NULL
           AND ${sessionValid(sess, MANAGERS, now)}`,
     );
@@ -271,5 +271,28 @@ export class GuestDb {
       WHERE t.party_id = ${sess.partyId} AND t.id > ${after} AND ${sessionValid(sess, MANAGERS, now)}
       ORDER BY t.id LIMIT ${limit}`);
     return r.results;
+  }
+
+  /**
+   * Owner decision: pending requests are cleaned up by hand only. Rejects up to
+   * `limit` of the party's pending requests created before `before` (oldest
+   * first), with a reason the guest sees, in ONE statement; their places are free
+   * at once. Returns the tickets changed and how many such requests remain.
+   */
+  async rejectStale(sess: SessionRef, before: number, reason: string, limit: number, now: number, actor: string, op: string) {
+    const ok = sessionValid(sess, MANAGERS, now);
+    const stale = sql`party_id = ${sess.partyId} AND status = 'pending' AND created_at < ${before}`;
+    const rs = await this.driver.batch([
+      sql`UPDATE tickets SET status = 'rejected', reject_reason = ${reason}, rejected_at = ${now}, rejected_by = ${actor},
+          rev = rev + 1, last_op = ${op}, last_action = 'rejected'
+        WHERE id IN (SELECT id FROM tickets WHERE ${stale} ORDER BY created_at LIMIT ${limit}) AND ${stale} AND ${ok}`,
+      audit(now, actor, "rejected", "ticket", sql`SELECT party_id, id, rev FROM tickets WHERE party_id = ${sess.partyId} AND last_op = ${op}`, reason),
+      sql`SELECT id FROM tickets WHERE party_id = ${sess.partyId} AND last_op = ${op}`,
+      sql`SELECT COUNT(*) AS n FROM tickets WHERE ${stale}`,
+    ]);
+    return {
+      ids: (rs[2]!.results as { id: string }[]).map((r) => r.id),
+      remaining: Number((rs[3]!.results[0] as { n: number }).n),
+    };
   }
 }

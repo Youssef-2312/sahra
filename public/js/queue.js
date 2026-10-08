@@ -45,6 +45,9 @@
   // The image comes from an authenticated endpoint; shown as a data: URL (the page CSP allows data: images).
   async function zoom(id) {
     var r = await fetch("/api/tickets/" + id + "/screenshot", { credentials: "same-origin" });
+    var note = document.getElementById("zoom-note");
+    note.textContent = "";
+    if (r.status === 410) { document.getElementById("zoom").hidden = true; note.textContent = (await r.json()).message; return; }
     if (!r.ok) return show({ status: r.status });
     var blob = await r.blob();
     var reader = new FileReader();
@@ -67,6 +70,22 @@
   document.getElementById("reload").addEventListener("click", function () { load(false); });
   document.getElementById("more").addEventListener("click", function () { load(true); });
   document.getElementById("status").addEventListener("change", function () { load(false); });
+
+  // One bounded batch per call; repeated while more remain.
+  document.getElementById("stale").addEventListener("submit", async function (e) {
+    e.preventDefault();
+    var f = e.target;
+    var total = 0;
+    for (var round = 0; round < 100; round++) {
+      var r = await Sahra.post("/api/tickets/reject-stale", { hours: Number(f.hours.value), reason: f.reason.value });
+      if (r.status === 503) { show("Not confirmed yet: press again. Rejected so far: " + total); return; }
+      if (r.status !== 200) return show(r);
+      total += r.body.rejected;
+      show("Rejected " + total + ", remaining " + r.body.remaining);
+      if (!r.body.remaining || !r.body.rejected) break;
+    }
+    load(false);
+  });
 
   document.getElementById("one").addEventListener("submit", async function (e) {
     e.preventDefault();

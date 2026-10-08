@@ -105,6 +105,7 @@ const cases: Case[] = [
   ["screenshot, junk session", "GET", "/api/tickets/:id/screenshot", (h) => h.req(`/api/tickets/${tid}/screenshot`, { cookies: junkCookie })],
   ["approve, junk session", "POST", "/api/tickets/approve", (h) => h.req("/api/tickets/approve", { method: "POST", headers: JSON_H, cookies: junkCookie, body: JSON.stringify({ ids: [tid] }) })],
   ["reject, junk session", "POST", "/api/tickets/reject", (h) => h.req("/api/tickets/reject", { method: "POST", headers: JSON_H, cookies: junkCookie, body: JSON.stringify({ ids: [tid] }) })],
+  ["reject old pending, junk session", "POST", "/api/tickets/reject-stale", (h) => h.req("/api/tickets/reject-stale", { method: "POST", headers: JSON_H, cookies: junkCookie, body: JSON.stringify({ hours: 1, reason: "x" }) })],
   ["release, junk session", "POST", "/api/tickets/release", (h) => h.req("/api/tickets/release", { method: "POST", headers: JSON_H, cookies: junkCookie, body: JSON.stringify({ ids: [tid] }) })],
   ["cancel, junk session", "POST", "/api/tickets/:id/cancel", (h) => h.req(`/api/tickets/${tid}/cancel`, { method: "POST", headers: JSON_H, cookies: junkCookie, body: JSON.stringify({ op: newId() }) })],
   ["reissue, junk session", "POST", "/api/tickets/:id/reissue", (h) => h.req(`/api/tickets/${tid}/reissue`, { method: "POST", headers: JSON_H, cookies: junkCookie, body: JSON.stringify({ op: newId() }) })],

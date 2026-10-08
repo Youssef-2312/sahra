@@ -6,6 +6,7 @@ import { cfConnect } from "./email/socket";
 import type { Env } from "./env";
 import { dbSizes, isHealthMinute, runHealth } from "./health";
 import { resyncReleaseEmails } from "./recovery/resync";
+import { purgeOldScreenshots } from "./storage";
 import { warmUp } from "./warmup";
 
 const fetcher = (input: string, init?: RequestInit) => fetch(input, init);
@@ -26,6 +27,7 @@ export default {
         main: new D1Driver(env.DB), ledger: new D1Driver(env.LEDGER), now: () => Date.now(), sizes: () => dbSizes(env),
         maintenance: env.MAINTENANCE === "1", emailConfigured: !!((env.GMAIL_ADDRESS && env.GMAIL_APP_PASSWORD) || (env.BREVO_API_KEY && env.BREVO_SENDER)),
         origin: env.PUBLIC_ORIGIN, discordUrl: env.DISCORD_WEBHOOK_URL, fetch: fetcher,
+        purgeScreenshots: (now) => purgeOldScreenshots(env, new D1Driver(env.DB), now),
       }));
       // After a controlled recovery: rebuild "your ticket" emails lost with the restore.
       ctx.waitUntil(resyncReleaseEmails(env as unknown as Record<string, unknown> & { PUBLIC_ORIGIN: string }, new D1Driver(env.DB), Date.now()).catch(() => null));
