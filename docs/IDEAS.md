@@ -211,3 +211,21 @@ coordinator's session. Status: agreed, rejected or open.
 - Effort: medium
 - Free-tier cost: a cancel notifies every guest through the outbox, so a big party uses a lot of the Gmail daily cap and takes a while to finish; show "x of y emails sent"
 - Rule conflicts: none; no payments are handled by Sahra. Wording: "Sahra records refunds, it does not send them".
+
+## 15. After sign-up: reference, saveable link, review time, contact, and organiser-assisted recovery
+
+- Status: agreed
+- Owner's words: "I agree with ur recommendation"
+- Source: outside review by another AI, passed on by the owner.
+- Confirmation page and email show:
+  - a short request reference (for example "SAH-4821") the guest can quote to the organiser;
+  - the private ticket link with a clear "Save this link" note;
+  - an expected review time, set by the organiser per party (for example "usually within 24 hours");
+  - the organiser's contact;
+  - once the QR is released, a "Save QR" button;
+  - a plain note: "This device remembers your tickets. On another device, use Find my tickets."
+- Wrong email or lost access: the guest contacts the organiser and quotes the reference. The organiser checks details only the guest would know (name, amount, payment time, screenshot) and can change the email on the guest card. Knowing a name alone is never enough. The change is audited with the organiser's name and a notice goes to the old address.
+- Needs: a reference field on tickets (short, unique per party, not guessable as a way into a ticket; it identifies, it does not authorise); organiser setting for review time; an "edit email" action on the guest card under the change-log and intent rules (it changes who can receive the ticket link, so it must also invalidate the old private link and issue a new one); one email template.
+- Effort: medium
+- Free-tier cost: small; a few more fields, one extra email only when an email is changed
+- Rule conflicts: the reference must never work as a key to open a ticket (the private link stays the only access). Fail closed: if the link is reissued, the old link and QR stop working. No emojis.
