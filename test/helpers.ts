@@ -521,22 +521,31 @@ export async function exportAll(h: Harness, limit = 200, o: { kind?: "nightly" |
     }
     tables.set(`${t.db}.${t.table}`, rows);
   }
-  const files = new Map<number, { bytes: Uint8Array; sha256: string }>();
-  for (const f of o.files === false ? [] : tables.get("files.files") ?? []) {
-    const r = await backupGet(h, `/api/backup/file/${f.id}`);
-    requests++;
-    const bytes = new Uint8Array(await r.arrayBuffer());
-    const sha256 = await sha256hexBytes(bytes);
-    if (r.status !== 200 || sha256 !== r.headers.get("x-sahra-sha256") || bytes.length !== Number(r.headers.get("x-sahra-size")) || bytes.length !== f.size) {
-      throw new Error(`file ${f.id}: transfer check failed`);
+  // Every files database's list; a purged screenshot is not downloaded (the Worker answers 410).
+  const files = new Map<string, { bytes: Uint8Array; sha256: string }>();
+  let purged = 0;
+  for (const t of manifest.order.filter((x) => x.table === "files")) {
+    for (const f of o.files === false ? [] : tables.get(`${t.db}.files`) ?? []) {
+      const r = await backupGet(h, `/api/backup/file/${t.db}/${f.id}`);
+      requests++;
+      if (f.purged_at != null) {
+        if (r.status !== 410) throw new Error(`file ${t.db}:${f.id}: purged but answered ${r.status}`);
+        purged++;
+        continue;
+      }
+      const bytes = new Uint8Array(await r.arrayBuffer());
+      const sha256 = await sha256hexBytes(bytes);
+      if (r.status !== 200 || sha256 !== r.headers.get("x-sahra-sha256") || bytes.length !== Number(r.headers.get("x-sahra-size")) || bytes.length !== f.size) {
+        throw new Error(`file ${t.db}:${f.id}: transfer check failed`);
+      }
+      files.set(`${t.db}:${f.id}`, { bytes, sha256 });
     }
-    files.set(Number(f.id), { bytes, sha256 });
   }
   return {
-    manifest, tables, files, requests,
+    manifest, tables, files, purged, requests,
     source: {
       rows: async (db: string, table: string) => tables.get(`${db}.${table}`) ?? [],
-      file: async (id: number) => files.get(id) ?? null,
+      file: async (db: string, id: number) => files.get(`${db}:${id}`) ?? null,
     },
   };
 }

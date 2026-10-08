@@ -7,7 +7,7 @@
 //   GET /api/backup/schedule                 hourly or nightly, why, and whether the daily budget allows hourly
 //   GET /api/backup/manifest[?counts=1|kind=hourly]  tables (all, or ledger + screenshot list), excluded tables, sizes, migrations
 //   GET /api/backup/rows/:db/:table?after=&limit=   one page, by primary key
-//   GET /api/backup/file/:id                 one screenshot's bytes (+ SHA-256 header)
+//   GET /api/backup/file/:db/:id             one screenshot's bytes (+ SHA-256 header); 410 if purged
 //   POST /api/backup/done                    the script reports a verified backup (the only write:
 //                                            one row, health_state, for workstream F's backup check)
 //
@@ -17,7 +17,8 @@
 import { Hono } from "hono/tiny";
 import { json, readJson, type AppEnv, type Ctx } from "../context";
 import { verifyBackupRequest } from "../backup/auth";
-import { dbInfo, decodeCursor, measuredSize, PAGE_DEFAULT, PAGE_MAX, readPage, schedule, specOf, tablesFor } from "../backup/export";
+import { dbInfo, decodeCursor, FILES_DBS, isFilesDb, measuredSize, PAGE_DEFAULT, PAGE_MAX, readPage, schedule, shardOf, specOf, tablesFor, type FilesDb } from "../backup/export";
+import { FILE_BINDINGS, filesBinding } from "../storage";
 import { sha256hexBytes, toBytes } from "../backup/restore";
 import { D1Driver, type SqlDriver } from "../db/driver";
 import { sql } from "../db/sql";
@@ -60,29 +61,38 @@ backupRoutes.use("*", async (c, next) => {
   c.res.headers.set("cache-control", "no-store");
 });
 
-function filesDriver(c: Ctx): SqlDriver | null {
-  return c.env.FILES ? new D1Driver(c.env.FILES) : null;
+/** The bound files databases (FILES, FILES_2..FILES_4), each with its own driver. */
+function filesDbs(c: Ctx): { db: FilesDb; binding: D1Database; driver: SqlDriver }[] {
+  return FILES_DBS.map((db) => ({ db, binding: filesBinding(c.env, shardOf(db)) }))
+    .filter((x): x is { db: FilesDb; binding: D1Database } => Boolean(x.binding))
+    .map((x) => ({ ...x, driver: new D1Driver(x.binding) }));
 }
 
-function driverFor(c: Ctx, db: string, files: SqlDriver | null): SqlDriver | null {
-  return db === "main" ? c.var.db.driver : db === "ledger" ? c.var.ledgerDriver : db === "files" ? files : null;
+function driverFor(c: Ctx, db: string): SqlDriver | null {
+  if (db === "main") return c.var.db.driver;
+  if (db === "ledger") return c.var.ledgerDriver;
+  if (!isFilesDb(db)) return null;
+  const b = filesBinding(c.env, shardOf(db));
+  return b ? new D1Driver(b) : null;
 }
 
 /** Rows read per database (the request log line counts only the main database's). */
-function logUsage(c: Ctx, files: SqlDriver | null) {
+function logUsage(c: Ctx, files: (SqlDriver | null)[]) {
   const m = c.var.db.driver.usage;
   const l = c.var.ledgerDriver.usage;
+  const f = files.filter((x): x is SqlDriver => Boolean(x));
+  const sum = (k: "queries" | "rows_read" | "rows_written") => f.reduce((a, x) => a + x.usage[k], 0);
   console.log(JSON.stringify({
-    evt: "backup", route: c.req.routePath, queries: m.queries + l.queries + (files?.usage.queries ?? 0),
-    main_rows_read: m.rows_read, ledger_rows_read: l.rows_read, files_rows_read: files?.usage.rows_read ?? 0,
-    rows_written: m.rows_written + l.rows_written + (files?.usage.rows_written ?? 0),
+    evt: "backup", route: c.req.routePath, queries: m.queries + l.queries + sum("queries"),
+    main_rows_read: m.rows_read, ledger_rows_read: l.rows_read, files_rows_read: sum("rows_read"),
+    rows_written: m.rows_written + l.rows_written + sum("rows_written"),
   }));
 }
 
 backupRoutes.get("/schedule", async (c) => {
   const now = c.var.deps.now();
   const s = await schedule(c.var.db.driver, now);
-  logUsage(c, null);
+  logUsage(c, []);
   return json(c, 200, { now, ...s });
 });
 
@@ -90,14 +100,18 @@ backupRoutes.get("/manifest", async (c) => {
   const counts = c.req.query("counts") === "1";
   const kind = c.req.query("kind") === "hourly" ? "hourly" : "nightly";
   const now = c.var.deps.now();
-  const files = filesDriver(c);
-  const [main, ledger, filesInfo, sched] = await Promise.all([
+  const files = filesDbs(c);
+  const [main, ledger, sched, ...filesInfo] = await Promise.all([
     dbInfo(c.var.db.driver, "main", counts, measuredSize(c.env.DB)),
     dbInfo(c.var.ledgerDriver, "ledger", counts, measuredSize(c.env.LEDGER)),
-    files ? dbInfo(files, "files", counts, measuredSize(c.env.FILES)) : Promise.resolve(null),
     schedule(c.var.db.driver, now),
+    ...files.map((f) => dbInfo(f.driver, f.db, counts, measuredSize(f.binding))),
   ]);
-  logUsage(c, files);
+  logUsage(c, files.map((f) => f.driver));
+  const databases: Record<string, unknown> = { main, ledger };
+  // Every bound files database with its measured size; "files" says when none is bound.
+  if (!files.length) databases.files = { configured: false };
+  files.forEach((f, i) => { databases[f.db] = { binding: FILE_BINDINGS[shardOf(f.db) - 1], shard: shardOf(f.db), ...filesInfo[i] }; });
   return json(c, 200, {
     format: "sahra-backup-1",
     generated_at: now,
@@ -105,16 +119,16 @@ backupRoutes.get("/manifest", async (c) => {
     page_max: PAGE_MAX,
     // Export (and restore) order: the ledger last, so it is never older than the tables it covers.
     kind,
-    order: tablesFor(kind).filter((t) => t.db !== "files" || files).map((t) => ({ db: t.db, table: t.table, key: t.key })),
-    databases: { main, ledger, files: filesInfo ?? { configured: false } },
+    order: tablesFor(kind, files.map((f) => f.db)).map((t) => ({ db: t.db, table: t.table, key: t.key })),
+    databases,
   });
 });
 
 backupRoutes.get("/rows/:db/:table", async (c) => {
   const spec = specOf(c.req.param("db"), c.req.param("table"));
-  const files = spec?.db === "files" ? filesDriver(c) : null;
-  const d = spec ? driverFor(c, spec.db, files) : null;
+  const d = spec ? driverFor(c, spec.db) : null;
   if (!spec || !d) return json(c, 404, { error: "unknown_table" });
+  const files = isFilesDb(spec.db) ? d : null;
   const limitText = c.req.query("limit");
   const limit = limitText === undefined ? PAGE_DEFAULT : Number(limitText);
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > PAGE_MAX) return json(c, 400, { error: "invalid_limit", max: PAGE_MAX });
@@ -122,20 +136,24 @@ backupRoutes.get("/rows/:db/:table", async (c) => {
   const after = afterText === undefined ? null : decodeCursor(spec, afterText);
   if (afterText !== undefined && !after) return json(c, 400, { error: "invalid_cursor" });
   const page = await readPage(d, spec, after, limit);
-  logUsage(c, files);
+  logUsage(c, [files]);
   return json(c, 200, { db: spec.db, table: spec.table, key: spec.key, rows: page.rows, next: page.next });
 });
 
-backupRoutes.get("/file/:id", async (c) => {
+backupRoutes.get("/file/:db/:id", async (c) => {
+  const db = c.req.param("db");
   const idText = c.req.param("id");
-  const files = filesDriver(c);
+  const files = isFilesDb(db) ? driverFor(c, db) : null;
   if (!files) return json(c, 404, { error: "files_not_configured" });
   if (!/^[1-9][0-9]{0,15}$/.test(idText) || !Number.isSafeInteger(Number(idText))) return json(c, 404, { error: "not_found" });
-  const r = await files.all<{ content_type: string; size: number; bytes: unknown }>(
-    sql`SELECT content_type, size, bytes FROM files WHERE id = ${Number(idText)}`);
-  logUsage(c, files);
+  // A purged screenshot (retention, src/storage/) is not served: its bytes are gone here.
+  const r = await files.all<{ content_type: string; size: number; bytes: unknown; purged: string | null }>(
+    sql`SELECT f.content_type, f.size, CASE WHEN d.id IS NULL THEN f.bytes END AS bytes, d.reason AS purged
+      FROM files f LEFT JOIN file_tombstones d ON d.id = f.id WHERE f.id = ${Number(idText)}`);
+  logUsage(c, [files]);
   const row = r.results[0];
   if (!row) return json(c, 404, { error: "not_found" });
+  if (row.purged !== null) return json(c, 410, { error: "purged", reason: row.purged });
   const bytes = toBytes(row.bytes);
   // The script checks these against its own hash of what it received, and again after saving to Drive.
   return new Response(bytes, {
@@ -179,6 +197,6 @@ backupRoutes.post("/done", async (c) => {
         WHERE id = 'main' AND (last_backup_at IS NULL OR last_backup_at <= ${at})`)
     : await c.var.db.driver.all(sql`UPDATE health_state SET last_backup_note = ${note}, last_hourly_backup_at = ${at}
         WHERE id = 'main' AND (last_hourly_backup_at IS NULL OR last_hourly_backup_at <= ${at})`);
-  logUsage(c, null);
+  logUsage(c, []);
   return json(c, 200, { recorded: r.meta.changes === 1, last_backup_at: kind === "nightly" ? at : null });
 });
