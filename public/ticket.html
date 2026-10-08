@@ -1,17 +1,17 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Sahra ticket</title></head>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>Your ticket - Sahra</title>
+<link rel="stylesheet" href="/css/sahra.css">
+</head>
 <body>
-<header><span id="account"><a href="/">Sign in</a></span> | <a href="https://nova.example/" id="nova" rel="noopener">Made by Nova</a></header>
-<main>
-<h1>Your ticket (test page)</h1>
-<pre id="ticket">Loading...</pre>
-<section id="qr-box" hidden>
-<p>Turn your screen brightness up at the door.</p>
-<pre id="qr"></pre>
-</section>
-<p><button id="refresh" type="button">Refresh</button></p>
-</main>
+<main id="app"><p class="muted">Loading...</p></main>
+<script src="/vendor/qrcode-generator/qrcode.js"></script>
+<script src="/js/i18n.js"></script>
+<script src="/js/ui.js"></script>
 <script src="/js/ticket.js"></script>
 </body>
 </html>

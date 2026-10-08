@@ -51,8 +51,8 @@ the `staging` branch; a finished piece the owner should try is pushed there too.
 | 1 | Foundation: stylesheet, wording (EN/AR), helpers, language switch | done |
 | 2 | Guest sign-up page (`/signup.html?party=`): party, address status, ticket types, short form | done |
 | 2b | Privacy and Terms pages (agreed, idea 28; text from what Sahra really stores; owner approves) | done (drafts) |
-| 3 | Guest ticket page (`/ticket.html#t=`): big QR, name/type/group, party, address or countdown | next |
-| 4 | Home page: party cards with the guest's own status; "Find my tickets" (needs backend) | |
+| 3 | Guest ticket page (`/ticket.html#t=`): big QR, name/type/group, party, address or countdown | done |
+| 4 | Home page: party cards with the guest's own status; "Find my tickets" (needs backend) | next |
 | 5 | Door scanner: camera, full-screen verdicts, sound and vibration | |
 | 6 | Organiser dashboard: top numbers and big buttons | |
 | 7 | Approval queue: one card per request, "Approve and send QR" | |
@@ -86,6 +86,17 @@ the `staging` branch; a finished piece the owner should try is pushed there too.
   HTML, `public/js/doc.js` shows the chosen one), marked "Draft, to be approved
   by the site owner".
 
+- Piece 3: `public/ticket.html` + `public/js/ticket.js`; QR drawn on a canvas
+  with `public/vendor/qrcode-generator/` (MIT, level M, alphanumeric, quiet
+  zone 4), shown as an <img> (also the "Save QR code" download). Checked: the
+  drawn code decodes (jsQR) to exactly the code the server issued. The ticket
+  API now returns `entry_from` (the type's entry time). The page remembers
+  its link in `sahra_tickets`; it re-reads itself just after an address reveal
+  time within the next day. No polling otherwise (requests budget).
+- Local ticket check without the bot check: insert a ticket in the local
+  database and sign its link with `src/guests/link.ts` bundled by esbuild
+  (scratchpad `sign.mjs`), using the local `.dev.vars` keys.
+
 ## Open questions for the owner
 
 - Privacy and Terms drafts: approve or change the wording (then remove the
@@ -98,12 +109,10 @@ the `staging` branch; a finished piece the owner should try is pushed there too.
 
 ## Next
 
-Piece 3, the guest ticket page (`/ticket.html#t=<signed link>`; the link goes
-to `GET /api/guest/ticket` in the `x-sahra-ticket` header):
-1. A QR generator copied into `public/vendor/` with its licence (no run-time
-   download): qrcode-generator (MIT).
-2. Order (idea 5): very large QR on white + "turn your brightness up"; name,
-   type, "Group of N"; party name, date, entry-from time; the address or the
-   countdown to its reveal. Not released / pending / rejected (with reason) /
-   cancelled / on hold / used: a plain message instead of the QR (fail closed).
-3. "Save QR code" (download a PNG drawn on a canvas), Refresh.
+Piece 4, the home page. The original brief says "the website homepage is the
+staff login"; the brainstorm (idea 4) agreed party cards as the hero with the
+guest's own status on each card, and "Find my tickets". Ask the owner which
+wins (or: party cards on "/" with a clear "Organiser sign-in" button). Needs
+backend: a public list of open parties (name, date, flyer later) and a batched
+status read for the remembered tickets; "Find my tickets" = one email with all
+the address's ticket links across parties, rate limited, same answer either way.

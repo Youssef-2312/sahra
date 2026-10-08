@@ -112,6 +112,10 @@ var SahraText = {
     save_qr: "Save QR code",
     refresh: "Refresh",
     link_invalid: "This link is not valid. It may have been replaced by a newer one: check your latest email.",
+    entry_from: "Entry from {when}",
+    group_note: "This QR code lets all {n} of you in together. Arrive together.",
+    ticket_label: "Ticket",
+    name_label: "Name",
   },
 
   ar: {
@@ -218,5 +222,9 @@ var SahraText = {
     save_qr: "احفظ رمز QR",
     refresh: "تحديث",
     link_invalid: "هذا الرابط غير صالح. ربما استُبدل برابط أحدث: راجع آخر بريد وصلك.",
+    entry_from: "الدخول من {when}",
+    group_note: "رمز QR هذا يُدخلكم جميعًا ({n}) معًا. احضروا معًا.",
+    ticket_label: "التذكرة",
+    name_label: "الاسم",
   },
 };

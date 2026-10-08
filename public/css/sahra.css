@@ -89,6 +89,7 @@ a { color: var(--accent); }
   margin: var(--gap) 0;
 }
 .card > :first-child { margin-top: 0; }
+.card h2 { margin-top: 0.2em; }
 .card > :last-child { margin-bottom: 0; }
 .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .stack > * + * { margin-top: 12px; }
