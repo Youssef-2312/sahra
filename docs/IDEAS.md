@@ -310,3 +310,10 @@ coordinator's session. Status: agreed, rejected or open.
 - Owner decision: "as inspiriation not react I woudl rather it being written in static hmtl". The blocks are inspiration only. All frontend pages are written as plain static HTML, CSS and a little JavaScript. No React and no build framework. No block is copied from a paid or unclear-licence source.
 - Why this fits: static pages are Workers static assets (not counted as requests), load fast on mobile data and have no outside dependency at the door.
 - The open question about newform remains: the owner is to show what they like on it (screenshot or description).
+
+## 23. Logo and favicon: decide later
+
+- Status: open
+- Owner's words: "im not sure about the favicon or the logo yet"
+- Nothing is to be built for the logo or favicon yet. Until the owner decides, the pages use the plain text name "Sahra" in a bold typeface and no custom icon. When the owner is ready, the options are: a simple "Sahra" wordmark with an "S" favicon drawn as a small SVG (free, sharp on phones), or an image the owner supplies. The brainstorm session cannot generate images.
+- Effort: small. Free-tier cost: none. Rule conflicts: none (nothing bought; no emojis).
