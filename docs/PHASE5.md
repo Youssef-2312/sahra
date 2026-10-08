@@ -40,8 +40,8 @@ the `staging` branch; a finished piece the owner should try is pushed there too.
 
 | # | Piece | Status |
 |---|-------|--------|
-| 1 | Foundation: stylesheet, wording (EN/AR), helpers, language switch | in progress |
-| 2 | Guest sign-up page (`/signup.html?party=`): party, address status, ticket types, short form | |
+| 1 | Foundation: stylesheet, wording (EN/AR), helpers, language switch | done |
+| 2 | Guest sign-up page (`/signup.html?party=`): party, address status, ticket types, short form | in progress |
 | 3 | Guest ticket page (`/ticket.html#t=`): big QR, name/type/group, party, address or countdown | |
 | 4 | Home page: party cards with the guest's own status; "Find my tickets" (needs backend) | |
 | 5 | Door scanner: camera, full-screen verdicts, sound and vibration | |
@@ -54,8 +54,22 @@ the `staging` branch; a finished piece the owner should try is pushed there too.
 
 ## Done so far
 
-(nothing yet)
+- Piece 1: `public/css/sahra.css`, `public/js/i18n.js` (95 keys, English and
+  Arabic; the Arabic wording should be read once by the owner),
+  `public/js/ui.js` (`Sahra.boot({render})` adds the top bar and language
+  switch; `render` runs again after a switch). Page skeleton:
+  `<link rel="stylesheet" href="/css/sahra.css">` in head, `<main id="app">`,
+  then `/js/i18n.js`, `/js/ui.js`, the page script.
 
 ## Next
 
-Piece 1: write `public/css/sahra.css`, `public/js/i18n.js`, `public/js/ui.js`.
+Piece 2, the guest sign-up page:
+1. Backend: `GET /api/guest/parties/:party` also returns the public party
+   details (`visiblePartyDetails(..., {kind:"public"})`), so the page needs one
+   request, not two (requests are the tighter daily allowance).
+2. Move the old `public/signup.html` + `js/signup.js` to `public/test/`.
+3. New `public/signup.html` + `public/js/signup.js`: order = party name, date
+   and time; address status; ticket types (price, sold out, sale ends in N
+   days); the short form (name, email, people, organiser questions, payment
+   instructions of the chosen type, screenshot); Turnstile; done screen with the
+   ticket link (remembered in the browser for piece 4); "Lost your ticket link?".
