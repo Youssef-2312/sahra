@@ -1,0 +1,212 @@
+/* Sahra design (Phase 5). Mobile first: one column, large tap targets, text that
+   reads without zooming. Colour carries meaning only: green = yes / admitted,
+   red = no / used, amber = uncertain. Logical properties (inline/block) so the
+   Arabic pages (dir="rtl") mirror without extra rules. No external fonts: the
+   phone's own fonts cover Latin and Arabic. */
+
+:root {
+  --bg: #f7f6f3;
+  --surface: #ffffff;
+  --text: #17171a;
+  --muted: #5f5f66;
+  --line: #e2e0da;
+  --accent: #3b3bd6;
+  --accent-text: #ffffff;
+  --yes: #137a3a;
+  --yes-bg: #e3f4e8;
+  --no: #b3261e;
+  --no-bg: #fbe7e5;
+  --maybe: #8a5a00;
+  --maybe-bg: #fdf0d5;
+  --radius: 14px;
+  --gap: 16px;
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", "Noto Sans Arabic", Tahoma, sans-serif;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111114;
+    --surface: #1b1b20;
+    --text: #f1f0ee;
+    --muted: #a6a6ae;
+    --line: #2e2e35;
+    --accent: #8f8fff;
+    --accent-text: #0e0e12;
+    --yes: #4cc77a;
+    --yes-bg: #12301d;
+    --no: #ff7a70;
+    --no-bg: #3a1513;
+    --maybe: #f2b54a;
+    --maybe-bg: #33260c;
+  }
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 17px;
+  line-height: 1.5;
+}
+
+main {
+  max-width: 34rem;
+  margin: 0 auto;
+  padding: var(--gap) var(--gap) calc(var(--gap) * 4);
+}
+
+h1 { font-size: 1.6rem; line-height: 1.2; margin: 0.4em 0 0.2em; }
+h2 { font-size: 1.15rem; margin: 1.6em 0 0.5em; }
+p { margin: 0.5em 0; }
+a { color: var(--accent); }
+.muted { color: var(--muted); }
+.small { font-size: 0.9rem; }
+.center { text-align: center; }
+[hidden] { display: none !important; }
+
+/* Top bar: brand on one side, the language switch on the other. */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gap);
+  max-width: 34rem;
+  margin: 0 auto;
+  padding: 12px var(--gap) 0;
+  font-size: 0.95rem;
+}
+.brand { font-weight: 700; letter-spacing: 0.02em; color: var(--text); text-decoration: none; }
+.lang-switch {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font: inherit;
+  font-size: 0.9rem;
+  min-height: 36px;
+  cursor: pointer;
+}
+
+/* Cards and blocks */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: var(--gap);
+  margin: var(--gap) 0;
+}
+.card > :first-child { margin-top: 0; }
+.card > :last-child { margin-bottom: 0; }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.stack > * + * { margin-top: 12px; }
+.facts { margin: 0; padding: 0; list-style: none; }
+.facts li { padding: 6px 0; border-bottom: 1px solid var(--line); }
+.facts li:last-child { border-bottom: 0; }
+.pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* Notices: colour plus a word, never colour alone. */
+.notice { border-radius: var(--radius); padding: 12px var(--gap); margin: var(--gap) 0; }
+.notice.yes { background: var(--yes-bg); color: var(--yes); }
+.notice.no { background: var(--no-bg); color: var(--no); }
+.notice.maybe { background: var(--maybe-bg); color: var(--maybe); }
+.notice.info { background: var(--surface); border: 1px solid var(--line); }
+
+.pill {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  background: var(--bg);
+  border: 1px solid var(--line);
+}
+.pill.yes { background: var(--yes-bg); color: var(--yes); border-color: transparent; }
+.pill.no { background: var(--no-bg); color: var(--no); border-color: transparent; }
+.pill.maybe { background: var(--maybe-bg); color: var(--maybe); border-color: transparent; }
+
+/* Buttons: one primary per screen, full width on phones. */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 52px;
+  padding: 12px 18px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+.btn.yes { background: var(--yes); border-color: var(--yes); color: #fff; }
+.btn.no { background: transparent; border-color: var(--no); color: var(--no); }
+.btn.link { width: auto; min-height: 44px; border: 0; background: none; color: var(--accent); padding: 8px 0; font-weight: 600; }
+.btn:disabled { opacity: 0.55; cursor: default; }
+.btn + .btn { margin-top: 10px; }
+
+/* Forms: 17px inputs (phones do not zoom), large and thumb-friendly. */
+.field { margin: 14px 0; }
+.field label, .field .label { display: block; font-weight: 600; margin-bottom: 6px; }
+.field .hint { display: block; color: var(--muted); font-size: 0.9rem; margin-top: 4px; font-weight: 400; }
+input[type="text"], input[type="email"], input[type="number"], input[type="tel"], input[type="search"],
+input[type="datetime-local"], select, textarea {
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+textarea { min-height: 96px; resize: vertical; }
+input:focus-visible, select:focus-visible, textarea:focus-visible, .btn:focus-visible, .choice:focus-within, .lang-switch:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+.check { display: flex; gap: 10px; align-items: flex-start; }
+.check input { width: 22px; height: 22px; margin-top: 2px; flex: none; }
+
+/* Choices (ticket types): big tappable cards with a radio inside. */
+.choice {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  background: var(--surface);
+  border: 2px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px;
+  margin: 10px 0;
+  cursor: pointer;
+}
+.choice input { width: 22px; height: 22px; margin-top: 3px; flex: none; }
+.choice:has(input:checked) { border-color: var(--accent); }
+.choice.off { opacity: 0.6; cursor: default; }
+.choice .grow { flex: 1; min-width: 0; }
+.price { font-weight: 700; white-space: nowrap; }
+
+/* The ticket QR: as large as the screen allows, white with a quiet zone. */
+.qr-box { background: #fff; border-radius: var(--radius); padding: 18px; margin: var(--gap) auto; max-width: 22rem; }
+.qr-box img, .qr-box canvas { display: block; width: 100%; height: auto; image-rendering: pixelated; }
+
+/* Full-screen scanner verdicts (piece 5). */
+.verdict { min-height: 60vh; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; border-radius: var(--radius); padding: 24px; }
+.verdict .word { font-size: 2.6rem; font-weight: 800; line-height: 1.1; }
+.verdict.yes { background: var(--yes); color: #fff; }
+.verdict.no { background: var(--no); color: #fff; }
+.verdict.maybe { background: #f2b54a; color: #1f1400; }
+
+.spacer { height: var(--gap); }
+.footer { color: var(--muted); font-size: 0.85rem; text-align: center; margin-top: calc(var(--gap) * 2); }
