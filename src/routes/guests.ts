@@ -113,8 +113,12 @@ guestRoutes.get("/parties/:party", async (c) => {
   const now = c.var.deps.now();
   const partyLeft = Math.max(0, p.capacity - p.held);
   const types = p.has_types ? await new TypeDb(c.var.db.driver).publicList(partyId, now) : [];
+  // The public party page's data too (times, description, rules, address status), so the
+  // sign-up page needs one request. The place stays hidden unless its mode is public.
+  const row = await new PartyDb(c.var.db.driver).get(partyId);
   return json(c, 200, {
     party: { id: p.id, name: p.name },
+    details: row ? visiblePartyDetails(row, { kind: "public" }, now) : null,
     form,
     max_people_per_ticket: p.max_people_per_ticket,
     places_left: partyLeft,

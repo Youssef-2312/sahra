@@ -167,6 +167,11 @@ describe("sign-up with ticket types", () => {
     const comp = (await newType(h, os, { name: "Guest list", staff_only: true })).body.type!.id;
     const f = await form(h, party);
     expect(f.types.map((t) => [t.name, t.price, t.places_left, t.on_sale])).toEqual([["Early", 200, 2, true], ["Regular", 300, 10, false]]);
+    // The public party details come with the form; a hidden place is not in them.
+    await env.DB.prepare("UPDATE parties SET address = 'Street 90', venue_name = 'Apt 12', address_mode = 'with_ticket' WHERE id = ?").bind(party).run();
+    const withDetails = (await (await h.req(`/api/guest/parties/${party}`)).json()) as { details: Record<string, unknown> };
+    expect(withDetails.details).toMatchObject({ id: party, address: null, venue_name: null, reveal: { mode: "with_ticket", waiting_for: "ticket" } });
+    expect(JSON.stringify(withDetails)).not.toContain("Street 90");
     expect(f.types[0]!.payment_instructions).toBe("Instapay to 010");
 
     expect((await typedSignup(h, party, null)).body.error).toBe("type_required");
