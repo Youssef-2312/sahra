@@ -283,3 +283,13 @@ coordinator's session. Status: agreed, rejected or open.
 - "Fillers" on cards: unclear, possibly "flyers" (each organiser uploads their own flyer or cover image for their party card). If so, it needs: an image upload per party, a size cap and resize in the browser, and storage in the files database (no R2); the 500 MB database size limit and the daily write budget apply, and the existing size health check should count it.
 - Effort: unknown until the words are confirmed
 - Rule conflicts: none so far; no R2; nothing bought (no paid fonts or stock images); no emojis in the interface.
+
+## 21. Organiser flyer or cover image on the party card (part of idea 20)
+
+- Status: agreed
+- Owner's words: "yes thats correct" (to: each organiser can upload their own flyer or cover image for their party card)
+- Each organiser can upload one flyer or cover image per party. It shows on the party's card on the home page and at the top of the party's sign-up page. If none is uploaded, the card uses a plain default style (or a shared hero photo).
+- Needs: one image upload on the party settings screen; resize and compress in the browser before upload (phone first); storage as a BLOB in the files database, as screenshots already are (no R2); allowed types and a hard size cap (suggest about 300 KB after shrinking, JPEG or WebP only); a way to replace or remove it.
+- Effort: medium
+- Free-tier cost: each upload is a few rows written; the image counts toward the 500 MB database limit and the existing database-size health alert. Guests loading it counts as reads, so serve it with caching so repeat visits do not re-read it (home page cards could use a small thumbnail).
+- Rule conflicts: none. No R2. A hostile or oversized file must be refused (check type and size on the server, do not trust the browser). Organiser-uploaded images are shown as given; the site owner can remove one.
