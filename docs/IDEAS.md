@@ -61,3 +61,19 @@ coordinator's session. Status: agreed, rejected or open.
 - Owner decision on devices: "alright the middle". Status shows on the party card in the browser that signed up. On any other device the guest uses a "Find my tickets" box on the home page: they type their email and get ONE email with the links to all their tickets across all parties. Answer is the same whether or not the email exists. No accounts, no sign-in.
 - Extra needs for "Find my tickets": one email template (no emojis), a cross-party lookup by email, and a per-email send limit so nobody can use it to spam an inbox. Effort small, on top of the existing "resend my ticket link". Counts against the daily email cap (Gmail), so keep the limit tight.
 - Declined for now: full guest accounts with email sign-in link or code (large effort, more email volume, more door-budget traffic). Can be revisited.
+
+## 5. Guest ticket page: order of content
+
+- Status: agreed
+- Owner's words: "yes thank you"
+- Order, top to bottom:
+  1. very large QR on a white background, with "Turn your screen brightness up";
+  2. guest name, ticket type, number of people (a group QR says for example "Group of 4");
+  3. party name, date, entry-from time;
+  4. the address, or the countdown to its reveal;
+  5. organiser announcements, if any.
+- If the ticket is cancelled, on hold, or not yet released, the QR is replaced by a plain message (fail closed: never show a QR that will not work).
+- Needs: one screen on existing data (ticket, ticket type, party, announcements). No new data.
+- Effort: small to medium
+- Free-tier cost: one read per page view; static page itself is free
+- Rule conflicts: none. Hidden address stays hidden until the server reveals it.
