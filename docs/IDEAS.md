@@ -166,3 +166,4 @@ coordinator's session. Status: agreed, rejected or open.
 - Effort: medium
 - Free-tier cost: screenshots are the heavy part; load them one card at a time or on tap, small previews first, to protect the daily read budget and mobile data. Emails go through the outbox (daily Gmail cap applies).
 - Rule conflicts: none. Capacity is still enforced inside the approval statement; if full, the card says so and nothing is approved.
+- Simplicity requirement (owner: "but make sure its simple"): the card shows only what is needed to decide: name, ticket type, screenshot with the expected amount, and the buttons. Extra answers and email are hidden behind a small "Details" tap. The big green button "Approve and send QR" is the obvious default; "Approve" without QR and "Reject" are smaller and secondary. No settings, no extra steps, no confirmation pop-up for approve (an "Undo" for a few seconds instead is preferred if it is safe: it must not apply once a QR email is queued).
