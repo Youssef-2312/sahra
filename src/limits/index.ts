@@ -90,12 +90,16 @@ export async function charge(driver: SqlDriver, partyId: string, kind: LimitKind
   return "party_limit";
 }
 
-/** The 429 answer for a refused charge. */
+/**
+ * The 429 answer for a refused charge. The words are for organisers and guests:
+ * a safety pause, with no detail about the hosting plan (owner decision).
+ */
 export function limited(c: Ctx, kind: LimitKind, why: Exclude<ChargeResult, "ok">) {
   const l = LIMITS[kind];
+  const label = l.label.charAt(0).toUpperCase() + l.label.slice(1);
   return json(c, 429, why === "daily_budget"
-    ? { error: "daily_budget", message: `The site is close to its free daily limits, so ${l.label} are paused until 00:00 UTC. Ticket scanning is not affected.` }
-    : { error: "party_limit", message: `This party has reached today's limit of ${l.cap} ${l.label}. It resets at 00:00 UTC.`, limit: l.cap });
+    ? { error: "daily_budget", message: `${label} are paused for the rest of the day and come back automatically overnight. Ticket scanning is not affected.` }
+    : { error: "party_limit", message: `This party has reached today's maximum of ${l.cap} ${l.label}. It resets automatically overnight.`, limit: l.cap });
 }
 
 /** Every party's counters today (for the site owner page; party_usage is small: at most 8 days of rows). */

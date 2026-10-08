@@ -394,7 +394,7 @@ describe("per-party limits", () => {
       .bind(party, day, LIMITS.export.cap, party, day, LIMITS.signup.cap).run();
     const ex = await h.req("/api/tickets/export", api(os, undefined, "GET"));
     expect(ex.status).toBe(429);
-    expect(await ex.json()).toEqual({ error: "party_limit", message: `This party has reached today's limit of ${LIMITS.export.cap} export pages. It resets at 00:00 UTC.`, limit: LIMITS.export.cap });
+    expect(await ex.json()).toEqual({ error: "party_limit", message: `This party has reached today's maximum of ${LIMITS.export.cap} export pages. It resets automatically overnight.`, limit: LIMITS.export.cap });
     const su = await signup(h, party);
     expect(su.status).toBe(429);
     expect(su.body.error).toBe("party_limit");

@@ -228,7 +228,7 @@ guestRoutes.post("/parties/:party/signup", async (c) => {
   const target = shot ? await uploadTarget(c.env, now) : null;
   if (target && target.state !== "ok") {
     return json(c, 503, target.state === "full"
-      ? { error: "uploads_full", message: "Screenshot uploads are full for now. Please try again later." }
+      ? { error: "uploads_full", message: "Screenshot uploads are paused for a moment. Please try again later." }
       : { error: "uploads_not_configured" });
   }
   // Per-party daily cap (src/limits/); a retry of a stored sign-up is not counted.
