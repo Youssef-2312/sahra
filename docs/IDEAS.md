@@ -293,3 +293,17 @@ coordinator's session. Status: agreed, rejected or open.
 - Effort: medium
 - Free-tier cost: each upload is a few rows written; the image counts toward the 500 MB database limit and the existing database-size health alert. Guests loading it counts as reads, so serve it with caching so repeat visits do not re-read it (home page cards could use a small thumbnail).
 - Rule conflicts: none. No R2. A hostile or oversized file must be refused (check type and size on the server, do not trust the browser). Organiser-uploaded images are shown as given; the site owner can remove one.
+
+## 22. Building blocks for the screens: newform and efferd (part of idea 20)
+
+- Status: open (the owner must confirm free use; coordinator must check the build setup)
+- Owner's words: "https://www.newform.com/  https://efferd.com/blocks/dashboard"
+- Checked by the brainstorm session:
+  - newform.com: the page could not be opened from here (404 on both www and the bare address), so what it offers, its licence and its price are NOT confirmed. Owner to say what block or page on it they like, or paste a screenshot.
+  - efferd.com/blocks/dashboard: 14 dashboard blocks "for shadcn UI". Dashboards 1 to 5 are marked Free, 6 to 14 are marked Pro (paid). Licence terms were not visible on the page. They are written for shadcn UI (React with Tailwind and Radix, installed as packages), not plain HTML.
+- Points for the coordinator and owner:
+  - Only free blocks may be used (no paid plan, no purchase). Check the licence on the site before copying any block into the project.
+  - The blocks are React, so using them means a React build step. Check this fits the current static-page setup and Workers Free limits (no extra Worker CPU: pages are static assets, free of request counts). A lighter alternative is to use the blocks only as a visual reference and write plain, small HTML and CSS pages.
+  - Nothing loads from the sites at run time; copy what is used into the project.
+  - Phone first, right-to-left Arabic, and clean and uncluttered rules (ideas 6 and 12) apply to every block. A dashboard block is desktop-minded by default; the organiser dashboard must still be designed for a phone first.
+- Recommendation (not yet agreed): use the free dashboard blocks as inspiration for the organiser dashboard and site-owner panel, and keep the guest pages and door scanner as small custom pages, because they are the most phone-critical and need the least code weight.
