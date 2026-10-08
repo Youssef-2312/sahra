@@ -268,3 +268,132 @@ Chosen extras (numbers from the brainstorm):
 - **14 Save QR to photos + brightness hint** (already a frontend requirement).
 - **15 Big result screens, distinct sounds and vibration** for admit, used and
   stop (frontend).
+
+## Workstream C: guests and tickets (Phase 4)
+
+Built on branch `claude/p4-c-guests`. Code: `src/guests/` (form, link tokens,
+Turnstile, emails, `GuestDb`), `src/routes/guests.ts` (no session),
+`src/routes/tickets.ts` (owner/admin), `src/storage/` (screenshots). Migrations:
+`migrations/0007_guests.sql` (main) and `migrations-files/0001_files.sql` (the
+files database). Test pages: `public/signup.html`, `public/ticket.html`,
+`public/queue.html`.
+
+### What it does
+
+- **Guest sign-up** (`POST /api/guest/parties/:party/signup`, multipart): name,
+  email, people (at most the party's `max_people_per_ticket`), the party's own
+  questions (`parties.guest_form`, set by owner/admin through
+  `POST /api/tickets/form`; answers stored as JSON in `tickets.answers`) and the
+  payment screenshot (required / optional / none per party; default required).
+  Order: Origin, `RL_AUTH` per IP (`signup:<ip>`), Content-Length limit, field and
+  image checks, then **Turnstile before any database access** (missing secret,
+  site key, unreachable siteverify -> 503; failure -> 403; all fail closed). Cloudflare's
+  documented test secrets are refused unless `ENABLE_TEST_TICKETS = "1"`.
+- **Retry without a second ticket:** the browser generates a 256-bit sign-up token
+  and keeps it until the request is confirmed. Ticket id and screenshot file id
+  are derived from it (SHA-256 with the party id), so a retry after "pending"
+  writes nothing new and only finishes the change log. Every retry needs a new
+  Turnstile token.
+- **Capacity in the same statement:** the sign-up INSERT only inserts when people
+  on pending + approved tickets + this request fit the party's capacity, and
+  every approval UPDATE only approves when approved people + this ticket fit.
+  Requests close automatically at capacity (sign-up answers 409 `full`; the
+  public form shows `full: true`). Rejected and cancelled tickets free their places.
+- **Screenshots** in a separate D1 database (binding `FILES`), BLOB bound as a
+  parameter, at most 1,500,000 bytes (server-enforced; Content-Length is checked
+  before the body is read), type taken from the first bytes (JPEG, PNG, WebP
+  only). Served only by `GET /api/tickets/:id/screenshot` to the ticket's party
+  owner/admin (door 403, other parties 404), `cache-control: no-store`. Without
+  `FILES`, a sign-up with a screenshot answers 503 `uploads_not_configured`.
+  The browser compresses to about 1600 px JPEG first.
+- **Approval queue:** `GET /api/tickets?status=pending` (paged), approve / reject
+  (with a reason the guest sees) / release for 1 to 20 tickets, each **one batch**.
+  Approving sends nothing. Release ("Send QR") adds one outbox row
+  (`ticket_released`, plain text, the guest's link) per ticket in the same batch,
+  guarded by "this operation released this ticket", so a repeat or a ticket
+  that was not released adds nothing. Per-ticket results: `done`, `already`, `refused`.
+- **Cancel, reissue, name transfer:** `recordIntent` with the browser's op id
+  before the main batch (intent not written -> 503 pending, nothing changed). The
+  same op id on a retry is recognized (`already`). Cancel and reissue reuse
+  `TicketDb.cancel` / `TicketDb.reissue`. Name transfer changes the name (and
+  optionally the email) and bumps `qr_version` and `link_version` in one
+  statement: the old QR is refused at the door and the old link stops working;
+  the new link is emailed (outbox `ticket_link`) and returned to the owner/admin.
+- **Guest ticket link:** `T1.<PARTY>.<K><TICKET>.<LINK_VERSION>.<SIG>`, HMAC
+  with a per-party key from `LINK_MASTER_K<K>` (HKDF purpose "LINK"), 130-bit
+  signature, key id for rotation (`LINK_KEY_ID`). It travels in the URL fragment
+  (`/ticket.html#t=...`, never sent to a server) and reaches the API in the
+  `x-sahra-ticket` header; the signature is checked before any database access.
+  The page shows pending / approved / rejected (with reason) / cancelled /
+  released, and the QR text only when approved + released + not on hold. Party
+  details: only `{ id, name }` for now (TODO in `src/routes/guests.ts` for
+  workstream A's `visiblePartyDetails`).
+- **Resend my ticket link:** same answer whether or not the address has a ticket;
+  `RL_AUTH` per IP and per party + address (hashed); Turnstile; one outbox row
+  (`ticket_link`, up to 5 links) only when a ticket exists, and at most one per
+  address per party per 10 minutes (the outbox row id is derived from party,
+  address and the 10-minute window, so the check is a primary-key lookup).
+- **Export:** `GET /api/tickets/export` (owner/admin, paged by ticket id, at most
+  500 per page): guest, answers, status, who approved / rejected / released /
+  scanned and when. The browser builds the CSV (cells starting with = + - @ are
+  prefixed against spreadsheet formulas). Nothing goes to Google Drive.
+
+### Rows read and written (measured locally, miniflare)
+
+One request each, in a party with 10 tickets (`test/guests.test.ts`, "rows read
+and written"). Main = sahra-prod, ledger = sahra-ledger, files = FILES.
+
+| Request | D1 queries | rows read (main) | rows written main / ledger / files |
+|---|---|---|---|
+| Sign-up with screenshot | 4 (+1 files batch) | 47 | 4 / 1 / 1 |
+| Approve 1 ticket | 4 | 16 | 4 / 1 / 0 |
+| Release 1 ticket (with its email) | 5 | 20 | 4 / 1 / 0 |
+| Guest ticket page | 1 | 2 | 0 / 0 / 0 |
+| Scan of a new guest ticket (admit) | 1 | 18 | 2 / 1 / 0 (unchanged) |
+
+- Sign-up writes: ticket + its index row + audit + `logged_rev`. Approve: ticket
+  + index row (status changed) + audit + `logged_rev`. Release: ticket + outbox +
+  audit + `logged_rev` (no index change). A bulk request of N tickets uses the
+  same number of queries as one ticket.
+- **New index** `tickets_party_status (party_id, status, people)`: lets the
+  capacity sum, the queue and the export read only one party's tickets instead
+  of every ticket. Cost: 1 extra row written per sign-up and per status change.
+  The scan path changes none of its columns: an admission still writes 2 + 1
+  (asserted in the test).
+- Reads grow with the party: the capacity check reads the party's pending +
+  approved tickets (up to its capacity) three times per sign-up and once per
+  approval. Part of the sign-up and approval reads is the existing change-log
+  flush, which scans the parties, staff and invites tables (not specific to
+  this workstream).
+
+### What local tests cannot prove
+
+- The Turnstile widget and siteverify against real Cloudflare (tests use a fake
+  that answers like the documented test keys), and that the widget works under
+  the page's CSP (`public/_headers` relaxes script-src and frame-src for
+  `/signup` and `/signup.html` only, with `! Content-Security-Policy` to replace
+  the global policy). Check both on staging in a real browser.
+- D1's real behaviour for 1.5 MB BLOB parameters and its row-size limit (miniflare
+  accepted them), and the real rows-written counts (verify on staging).
+- That two sign-ups at once on real D1 are serialized like in miniflare (D1
+  documents one writer per database; the race tests here run against miniflare).
+- Browser compression keeping InstaPay/Telda amounts readable (not tested).
+
+### Owner actions and open questions
+
+- Create the files database(s) (`sahra-files-1`, same EEUR location) for staging
+  and production, add the `FILES` binding to `wrangler.jsonc`, and apply
+  `migrations-files/` to them; until then uploads answer 503 (fail closed), so a
+  party with the default "screenshot required" form cannot take sign-ups.
+- Create a Turnstile widget per Worker (staging, production) and set
+  `TURNSTILE_SITE_KEY` (var) and `TURNSTILE_SECRET` (secret); set
+  `LINK_MASTER_K1` (secret, at least 32 random bytes, base64url) if not already set.
+- A screenshot stored for a sign-up that then found the party full stays as an
+  orphan row in the files database (never served). A cleanup job and the 70% size
+  warnings are not built yet.
+- `TicketDb.approve` (src/db/tickets.ts) has no capacity check; nothing in this
+  workstream calls it (approvals go through `GuestDb.approve`). Add the check or
+  remove the method at integration.
+- The guest does not get an email on sign-up (only the link on screen); "resend
+  my link" covers a lost link. Adding a confirmation email costs 1 outbox row
+  per sign-up.

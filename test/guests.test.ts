@@ -535,3 +535,15 @@ describe("rows read and written (local measurement)", () => {
     expect(su.ledger_rows_written).toBe(1);
   });
 });
+
+describe("static page headers", () => {
+  it("only the sign-up page allows the Turnstile widget; every other page keeps the strict policy", () => {
+    const h = env.TEST_ASSET_HEADERS;
+    const rule = (path: string) => new RegExp(`^${path.replace(".", "\\.")}\\n  ! Content-Security-Policy\\n  Content-Security-Policy: [^\\n]*script-src 'self' https://challenges\\.cloudflare\\.com; frame-src https://challenges\\.cloudflare\\.com;`, "m");
+    expect(h).toMatch(rule("/signup"));
+    expect(h).toMatch(rule("/signup.html"));
+    // Two rules of two mentions each, plus the comment above them.
+    expect(h.match(/challenges\.cloudflare\.com/g)).toHaveLength(5);
+    expect(h).toMatch(/^\/\*\n  Content-Security-Policy: default-src 'none'; script-src 'self'; /m);
+  });
+});
