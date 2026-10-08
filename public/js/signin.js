@@ -6,12 +6,13 @@
   var t = Sahra.t, el = Sahra.el;
   var app = document.getElementById("app");
 
-  function option(title, hint, action) {
+  // One primary button per screen: party staff are most of the sign-ins; organisers get the plain button.
+  function option(title, hint, action, main) {
     return el("section", { class: "card" },
       el("h2", { text: title }),
       el("p", { class: "muted", text: hint }),
       el("form", { attrs: { method: "post", action: action } },
-        el("button", { class: "btn primary", text: t("si_google"), attrs: { type: "submit" } })));
+        el("button", { class: main ? "btn primary" : "btn", text: t("si_google"), attrs: { type: "submit" } })));
   }
 
   // One of the home page's party photos behind the panel; when it is missing the panel keeps its gradient.
@@ -27,7 +28,7 @@
     app.appendChild(el("div", { class: "signin-wrap" },
       el("div", { class: "signin-panel" }, photo(), el("span", { class: "kicker", text: t("si_title") }), el("h1", { text: t("si_head") }), el("p", { text: t("si_text") })),
       el("div", null,
-        option(t("si_staff"), t("si_staff_hint"), "/api/auth/google/start"),
+        option(t("si_staff"), t("si_staff_hint"), "/api/auth/google/start", true),
         option(t("si_org"), t("si_org_hint"), "/api/auth/platform/start"),
         el("p", { class: "small muted", text: t("si_invite_only") }),
         el("p", { class: "small muted", text: t("si_door") }))));

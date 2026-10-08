@@ -162,28 +162,12 @@ var Sahra = (function () {
     if (renderFn) renderFn();
   }
 
-  /**
-   * Motion: elements with class "reveal" fade up when they scroll into view
-   * (pages add them; a MutationObserver picks up every re-render). Skipped when
-   * the phone asks for reduced motion or the browser lacks the observers, and
-   * then nothing is hidden. The top bar gets a shadow once the page scrolls.
-   */
+  /** The top bar floats over the page once it scrolls, so only then does it cast a shadow. */
   function motion() {
     var shell = document.querySelector(".topbar-shell");
     var onScroll = function () { if (shell) shell.classList.toggle("scrolled", window.scrollY > 8); };
     window.addEventListener("scroll", onScroll, { passive: true });
     onScroll();
-    var still = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (still || !("IntersectionObserver" in window) || !("MutationObserver" in window)) return;
-    document.documentElement.classList.add("motion");
-    var io = new IntersectionObserver(function (entries) {
-      entries.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); } });
-    }, { rootMargin: "0px 0px -8% 0px", threshold: 0.08 });
-    function scan() {
-      document.querySelectorAll(".reveal:not([data-seen])").forEach(function (n) { n.setAttribute("data-seen", ""); io.observe(n); });
-    }
-    new MutationObserver(scan).observe(document.body, { childList: true, subtree: true });
-    scan();
   }
 
   // Instagram glyph drawn as a plain outline (rounded square, lens, dot): an icon, not an emoji.

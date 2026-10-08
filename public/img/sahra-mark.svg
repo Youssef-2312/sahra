@@ -1,11 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Sahra">
-  <!-- Sahra's mark: a crescent moon (a night out, "sahra") with Nova blue's star in its curve. -->
+  <!-- Sahra's mark: a crescent moon (a night out, "sahra") with a star in its curve. -->
   <defs>
     <mask id="cut">
       <rect width="64" height="64" fill="#fff"/>
       <circle cx="38" cy="26" r="19.5" fill="#000"/>
     </mask>
   </defs>
-  <circle cx="29" cy="35" r="22" fill="#f3f2ef" mask="url(#cut)"/>
-  <circle cx="46" cy="18" r="5.5" fill="#2f6bff"/>
+  <circle cx="29" cy="35" r="22" fill="#383635" mask="url(#cut)"/>
+  <circle cx="46" cy="18" r="5.5" fill="#8a8786"/>
 </svg>

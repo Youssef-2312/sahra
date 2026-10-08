@@ -9,8 +9,8 @@ var SahraCharts = (function () {
   var t = Sahra.t, el = Sahra.el;
   var NS = "http://www.w3.org/2000/svg";
   var drawn = false;
-  // Calm category colours on the dark base; green, red and amber are kept for meaning.
-  var PALETTE = ["#8ea2ff", "#6fd3c7", "#c9a2ff", "#7cc4ff", "#f0a0c8", "#e8e3d9"];
+  // The owner's palette: charcoal and greys only (green, red and amber are kept for meaning).
+  var PALETTE = ["#383635", "#8a8786", "#c4c3c2", "#5f5c5b", "#a9a7a6", "#1f1e1d"];
 
   function svg(tag, attrs, kids) {
     var n = document.createElementNS(NS, tag);
@@ -44,10 +44,10 @@ var SahraCharts = (function () {
       var h = Math.round((H - top - bottom) * (x.value / max));
       var bx = left + i * (bw + gap);
       nodes.push(svg("rect", { x: bx, y: H - bottom - h, width: bw, height: Math.max(h, x.value ? 2 : 0), rx: 3, fill: color }, [tip(x.tip)]));
-      if (x.value) nodes.push(label(String(x.value), { x: bx + bw / 2, y: H - bottom - h - 4, "text-anchor": "middle", "font-size": 10, fill: "#a3a6ad" }));
-      if (x.label) nodes.push(label(x.label, { x: bx + bw / 2, y: H - 8, "text-anchor": "middle", "font-size": 10, fill: "#a3a6ad" }));
+      if (x.value) nodes.push(label(String(x.value), { x: bx + bw / 2, y: H - bottom - h - 4, "text-anchor": "middle", "font-size": 10, fill: "#5f5c5b" }));
+      if (x.label) nodes.push(label(x.label, { x: bx + bw / 2, y: H - 8, "text-anchor": "middle", "font-size": 10, fill: "#5f5c5b" }));
     });
-    nodes.push(svg("line", { x1: 0, x2: W, y1: H - bottom + 0.5, y2: H - bottom + 0.5, stroke: "#2f3238" }));
+    nodes.push(svg("line", { x1: 0, x2: W, y1: H - bottom + 0.5, y2: H - bottom + 0.5, stroke: "#c4c3c2" }));
     return svg("svg", { viewBox: "0 0 " + W + " " + H, role: "img" }, nodes);
   }
 
@@ -78,7 +78,7 @@ var SahraCharts = (function () {
       return ring;
     });
     var donut = svg("svg", { viewBox: "0 0 160 160", role: "img", class: "donut" },
-      rings.concat([label(String(total), { x: 80, y: 86, "text-anchor": "middle", "font-size": 22, "font-weight": 700, fill: "#f2f2f0" })]));
+      rings.concat([label(String(total), { x: 80, y: 86, "text-anchor": "middle", "font-size": 26, "font-weight": 400, "font-family": "Instrument Serif, Amiri, Georgia, serif", fill: "#383635" })]));
     donut.setAttribute("width", "160");
     var legend = el("div", { class: "legend" }, rows.map(function (r, i) {
       var dot = el("span", { class: "dot" });
@@ -100,7 +100,7 @@ var SahraCharts = (function () {
       var v = by[at] || 0;
       items.push({ value: v, label: items.length % 4 === 0 ? Sahra.time(at, tz) : "", tip: Sahra.time(at, tz) + ": " + v });
     }
-    return card(t("d_chart_arrivals"), bars(items, PALETTE[1]));
+    return card(t("d_chart_arrivals"), bars(items, PALETTE[0]));
   }
 
   function card(title, chart, extra) {

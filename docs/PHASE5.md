@@ -69,6 +69,23 @@ the `staging` branch; a finished piece the owner should try is pushed there too.
   the first load only; the top bar gains a shadow once scrolled. The door
   verdict only gets a 0.12 s pop (never a delay). "Reduce motion" on the
   phone turns it all off, and without JavaScript nothing stays hidden.
+- Second direction (owner brief, 2026-10-08, replaces the Nova-style look):
+  no generic AI aesthetics, no pill buttons, no purple gradients, no vague
+  hero text, no emoji icons, no em dashes, no fake reviews or counters, no
+  cursor effects, no scroll animations. The owner's palette (charcoal #383635,
+  grey #8A8786, light grey #C4C3C2, off-white #ECEBE9, near white #EFEEEC; its
+  orange switched to a lighter white #FAFAF8); no colour accent, the solid
+  charcoal fill is the one emphasis; green, red and amber only for meaning.
+  Instrument Serif (Amiri for Arabic) headlines with tight tracking,
+  JetBrains Mono (Plex Sans Arabic for Arabic) text on a strict 1.333 scale.
+  Square corners, hairline rules, shadows only on what floats.
+  North star (home): a guest sees how soon the next party is and how to get
+  in, and trusts that the ticket is real. The number is the hero: days until
+  the next party, beside a moon that waxes to match; three secondary real
+  numbers; the parties as a printed programme. Dashboard: one primary number
+  (approved of capacity, or inside of approved on the night) with a bar that
+  fills to its share once, three secondary numbers. Motion: one staggered load
+  reveal on the home hero; micro-interactions immediate (60 ms colour changes).
 - Hero photos: the owner has permission to use them; they are compressed
   (about 150 KB each) and slightly blurred before they go in public/img/hero.
 
