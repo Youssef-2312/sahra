@@ -90,6 +90,7 @@ export interface GuestTicket {
   used_at: number | null;
   reject_reason: string | null;
   type_name: string | null;
+  type_entry_from: number | null;
   price: number | null;
 }
 
@@ -165,7 +166,8 @@ export class GuestDb {
   async guestTicket(partyId: string, ticketId: string): Promise<GuestTicket | null> {
     const r = await this.driver.all<GuestTicket>(sql`SELECT t.id, t.party_id, p.name AS party_name, t.status, t.people, t.guest_name,
         t.qr_version, t.link_version, t.released_at, t.hold_at, t.used_at, t.reject_reason,
-        (SELECT name FROM ticket_types WHERE id = t.type_id) AS type_name, t.price
+        (SELECT name FROM ticket_types WHERE id = t.type_id) AS type_name,
+        (SELECT entry_from FROM ticket_types WHERE id = t.type_id) AS type_entry_from, t.price
       FROM tickets t JOIN parties p ON p.id = t.party_id WHERE t.id = ${ticketId} AND t.party_id = ${partyId}`);
     return r.results[0] ?? null;
   }

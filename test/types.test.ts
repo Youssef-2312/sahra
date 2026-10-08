@@ -276,7 +276,9 @@ describe("door: entry time per type", () => {
     const t2 = await typedSignup(h, party, early);
     await release(h, os, t1.body.ticket_id!);
     await release(h, os, t2.body.ticket_id!);
-    const qr1 = (await viewTicket(h, t1.body.link!)).body.ticket!.qr!;
+    const page1 = (await viewTicket(h, t1.body.link!)).body.ticket as unknown as { qr: string; type: string; entry_from: number };
+    expect([page1.type, page1.entry_from]).toEqual(["Regular", now + 3600_000]);
+    const qr1 = page1.qr;
     const qr2 = (await viewTicket(h, t2.body.link!)).body.ticket!.qr!;
 
     logs = [];

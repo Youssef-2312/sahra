@@ -316,6 +316,8 @@ guestRoutes.get("/ticket", async (c) => {
       guest_name: t.guest_name,
       people: t.people,
       type: t.type_name,
+      // The door refuses this ticket before this time (its type's entry time), if set.
+      entry_from: t.type_entry_from,
       group_note: groupNote(t.people),
       reject_reason: t.status === "rejected" ? t.reject_reason : null,
       on_hold: t.hold_at != null,
