@@ -81,17 +81,19 @@
     document.title = p.name + " - Sahra";
     var usable = !!k.qr && !k.used && !k.on_hold && k.status === "released";
 
+    var side = el("div", { class: "side" }), body = el("div");
+    app.appendChild(el("div", { class: "cols" }, side, body));
     if (usable) {
       var src = qrImage(k.qr);
-      app.appendChild(el("div", { class: "qr-box" }, el("img", { attrs: { src: src, alt: "QR", width: 300, height: 300 } })));
-      app.appendChild(el("p", { class: "center muted", text: t("brightness") }));
+      side.appendChild(el("div", { class: "qr-box" }, el("img", { attrs: { src: src, alt: "QR", width: 300, height: 300 } })));
+      side.appendChild(el("p", { class: "center muted", text: t("brightness") }));
     } else {
       var m = statusMessage(k);
-      app.appendChild(el("p", { class: "notice " + m[0], text: m[1] }));
-      if (k.status === "rejected" && k.reject_reason) app.appendChild(el("p", { class: "pre", text: t("reason", { text: k.reject_reason }), attrs: { dir: "auto" } }));
+      side.appendChild(el("p", { class: "notice " + m[0], text: m[1] }));
+      if (k.status === "rejected" && k.reject_reason) side.appendChild(el("p", { class: "pre", text: t("reason", { text: k.reject_reason }), attrs: { dir: "auto" } }));
     }
 
-    app.appendChild(el("section", { class: "card" },
+    body.appendChild(el("section", { class: "card" },
       el("ul", { class: "facts" },
         el("li", null, el("span", { class: "small muted", text: t("name_label") }), el("br"), el("strong", { text: k.guest_name || "", attrs: { dir: "auto" } })),
         el("li", null, el("span", { class: "small muted", text: t("ticket_label") }), el("br"),
@@ -99,17 +101,17 @@
         k.people > 1 ? el("li", { class: "small", text: t("group_note", { n: k.people }) }) : null)));
 
     var timeLine = p.starts_at ? Sahra.when(p.starts_at, p.time_zone) + (p.ends_at ? " - " + Sahra.time(p.ends_at, p.time_zone) : "") : null;
-    app.appendChild(el("section", { class: "card" },
+    body.appendChild(el("section", { class: "card" },
       el("p", { class: "small muted", text: t("when") }),
       el("h2", { text: p.name, attrs: { dir: "auto" } }),
       timeLine ? el("p", { text: timeLine }) : null,
       k.entry_from ? el("p", { class: "pill maybe", text: t("entry_from", { when: Sahra.when(k.entry_from, p.time_zone) }) }) : null));
 
-    app.appendChild(addressCard(p));
-    if (p.rules) app.appendChild(el("section", { class: "card" }, el("p", { class: "small muted", text: t("rules") }), el("p", { class: "pre", text: p.rules, attrs: { dir: "auto" } })));
+    body.appendChild(addressCard(p));
+    if (p.rules) body.appendChild(el("section", { class: "card" }, el("p", { class: "small muted", text: t("rules") }), el("p", { class: "pre", text: p.rules, attrs: { dir: "auto" } })));
 
-    if (usable) app.appendChild(el("a", { class: "btn", text: t("save_qr"), attrs: { href: app.querySelector(".qr-box img").src, download: "sahra-ticket.png" } }));
-    app.appendChild(el("button", { class: "btn", text: t("refresh"), attrs: { type: "button" }, on: { click: load } }));
+    if (usable) side.appendChild(el("a", { class: "btn wide-btn", text: t("save_qr"), attrs: { href: side.querySelector(".qr-box img").src, download: "sahra-ticket.png" } }));
+    body.appendChild(el("button", { class: "btn", text: t("refresh"), attrs: { type: "button" }, on: { click: load } }));
   }
 
   async function load() {

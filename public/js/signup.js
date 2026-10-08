@@ -255,20 +255,20 @@
     document.title = data && data.party ? data.party.name + " - Sahra" : "Sahra";
     if (loadError) { app.appendChild(el("p", { class: "notice no", text: loadError })); return; }
     if (done) { app.appendChild(doneView()); return; }
-    app.appendChild(partyCard());
-    app.appendChild(addressCard());
-    app.appendChild(rulesCard());
+    // Phones: one column. Desktop: the party on the side, the form beside it.
+    var body = el("div");
+    app.appendChild(el("div", { class: "cols" }, el("div", { class: "side" }, partyCard(), addressCard(), rulesCard()), body));
     var closed = closedReason();
     if (closed) {
-      app.appendChild(el("p", { class: "notice maybe", text: closed }));
+      body.appendChild(el("p", { class: "notice maybe", text: closed }));
     } else {
       var notes = [];
       if (data.registration.closes_at) notes.push(t("closes_at", { when: Sahra.when(data.registration.closes_at, tz()) }));
       if (data.max_tickets_per_email) notes.push(t("max_per_email", { n: data.max_tickets_per_email }));
-      if (notes.length) app.appendChild(el("p", { class: "small muted", text: notes.join(" ") }));
-      app.appendChild(formBlock());
+      if (notes.length) body.appendChild(el("p", { class: "small muted", text: notes.join(" ") }));
+      body.appendChild(formBlock());
     }
-    if (data.turnstile_site_key) app.appendChild(lostLinkBlock());
+    if (data.turnstile_site_key) body.appendChild(lostLinkBlock());
     mountTurnstile();
   }
 

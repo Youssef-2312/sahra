@@ -295,16 +295,20 @@ details > summary::-webkit-details-marker { display: none; }
   .tiles { grid-template-columns: repeat(4, 1fr); gap: 16px; }
   .tile .big { font-size: 2.2rem; }
   .btn { width: auto; min-width: 12rem; }
-  .btn.small-btn { min-width: 0; }
+  .btn.small-btn, .btn.link { min-width: 0; }
+  .btn.link { justify-content: flex-start; }
+  .scan-wrap .btn:not(.link) { width: 100%; }
+  .scan-wrap .row strong { font-size: 1.4rem; }
+  .charts { margin-top: 16px; }
   .btn + .btn { margin-top: 0; }
   .stack.buttons { display: flex; flex-wrap: wrap; gap: 12px; }
   .stack.buttons > * + * { margin-top: 0; }
-  form .btn.primary, .verdict .btn { width: 100%; }
+  form .btn.primary, .verdict .btn, .btn.wide-btn, .side .btn { width: 100%; }
   .cols { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: 40px; align-items: start; }
   .cols > .side { position: sticky; top: 24px; }
   .charts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
   .charts > .card { margin: 0; }
-  .narrow { max-width: 46rem; margin-inline: auto; }
+  main.narrow { max-width: 46rem; }
   .signin-wrap { display: grid; grid-template-columns: 1.1fr 1fr; gap: 40px; align-items: center; min-height: 60vh; }
   .signin-panel { padding: 56px 44px; min-height: 26rem; display: flex; flex-direction: column; justify-content: flex-end; }
   .signin-panel h1 { font-size: 2.6rem; }

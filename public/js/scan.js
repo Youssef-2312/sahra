@@ -198,6 +198,12 @@
       app.appendChild(el("p", { class: "notice maybe", text: t("sc_signed_out") }));
       return;
     }
+    // Everything inside one centred column (bigger on a desktop); Back leaves the scanner.
+    var wrap = el("div", { class: "scan-wrap" });
+    app.appendChild(wrap);
+    var app0 = app;
+    app = wrap;
+    app.appendChild(el("a", { class: "btn link", text: (Sahra.lang() === "ar" ? "\u2192 " : "\u2190 ") + t("back"), attrs: { href: me.staff.role === "door" ? "/" : "/dashboard.html" } }));
     app.appendChild(el("div", { class: "row" },
       el("strong", { text: party ? party.name : me.party.name, attrs: { dir: "auto" } }),
       el("span", { class: "pill", text: t("sc_rule") })));
@@ -220,6 +226,7 @@
       if (state === "verdict") screen.appendChild(el("button", { class: "btn", text: t("sc_next"), attrs: { type: "button" }, on: { click: next } }));
       app.appendChild(screen);
     }
+    app = app0;
   }
 
   (async function () {

@@ -59,7 +59,7 @@
     list.push(el("a", { class: "btn", text: t("d_settings"), attrs: { href: "/party.html" } }));
     list.push(el("a", { class: "btn", text: t("d_outbox"), attrs: { href: "/outbox.html" } }));
     if (me.staff.role === "owner") list.push(el("a", { class: "btn", text: t("d_tools"), attrs: { href: "/tools.html" } }));
-    return el("div", { class: "stack" }, list);
+    return el("div", { class: "stack buttons" }, list);
   }
 
   function render() {
@@ -71,7 +71,7 @@
       admission ? el("span", { class: "pill " + (admission.open ? "yes" : "maybe"), text: admission.open ? t("d_doors_open") : t("d_doors_paused") }) : null));
     app.appendChild(tiles());
     app.appendChild(buttons());
-    var charts = el("div", { attrs: { id: "charts" } });
+    var charts = el("div", { class: "charts", attrs: { id: "charts" } });
     app.appendChild(charts);
     if (window.SahraCharts) window.SahraCharts.draw(charts, stats, party);
     if (updatedAt) app.appendChild(el("p", { class: "small muted center", text: t("d_updated", { time: Sahra.time(updatedAt) }) }));

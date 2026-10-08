@@ -151,6 +151,13 @@ the `staging` branch; a finished piece the owner should try is pushed there too.
   Top bar: Sahra at the start, language + Sign in at the end. Desktop rules
   (>= 900px) in sahra.css: wider main, 3-column cards, 4 tiles, columns.
 
+- Desktop layouts: sign-up and ticket pages in two columns (`.cols`, the
+  party / QR side sticky), dashboard buttons in rows and charts side by side,
+  scanner in a centred column with a Back link (door staff to "/", owner and
+  admin to the dashboard), Privacy and Terms in a narrow reading column. Fixed
+  on the way: the sign-up page threw when a party had no rules (an empty
+  section was appended).
+
 ## Open questions for the owner
 
 - Hero photos (idea 20) and the sign-in page look (idea 27): photos still to be
@@ -158,8 +165,7 @@ the `staging` branch; a finished piece the owner should try is pushed there too.
 
 ## Next
 
-Piece 7 (approval queue cards, "Approve and send QR") unless the owner answers
-piece 4 first.
+Piece 7: approval queue cards with one-tap "Approve and send QR".
 
 Piece 4, the home page. The original brief says "the website homepage is the
 staff login"; the brainstorm (idea 4) agreed party cards as the hero with the
