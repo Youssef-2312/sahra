@@ -15,7 +15,8 @@
   var parties = null, failed = null;
   var mine = [];          // [{ link, status, party_id, party_name, starts_at, time_zone }]
   var heroBox = document.getElementById("hero");
-  var HERO = [1, 2, 3, 4, 5, 6, 7]; // the owner's seven photos behind the hero (the first tile is large), no repeats
+  // The owner's twelve photos (6 and 7 look alike when blurred, so they are kept apart).
+  var HERO = [1, 8, 2, 9, 3, 10, 4, 11, 6, 12, 5, 7];
 
   function remembered() {
     try {
@@ -49,10 +50,30 @@
 
   function heading(a, em, b) { return [a, el("span", { class: "serif", text: em }), b]; }
 
+  // The moving collage (owner): every photo the same size, edge to edge, in rows
+  // tilted on a diagonal; the whole sheet slides along the diagonal as one, so
+  // the arrangement never changes and a photo never touches a copy of itself.
+  // Row r starts STEP photos further along,
+  // and every other row is shifted half a photo. With 12 photos a full
+  // screen still shows each a few times; more photos, fewer repeats.
+  var LANES = 7;    // enough tilted rows to cover the corners of a wide screen
+  var STEP = 9;     // the row offset that keeps copies of a photo furthest apart (worked out for 12 photos)
+  function collage() {
+    var lanes = [];
+    for (var r = 0; r < LANES; r++) {
+      var k = (r * STEP) % HERO.length;
+      var order = HERO.slice(k).concat(HERO.slice(0, k));
+      // Three copies: the row moves by exactly one copy, so the screen is always covered and the loop has no seam.
+      var tiles = order.concat(order, order).map(function (n, i) { return el("div", { class: "ph" }, photo(n, i < HERO.length * 2)); });
+      lanes.push(el("div", { class: "lane" }, tiles));
+    }
+    return el("div", { class: "hero-bg", attrs: { "aria-hidden": "true" } }, el("div", { class: "tilt" }, lanes));
+  }
+
   function hero() {
     var shown = mine.filter(function (m) { return m.status !== "invalid"; });
     return el("section", { class: "hero" },
-      el("div", { class: "hero-bg", attrs: { "aria-hidden": "true" } }, HERO.map(function (n, i) { return el("div", { class: "ph" }, photo(n, i < 5)); })),
+      collage(),
       el("div", { class: "copy" },
         el("h1", null, heading(t("h_title_a"), t("h_title_em"), t("h_title_b"))),
         el("p", { text: t("h_sub") }),
@@ -133,28 +154,40 @@
     return svg;
   }
 
-  var railWatch = null;
+  // Parties as pages of a fixed grid (owner): 3 columns x 3 rows on desktops
+  // (party 1 2 3 / 4 5 6 / 7 8 9), 2 x 3 on tablets, 1 x 3 on phones. The arrows
+  // turn the page; they appear only when there is more than one page.
+  var page = 0;
+  var WIDE = window.matchMedia ? window.matchMedia("(min-width: 900px)") : null;
+  var MID = window.matchMedia ? window.matchMedia("(min-width: 600px)") : null;
+  function perPage() { return 3 * (WIDE && WIDE.matches ? 3 : MID && MID.matches ? 2 : 1); }
+  var sectionBox = null;
+  function redrawParties() {
+    if (!sectionBox || !sectionBox.parentNode) return;
+    var fresh = el("div", { class: "parties-section" }, partiesSection());
+    sectionBox.parentNode.replaceChild(fresh, sectionBox);
+    sectionBox = fresh;
+  }
+  [WIDE, MID].forEach(function (mq) {
+    if (!mq) return;
+    var on = function () { redrawParties(); };
+    if (mq.addEventListener) mq.addEventListener("change", on); else if (mq.addListener) mq.addListener(on);
+  });
+
   function partiesSection() {
-    var rail = el("div", { class: "rail", attrs: { tabindex: "0", "aria-label": t("h_upcoming") } });
-    function step(next) {
-      var first = rail.firstElementChild;
-      var w = first ? first.getBoundingClientRect().width + 18 : rail.clientWidth;
-      var rtl = document.documentElement.dir === "rtl";
-      rail.scrollBy({ left: (next ? 1 : -1) * (rtl ? -w : w), behavior: "smooth" });
-    }
-    var nav = el("div", { class: "rail-nav", hidden: true },
-      el("button", { class: "round", attrs: { type: "button", "aria-label": t("h_prev") }, on: { click: function () { step(false); } } }, chevron(false)),
-      el("button", { class: "round", attrs: { type: "button", "aria-label": t("h_next") }, on: { click: function () { step(true); } } }, chevron(true)));
-    // Arrows only when the cards do not all fit; checked again whenever the row changes size.
-    function fit() { nav.hidden = !(rail.scrollWidth > rail.clientWidth + 1); }
-    if (railWatch) railWatch.disconnect();
-    if ("ResizeObserver" in window) { railWatch = new ResizeObserver(fit); railWatch.observe(rail); }
-    else window.addEventListener("resize", fit);
+    var per = perPage();
+    var pages = parties && parties.length ? Math.ceil(parties.length / per) : 1;
+    page = Math.min(page, pages - 1);
+    function turn(d) { page = Math.max(0, Math.min(pages - 1, page + d)); redrawParties(); }
+    var nav = pages > 1 ? el("div", { class: "rail-nav" },
+      el("button", { class: "round", attrs: { type: "button", "aria-label": t("h_prev"), disabled: page === 0 }, on: { click: function () { turn(-1); } } }, chevron(false)),
+      el("span", { class: "page-count", text: t("h_page", { n: page + 1, total: pages }), attrs: { "aria-live": "polite" } }),
+      el("button", { class: "round", attrs: { type: "button", "aria-label": t("h_next"), disabled: page === pages - 1 }, on: { click: function () { turn(1); } } }, chevron(true))) : null;
     var list = [el("div", { class: "section-head", attrs: { id: "parties" } }, el("h2", { text: t("h_upcoming") }), nav)];
     if (failed) list.push(el("p", { class: "notice no", text: failed }));
     else if (!parties) list.push(el("p", { class: "muted", text: t("loading") }));
     else if (!parties.length) list.push(el("p", { class: "empty", text: t("h_none") }));
-    else { parties.forEach(function (p) { rail.appendChild(card(p)); }); list.push(rail); requestAnimationFrame(fit); }
+    else list.push(el("div", { class: "parties-grid" }, parties.slice(page * per, page * per + per).map(card)));
     return list;
   }
 
@@ -191,7 +224,8 @@
     Sahra.clear(heroBox).appendChild(hero());
     var m = mineSection();
     if (m) m.forEach(function (n) { app.appendChild(n); });
-    partiesSection().forEach(function (n) { app.appendChild(n); });
+    sectionBox = el("div", { class: "parties-section" }, partiesSection());
+    app.appendChild(sectionBox);
     app.appendChild(how());
   }
 

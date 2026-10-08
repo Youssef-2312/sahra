@@ -246,11 +246,22 @@ the `staging` branch; a finished piece the owner should try is pushed there too.
 
 ## Open questions for the owner
 
+- Party cards as pages of a fixed grid (owner): 3 x 3 on desktops (party 1 2 3 /
+  4 5 6 / 7 8 9, then the arrows turn to the next page), 2 x 3 on tablets,
+  1 x 3 on phones; the page count shows between the arrows, which appear only
+  when there is more than one page. Checked with 10 placeholder parties in the
+  test browser: 9 + 1 on desktops, 6 + 4 on tablets, 3 + 3 + 3 + 1 on phones.
+- Hero collage (owner): all photos the same size, edge to edge, in seven rows
+  tilted 14 degrees that drift in opposite directions (CSS only, 70 to 84 s a
+  loop; each row holds three copies and moves one, so the screen is always
+  covered: measured 0% uncovered over the loop at 390 and 1440 px, English and
+  Arabic); every other row is shifted half a photo so no grid lines run
+  through. Still under "reduce motion".
 - Hero photos: done. The owner uploaded seven photos (and a blank PNG, left
-  out); they are resized to 1000 px at most, blurred a little, stripped of
-  metadata (no location data) and saved as public/img/hero/hero-1.jpg ...
-  hero-7.jpg (35 to 70 KB each). The collage uses all seven once (one large,
-  one tall, one wide). hero-3 is also the sign-in panel photo.
+  out), then five more; all are resized to 1000 px at most, blurred a little,
+  stripped of metadata (no location data) and saved as
+  public/img/hero/hero-1.jpg ... hero-12.jpg (35 to 70 KB each). hero-3 is
+  also the sign-in panel photo.
 - Ticket waves (asked 2026-10-08): not built. Ticket types have their own
   sales windows and places, but one does not open when the previous sells
   out. Offered: up to 5 waves that open in turn.

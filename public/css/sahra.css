@@ -204,13 +204,15 @@ details > summary::-webkit-details-marker { display: none; }
    heading and the Discover button, darkened so the words stay readable. */
 .hero { position: relative; isolation: isolate; overflow: hidden; display: flex; align-items: center; justify-content: center;
   min-height: min(86svh, 760px); padding: 72px 20px 64px; text-align: center; border-bottom: 1px solid var(--line); }
-.hero-bg { position: absolute; inset: -12px; z-index: -2; display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(4, 1fr); gap: 8px; }
-.hero-bg .ph { position: relative; border-radius: 16px; overflow: hidden; background: var(--surface); }
-.hero-bg .ph:nth-child(1) { grid-column: span 2; grid-row: span 2; }
-/* Seven photos fill the 12 cells (3 x 4 on phones, 4 x 3 on desktops): one tall, one wide. */
-.hero-bg .ph:nth-child(2) { grid-row: span 2; }
-.hero-bg .ph:nth-child(7) { grid-column: span 2; }
+/* Moving collage: equal photos edge to edge in rows tilted on a diagonal; the sheet slides along the diagonal as one. */
+.hero-bg { position: absolute; inset: 0; z-index: -2; overflow: hidden; }
+.hero-bg .tilt { position: absolute; top: 50%; left: 50%; display: flex; flex-direction: column; transform: translate(-50%, -50%) rotate(-14deg); }
+.hero-bg .lane { display: flex; width: max-content; animation: lane 150s linear infinite; will-change: transform; }
+.hero-bg .ph { flex: none; width: 210px; height: 148px; overflow: hidden; background: var(--surface); }
+/* Edge to edge (owner: "stuck to each other"), every other row shifted half a photo like brickwork, so no grid lines run through. */
+.hero-bg .lane:nth-child(even) { margin-inline-start: -105px; }
 .hero-bg img { width: 100%; height: 100%; object-fit: cover; display: block; }
+@keyframes lane { from { transform: translateX(0); } to { transform: translateX(-33.3333%); } }  /* one copy of three */
 .hero::before { content: ""; position: absolute; inset: 0; z-index: -1; background: rgba(12, 13, 16, 0.6); }  /* one flat veil: readable words, photos still visible; no gradients (owner) */
 .hero .copy { max-width: 46rem; display: flex; flex-direction: column; align-items: center; }
 .hero h1 { font-size: 2.6rem; line-height: 1.05; letter-spacing: -0.035em; margin: 0 0 12px; max-width: 100%; overflow-wrap: break-word; text-shadow: 0 4px 30px rgba(0, 0, 0, 0.6); }
@@ -234,11 +236,12 @@ html[lang="ar"] .serif { font-family: var(--font-head); font-style: normal; font
 /* Party cards (owner's reference): a row that scrolls sideways (swipe on phones,
    arrows on desktop). Flyers on the start side as a small grid, details on the
    end side aligned to the start. */
-.rail { display: grid; grid-auto-flow: column; grid-auto-columns: 88%; gap: 14px; overflow-x: auto; scroll-snap-type: x mandatory; scroll-padding-inline: 2px;
-  padding: 4px 2px 18px; margin: var(--gap) -2px 0; scrollbar-width: none; overscroll-behavior-x: contain; }
-.rail::-webkit-scrollbar { display: none; }
-.rail:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 12px; }
-.party-card { scroll-snap-align: start; display: grid; grid-template-columns: 42% minmax(0, 1fr); text-decoration: none; color: var(--text);
+/* Party cards (owner): pages of a fixed grid, 3 x 3 on desktops, 2 x 3 on
+   tablets, 1 x 3 on phones; each card has the flyers on the start side and the
+   details on the end side, aligned to the start. */
+.parties-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; margin-top: var(--gap); }
+.page-count { min-width: 3.2rem; text-align: center; color: var(--muted); font-size: 16px; font-variant-numeric: tabular-nums; }
+.party-card { display: grid; grid-template-columns: 42% minmax(0, 1fr); text-decoration: none; color: var(--text);
   background: var(--surface); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; box-shadow: none; transition: border-color 0.15s; }
 .party-card:hover { border-color: var(--line-strong); }
 .flyers { display: grid; gap: 3px; background: var(--bg); min-height: 12rem; }
@@ -264,7 +267,8 @@ html[lang="ar"] .serif { font-family: var(--font-head); font-style: normal; font
 .party-card .tags { display: flex; flex-wrap: wrap; gap: 6px; }
 .party-card .go { margin-top: auto; padding-top: 8px; font-weight: 600; font-size: 16px; line-height: 1.5; color: var(--accent); }
 .party-card:hover .go { text-decoration: underline; text-underline-offset: 4px; }
-.rail-nav { display: inline-flex; gap: 10px; }
+.rail-nav { display: inline-flex; align-items: center; gap: 10px; }
+.round:disabled { opacity: 0.35; cursor: default; }
 .round { display: inline-flex; align-items: center; justify-content: center; width: 46px; height: 46px; border-radius: 50%; border: 1px solid var(--line-strong);
   background: var(--surface-2); color: var(--text); cursor: pointer; transition: border-color 0.15s, background 0.15s; }
 .round:hover { border-color: rgba(255, 255, 255, 0.35); background: #23262e; }
@@ -304,6 +308,8 @@ html[dir="rtl"] .round svg { transform: scaleX(-1); }
 .icon-link { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 999px; border: 1px solid var(--line-strong); color: var(--text); }
 .icon-link svg { width: 20px; height: 20px; }
 
+@media (min-width: 600px) and (max-width: 899px) { .parties-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
 /* Desktop and large tablets */
 @media (min-width: 900px) {
   body { font-size: 17.5px; }
@@ -313,7 +319,8 @@ html[dir="rtl"] .round svg { transform: scaleX(-1); }
   .site-footer { padding-inline: 32px; }
   h1 { font-size: 2.2rem; }
   .hero { min-height: min(88vh, 860px); padding: 96px 32px 88px; }
-  .hero-bg { grid-template-columns: repeat(4, 1fr); grid-template-rows: repeat(3, 1fr); gap: 12px; }
+  .hero-bg .ph { width: 340px; height: 238px; }
+  .hero-bg .lane:nth-child(even) { margin-inline-start: -170px; }
   .hero .copy { max-width: 64rem; }
   .hero h1 { font-size: 4.6rem; }
   .hero p { font-size: 1.2rem; }
@@ -321,10 +328,10 @@ html[dir="rtl"] .round svg { transform: scaleX(-1); }
   .host { grid-template-columns: 1fr auto; align-items: center; }
   .section-head { margin-top: 72px; }
   #app > .section-head:first-child { margin-top: 44px; }
-  .rail { grid-auto-columns: calc((100% - 18px) / 2); gap: 18px; }
+  .parties-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
   .flyers { min-height: 14rem; }
-  .party-card .info { padding: 22px 22px; }
-  .party-card .name { font-size: 1.55rem; }
+  .party-card .info { padding: 18px 16px; }
+  .party-card .name { font-size: 1.2rem; }
   .mine { grid-template-columns: repeat(2, 1fr); }
   .steps { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 32px; }
   .host { margin-top: 56px; }
@@ -397,13 +404,6 @@ main { animation: rise 0.5s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
 .brand:hover img { animation: twinkle 1.2s ease-in-out; }
 
 /* Hero: tiles arrive one after another, then drift slowly; the words rise in. */
-.hero-bg .ph { animation: tile-in 1s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
-.hero-bg .ph:nth-child(2) { animation-delay: 0.06s; } .hero-bg .ph:nth-child(3) { animation-delay: 0.12s; }
-.hero-bg .ph:nth-child(4) { animation-delay: 0.18s; } .hero-bg .ph:nth-child(5) { animation-delay: 0.24s; }
-.hero-bg .ph:nth-child(6) { animation-delay: 0.3s; } .hero-bg .ph:nth-child(7) { animation-delay: 0.36s; }
-.hero-bg .ph:nth-child(8) { animation-delay: 0.42s; } .hero-bg .ph:nth-child(9) { animation-delay: 0.48s; }
-.hero-bg img { animation: drift 26s ease-in-out infinite alternate; will-change: transform; }
-.hero-bg .ph:nth-child(even) img { animation-duration: 32s; animation-direction: alternate-reverse; }
 .hero .copy > * { animation: rise 0.8s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
 .hero .copy > :nth-child(1) { animation-delay: 0.2s; } .hero .copy > :nth-child(2) { animation-delay: 0.32s; }
 .hero .copy > :nth-child(3) { animation-delay: 0.44s; } .hero .copy > :nth-child(4) { animation-delay: 0.56s; }
@@ -435,5 +435,5 @@ main { animation: rise 0.5s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; animation-delay: 0s !important;
     transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
-  .hero-bg img { animation: none !important; }
+  .hero-bg .lane { animation: none !important; }
 }
