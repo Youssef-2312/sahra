@@ -307,3 +307,13 @@ Chosen extras (numbers from the brainstorm):
 - After a restore, audit rows and outbox rows newer than the restore point are
   lost (the change log keeps the history); emails may be sent twice, which is
   harmless (every email links to the same ticket page).
+- **Checkpoint C, live on staging (2026-10-08):** run 1 admitted 50 + 10 race tickets;
+  backup point 00:34:40Z; run 2 admitted 50 + 10 more (main database and ledger:
+  592 admissions = 592 records). `recover.mjs staging`: maintenance on and confirmed;
+  917 rows checked before the restore, 0 mismatches; Time Travel restore to the
+  backup point; 96 entries replayed, 821 already current; 0 holds; 13 sessions
+  ended; party paused and pause_number synced; final check OK; maintenance off.
+  After reopening: all 100 saved tickets (50 before, 50 after the backup point)
+  scanned again and every one said "used"; ledger check: 0 reopened.
+  Not proven live: the "main database unreachable" path (holds from intents) is
+  tested locally only, as is recovery of site owners and organisers (Phase 4).
