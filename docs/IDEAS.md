@@ -18,3 +18,17 @@ coordinator's session. Status: agreed, rejected or open.
 - Free-tier cost: none (static assets do not count as Worker requests)
 - Rule conflicts: none. No emojis in either language.
 - Open point: do emails follow the guest's language? Not yet asked.
+
+## 2. Guest sign-up page: order of content
+
+- Status: agreed
+- Owner's words: "this is the right order"
+- Order, top to bottom:
+  1. party name, date and time;
+  2. address status (for example "revealed 2 hours before"; a hidden address never reaches the browser early);
+  3. ticket types with prices, each showing "sold out" or "closes in 3 days" where it applies;
+  4. a short sign-up form.
+- Needs: one screen; uses data that already exists (party details, ticket types, sales windows). No new data.
+- Effort: small to medium
+- Free-tier cost: none (static page plus one read of the party's public details per visit)
+- Rule conflicts: none
