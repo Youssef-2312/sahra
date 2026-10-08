@@ -549,6 +549,8 @@ describe("rows per request (measured locally)", () => {
       await h.req(`/api/platform/organisers/${body.organiser_id}/disable`, papi(a.s)); note("POST /api/platform/organisers/:id/disable (1 staff row)");
       await h.req(`/api/platform/parties/${id}/owner-invite`, papi(a.s, { staff_id: newId(), invite_id: newId(), name: "New", email: "measure-new@gmail.com" }));
       note("POST /api/platform/parties/:id/owner-invite");
+      await h.req(`/api/platform/parties/${id}/manage`, papi(a.s)); note("POST /api/platform/parties/:id/manage (first time)");
+      await h.req(`/api/platform/parties/${id}/manage`, papi(a.s)); note("POST /api/platform/parties/:id/manage (again)");
     } finally {
       spy.mockRestore();
     }
@@ -622,13 +624,13 @@ describe("removing a site owner", () => {
     expect(list.site_owners.map((x) => x.id)).toEqual(expect.arrayContaining([a.id, b.id]));
 
     const r = await h.req(`/api/platform/site-owners/${b.id}/remove`, papi(a.s));
-    expect(await r.json()).toEqual({ status: "removed" });
+    expect(await r.json()).toEqual({ status: "removed", staff_disabled: 0 });
     expect(await env.LEDGER.prepare("SELECT COUNT(*) AS n FROM intents WHERE entity = 'platform_admin' AND entity_id = ? AND action = 'site_owner_removed'").bind(b.id).first("n")).toBe(1);
     expect((await logEntry("platform_admin", b.id, 2))!.state).toMatchObject({ last_action: "site_owner_removed", disabled_by: a.id });
     for (const s of [b.s, bSecond]) expect((await h.req("/api/platform/me", { cookies: { "__Host-sahra_p": s.token } })).status).toBe(401);
     h.google.identity = { sub: b.sub, email: `${b.sub}@gmail.com` };
     expect((await platformLogin(h)).res.status).toBe(403);
-    expect(await (await h.req(`/api/platform/site-owners/${b.id}/remove`, papi(a.s))).json()).toEqual({ status: "already" });
+    expect(await (await h.req(`/api/platform/site-owners/${b.id}/remove`, papi(a.s))).json()).toMatchObject({ status: "already" });
     expect((await h.req(`/api/platform/site-owners/${newId()}/remove`, papi(a.s))).status).toBe(404);
   });
 
@@ -652,7 +654,7 @@ describe("removing a site owner", () => {
     const h = await harness();
     const a = await siteOwner(h);
     const pdb = new PlatformDb(new D1Driver(env.DB));
-    expect(await pdb.removeSiteOwner(a.s.hash, a.id, a.id, h.clock.now(), newId())).toBe("rejected");
+    expect((await pdb.removeSiteOwner(a.s.hash, a.id, a.id, h.clock.now(), newId())).status).toBe("rejected");
     expect(await env.DB.prepare("SELECT disabled_at FROM platform_admins WHERE id = ?").bind(a.id).first("disabled_at")).toBeNull();
   });
 
@@ -664,6 +666,6 @@ describe("removing a site owner", () => {
     expect((await h.req(`/api/platform/site-owners/${b.id}/remove`, papi(a.s))).status).toBe(503);
     expect(await env.DB.prepare("SELECT disabled_at FROM platform_admins WHERE id = ?").bind(b.id).first("disabled_at")).toBeNull();
     h.ledger.intentMode = "ok";
-    expect(await (await h.req(`/api/platform/site-owners/${b.id}/remove`, papi(a.s))).json()).toEqual({ status: "removed" });
+    expect(await (await h.req(`/api/platform/site-owners/${b.id}/remove`, papi(a.s))).json()).toMatchObject({ status: "removed" });
   });
 });

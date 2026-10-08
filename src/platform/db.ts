@@ -247,7 +247,7 @@ export class PlatformDb {
   }) {
     const ok = siteOwnerValid(hash, ownerId, a.now);
     const noOwner = sql`NOT EXISTS (SELECT 1 FROM staff o WHERE o.party_id = ${partyId} AND o.role = 'owner'
-      AND o.disabled_at IS NULL AND o.google_sub IS NOT NULL)`;
+      AND o.disabled_at IS NULL AND o.google_sub IS NOT NULL AND o.site_owner_id IS NULL)`;
     const rs = await this.driver.batch([
       sql`INSERT INTO staff (id, party_id, name, role, invited_email, created_at, created_by, last_op, last_action)
         SELECT ${a.staffId}, ${partyId}, ${a.name}, 'owner', ${a.email}, ${a.now}, ${ownerId}, ${a.op}, 'staff_added'
@@ -306,9 +306,11 @@ o.party_limit, ${activeParties(sql`o.id`)} AS active_parties,
           (SELECT COUNT(*) FROM staff st WHERE st.party_id = p.id AND st.disabled_at IS NULL) AS staff,
           (SELECT COUNT(*) FROM sessions s WHERE s.party_id = p.id AND s.revoked_at IS NULL AND s.expires_at > ${now}) AS active_sessions,
           (SELECT COUNT(*) FROM staff ow WHERE ow.party_id = p.id AND ow.role = 'owner' AND ow.disabled_at IS NULL
-            AND ow.google_sub IS NOT NULL) AS active_owners,
+            AND ow.google_sub IS NOT NULL AND ow.site_owner_id IS NULL) AS active_owners,
           (SELECT COUNT(*) FROM staff ow WHERE ow.party_id = p.id AND ow.role = 'owner' AND ow.disabled_at IS NULL
-            AND ow.google_sub IS NULL) AS pending_owner_invites
+            AND ow.google_sub IS NULL) AS pending_owner_invites,
+          (SELECT COUNT(*) FROM staff ow WHERE ow.party_id = p.id AND ow.disabled_at IS NULL
+            AND ow.site_owner_id IS NOT NULL) AS site_owners_managing
         FROM parties p LEFT JOIN organisers o ON o.id = p.organiser_id WHERE p.id != ${PLATFORM} AND ${ok} ORDER BY p.created_at`,
       sql`SELECT party_id, status, COUNT(*) AS n FROM tickets WHERE ${ok} GROUP BY party_id, status`,
       sql`SELECT party_id, status, COUNT(*) AS n FROM outbox WHERE ${ok} GROUP BY party_id, status`,
@@ -423,14 +425,97 @@ o.party_limit, ${activeParties(sql`o.id`)} AS active_parties,
           AND (SELECT COUNT(*) FROM platform_admins o WHERE o.disabled_at IS NULL AND o.id != ${targetId}) >= 1`,
       sql`UPDATE platform_sessions SET revoked_at = ${now} WHERE revoked_at IS NULL
         AND google_sub = (SELECT google_sub FROM platform_admins WHERE id = ${targetId} AND disabled_at IS NOT NULL)`,
+      // Their access to parties (rows made by enterParty) ends in the same transaction.
+      sql`UPDATE staff SET disabled_at = ${now}, rev = rev + 1, last_op = ${op}, last_action = 'staff_disabled'
+        WHERE site_owner_id = ${targetId} AND disabled_at IS NULL
+          AND EXISTS (SELECT 1 FROM platform_admins WHERE id = ${targetId} AND last_op = ${op} AND disabled_at IS NOT NULL)`,
+      sql`UPDATE sessions SET revoked_at = ${now} WHERE revoked_at IS NULL
+        AND staff_id IN (SELECT id FROM staff WHERE last_op = ${op} AND last_action = 'staff_disabled')`,
       paudit(now, ownerId, "site_owner_removed", "platform_admin", sql`SELECT id, rev FROM platform_admins WHERE id = ${targetId} AND last_op = ${op}`),
+      audit(now, ownerId, "staff_disabled", "staff", sql`SELECT party_id, id, rev FROM staff WHERE last_op = ${op} AND last_action = 'staff_disabled'`,
+        "site owner removed"),
       sql`SELECT disabled_at, ${ok} AS ok FROM platform_admins WHERE id = ${targetId}`,
+      sql`SELECT id, party_id FROM staff WHERE last_op = ${op} AND last_action = 'staff_disabled'`,
     ]);
-    const row = rs[3]!.results[0] as undefined | { disabled_at: number | null; ok: number };
-    if (!row) return "not_found" as const;
-    if (Number(row.ok) !== 1 || targetId === ownerId) return "rejected" as const;
-    if (rs[0]!.meta.changes === 1) return "removed" as const;
-    return row.disabled_at != null ? ("already" as const) : ("rejected" as const);
+    const row = rs[6]!.results[0] as undefined | { disabled_at: number | null; ok: number };
+    const staff = rs[7]!.results as { id: string; party_id: string }[];
+    if (!row) return { status: "not_found" as const, staff };
+    if (Number(row.ok) !== 1 || targetId === ownerId) return { status: "rejected" as const, staff };
+    if (rs[0]!.meta.changes === 1) return { status: "removed" as const, staff };
+    return { status: row.disabled_at != null ? ("already" as const) : ("rejected" as const), staff };
+  }
+
+  /** Read-only: a site owner's active party rows (for the intents written before removing them). */
+  async staffOfSiteOwner(siteOwnerId: string) {
+    const r = await this.driver.all<{ id: string; party_id: string }>(
+      sql`SELECT id, party_id FROM staff WHERE site_owner_id = ${siteOwnerId} AND disabled_at IS NULL`,
+    );
+    return r.results;
+  }
+
+  // ------------------------------------------------------- site owner: managing any party
+
+  /**
+   * Step 1 of entering a party (owner decision: a site owner can manage any
+   * party): an ordinary owner staff row for the site owner's Google account,
+   * marked with site_owner_id, created or (if they already have a row there)
+   * made owner and active again. Audited, logged by the caller before step 2.
+   * Refused for a disabled party and for a row on a recovery hold.
+   */
+  async enterPartyRow(hash: string, ownerId: string, partyId: string, a: { staffId: string; now: number; op: string }) {
+    const ok = siteOwnerValid(hash, ownerId, a.now);
+    const sub = sql`(SELECT google_sub FROM platform_admins WHERE id = ${ownerId})`;
+    const open = sql`EXISTS (SELECT 1 FROM parties WHERE id = ${partyId} AND disabled_at IS NULL)`;
+    const rs = await this.driver.batch([
+      sql`UPDATE staff SET role = 'owner', disabled_at = NULL, site_owner_id = ${ownerId}, rev = rev + 1, last_op = ${a.op}, last_action = 'site_owner_access'
+        WHERE party_id = ${partyId} AND google_sub = ${sub} AND hold_at IS NULL
+          AND (role != 'owner' OR disabled_at IS NOT NULL OR site_owner_id IS NULL OR site_owner_id != ${ownerId})
+          AND ${ok} AND ${open}`,
+      sql`INSERT INTO staff (id, party_id, name, role, google_sub, invited_email, created_at, created_by, site_owner_id, last_op, last_action)
+        SELECT ${a.staffId}, ${partyId}, pa.name || ' (site owner)', 'owner', pa.google_sub, pa.email, ${a.now}, ${ownerId}, ${ownerId}, ${a.op}, 'site_owner_access'
+        FROM platform_admins pa WHERE pa.id = ${ownerId} AND pa.google_sub IS NOT NULL AND ${ok} AND ${open}
+          AND NOT EXISTS (SELECT 1 FROM staff x WHERE x.party_id = ${partyId} AND x.google_sub = pa.google_sub)
+          AND NOT EXISTS (SELECT 1 FROM staff x WHERE x.id = ${a.staffId})`,
+      audit(a.now, ownerId, "site_owner_access", "staff", sql`SELECT party_id, id, rev FROM staff WHERE party_id = ${partyId} AND last_op = ${a.op}`,
+        "site owner manages this party"),
+      sql`SELECT ${ok} AS ok, p.id AS party, p.disabled_at, st.id AS staff_id, st.role, st.disabled_at AS staff_disabled, st.hold_at
+        FROM (SELECT 1) LEFT JOIN parties p ON p.id = ${partyId}
+          LEFT JOIN staff st ON st.party_id = ${partyId} AND st.google_sub = ${sub}`,
+    ]);
+    const row = rs[3]!.results[0] as {
+      ok: number; party: string | null; disabled_at: number | null; staff_id: string | null; role: string | null; staff_disabled: number | null; hold_at: number | null;
+    };
+    if (Number(row.ok) !== 1) return { status: "rejected" as const };
+    if (!row.party) return { status: "not_found" as const };
+    if (row.disabled_at != null) return { status: "party_disabled" as const };
+    if (row.hold_at != null) return { status: "on_hold" as const };
+    if (!row.staff_id || row.role !== "owner" || row.staff_disabled != null) return { status: "rejected" as const };
+    return { status: "ok" as const, staffId: row.staff_id };
+  }
+
+  /**
+   * Step 2: an ordinary owner session at that party for the site owner's row,
+   * after the row is in the change log. Same rules as a staff Google session
+   * (row active, owner, party not disabled, hourly cap) plus the site owner
+   * check, all inside the INSERT.
+   */
+  async enterPartySession(hash: string, ownerId: string, partyId: string, a: { staffId: string; sessionHash: string; now: number; expiresAt: number }) {
+    const ok = siteOwnerValid(hash, ownerId, a.now);
+    const underCap = sql`(SELECT COUNT(*) FROM sessions cap WHERE cap.staff_id = ${a.staffId} AND cap.created_at > ${a.now - 3600_000}) < ${CONFIG.maxSessionsPerStaffPerHour}`;
+    const rs = await this.driver.batch([
+      sql`INSERT INTO sessions (id_hash, kind, party_id, staff_id, role, created_at, expires_at)
+        SELECT ${a.sessionHash}, 'google', st.party_id, st.id, 'owner', ${a.now}, ${a.expiresAt}
+        FROM staff st JOIN platform_admins pa ON pa.id = ${ownerId} AND pa.google_sub = st.google_sub
+        WHERE st.id = ${a.staffId} AND st.party_id = ${partyId} AND st.site_owner_id = ${ownerId} AND st.role = 'owner'
+          AND st.disabled_at IS NULL AND st.hold_at IS NULL
+          AND NOT EXISTS (SELECT 1 FROM parties dp WHERE dp.id = ${partyId} AND dp.disabled_at IS NOT NULL)
+          AND ${ok} AND ${underCap}`,
+      sql`INSERT INTO audit (party_id, at, actor_staff_id, action, entity_type, entity_id, entity_rev, detail)
+        SELECT party_id, ${a.now}, staff_id, 'login_google', 'staff', staff_id, NULL, 'site owner' FROM sessions WHERE id_hash = ${a.sessionHash}`,
+      sql`SELECT ${underCap} AS under_cap`,
+    ]);
+    if (rs[0]!.meta.changes === 1) return "created" as const;
+    return (rs[2]!.results[0] as { under_cap: number } | undefined)?.under_cap ? ("rejected" as const) : ("capped" as const);
   }
 
   // ------------------------------------------------------- organiser: parties

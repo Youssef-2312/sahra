@@ -150,6 +150,8 @@ const cases: Case[] = [
   ["backup done, BACKUP_KEY not set", "POST", "/api/backup/done", () => withEnv({ BACKUP_KEY: undefined }, (h) => backupPost(h, "/api/backup/done", { kind: "nightly", folder: "sahra-backup-2026-10-01T0300Z", rows: 1, files: 0, bytes: 0 }, { key: env.BACKUP_KEY! }))],
   ["owner invite, junk session", "POST", "/api/platform/parties/:id/owner-invite", (h) => h.req("/api/platform/parties/some-party/owner-invite", { method: "POST", headers: JSON_H, cookies: junkPlatform, body: JSON.stringify({ staff_id: newId(), invite_id: newId(), name: "x", email: "x@gmail.com" }) })],
   ["owner invite, staff cookie", "POST", "/api/platform/parties/:id/owner-invite", (h) => h.req("/api/platform/parties/some-party/owner-invite", { method: "POST", headers: JSON_H, cookies: junkCookie, body: JSON.stringify({ staff_id: newId(), invite_id: newId(), name: "x", email: "x@gmail.com" }) })],
+  ["manage party, junk session", "POST", "/api/platform/parties/:id/manage", (h) => h.req("/api/platform/parties/some-party/manage", { method: "POST", headers: JSON_H, cookies: junkPlatform })],
+  ["manage party, staff cookie", "POST", "/api/platform/parties/:id/manage", (h) => h.req("/api/platform/parties/some-party/manage", { method: "POST", headers: JSON_H, cookies: junkCookie })],
   ["unknown API path", "GET", "/api/*", (h) => h.req("/api/nothing-here")],
 ];
 

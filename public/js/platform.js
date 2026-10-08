@@ -84,6 +84,11 @@
       show(await act("/api/platform/organisers/" + encodeURIComponent(String(f.get("id")).trim()) + "/party-limit", { limit: Number(f.get("limit")) }));
       loadOwner();
     });
+    form("manage-party", async function (f) {
+      var r = await act("/api/platform/parties/" + encodeURIComponent(String(f.get("id")).trim()) + "/manage");
+      if (r.status === 200) { location.href = "/dashboard"; return; }
+      show(r);
+    });
     form("owner-invite", async function (f) {
       show(await act("/api/platform/parties/" + encodeURIComponent(String(f.get("id")).trim()) + "/owner-invite", {
         staff_id: crypto.randomUUID(), invite_id: crypto.randomUUID(), name: f.get("name"), email: f.get("email"),

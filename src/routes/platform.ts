@@ -18,8 +18,8 @@ import { flushChangeLog } from "../changelog";
 import { recordIntent } from "../changes";
 import { json, readJson } from "../context";
 import { CONFIG } from "../env";
-import { clearCookie } from "../lib/http";
-import { csrfFor, isUuid, newId } from "../lib/crypto";
+import { COOKIE_SESSION, clearCookie, cookie } from "../lib/http";
+import { csrfFor, isUuid, newId, newToken, sha256hex } from "../lib/crypto";
 import { COOKIE_PLATFORM, requirePlatform, type PCtx, type PlatformEnv } from "../platform/auth";
 import { MAX_PARTY_LIMIT, PLATFORM, siteOwnerValid } from "../platform/db";
 import { healthView } from "../health";
@@ -222,11 +222,47 @@ platformRoutes.post("/site-owners/:id/remove", requirePlatform(["site_owner"]), 
   const now = c.var.deps.now();
   const op = newId();
   await recordIntent(c.var.ledger, op, PLATFORM, "site_owner_removed", [{ entity: "platform_admin", id }], now);
+  // Their access to parties ends with the removal: intents for those staff rows too.
+  const intended = await c.var.pdb.staffOfSiteOwner(id);
+  await recordStaffIntents(c, op, intended, now);
   const r = await c.var.pdb.removeSiteOwner(p.hash, p.info.site_owner_id!, id, now, op);
-  if (r === "not_found") return j(c, 404, { error: "not_found" });
-  if (r === "rejected") return j(c, 409, { error: "not_allowed" });
+  if (r.status === "not_found") return j(c, 404, { error: "not_found" });
+  if (r.status === "rejected") return j(c, 409, { error: "not_allowed" });
+  const known = new Set(intended.map((x) => x.id));
+  await recordStaffIntents(c, op, r.staff.filter((x) => !known.has(x.id)), now);
   await flushChangeLog(c.var.db, c.var.ledger, now);
-  return j(c, 200, { status: r });
+  return j(c, 200, { status: r.status, staff_disabled: r.staff.length });
+});
+
+/**
+ * Manage any party (owner decision): the site owner gets an ordinary owner staff
+ * row there (shown in the party's staff list as "<name> (site owner)", every
+ * change audited under it) and an ordinary owner session, set as the party
+ * session cookie. Every party owner feature then works with its own authority
+ * checks. Removing the site owner ends this access.
+ */
+platformRoutes.post("/parties/:id/manage", requirePlatform(["site_owner"]), async (c) => {
+  const partyId = c.req.param("id");
+  if (!PARTY_ID.test(partyId)) return j(c, 400, { error: "invalid_request" });
+  const p = c.var.platform;
+  const now = c.var.deps.now();
+  const row = await c.var.pdb.enterPartyRow(p.hash, p.info.site_owner_id!, partyId, { staffId: newId(), now, op: newId() });
+  if (row.status === "not_found") return j(c, 404, { error: "not_found" });
+  if (row.status === "party_disabled") return j(c, 409, { error: "party_disabled" });
+  if (row.status === "on_hold") return j(c, 409, { error: "on_hold_after_recovery" });
+  if (row.status !== "ok") return j(c, 409, { error: "not_allowed" });
+  // The row is confirmed in the change log before a session is handed out.
+  await flushChangeLog(c.var.db, c.var.ledger, now);
+  const token = newToken();
+  const expiresAt = now + CONFIG.googleSessionMs;
+  const s = await c.var.pdb.enterPartySession(p.hash, p.info.site_owner_id!, partyId, {
+    staffId: row.staffId, sessionHash: await sha256hex(token), now, expiresAt,
+  });
+  if (s === "capped") return j(c, 429, { error: "too_many_sessions" });
+  if (s !== "created") return j(c, 409, { error: "not_allowed" });
+  const res = j(c, 200, { status: "managing", party: partyId, expires_at: expiresAt });
+  res.headers.append("set-cookie", cookie(COOKIE_SESSION, token, { maxAgeS: CONFIG.googleSessionMs / 1000, sameSite: "Strict" }));
+  return res;
 });
 
 // ------------------------------------------------------------ organiser
