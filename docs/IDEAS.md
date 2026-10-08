@@ -272,3 +272,14 @@ coordinator's session. Status: agreed, rejected or open.
 - Needs: confirmation screen using counts the server already has; the existing disable-party action (which pauses the party and ends its sessions) and its change intent stay unchanged. Effort: small.
 - Free-tier cost: a couple of counts when the screen opens
 - Rule conflicts: none; consistent with fail closed (a disabled party admits nobody).
+
+## 20. Look and feel: "newform", hero photos, logo, favicon, organiser "fillers" on cards
+
+- Status: open (several words need confirming with the owner)
+- Owner's words: "also for the frontend I want newform used and these pictures used as a hero I also want a logo generated for sahra and the favicon to also be generatted and I want the oraginers to be able to add their own fillers on their cards"
+- "newform": unclear. Possibly a typeface or a design kit. Asked the owner; do not build on a guess.
+- Hero pictures: the owner shared three night-party crowd photos (a dark venue with hands raised, a dancing crowd under a wall of studs, a costume party). They are held in the owner's chat only, not in the repository. The owner has to hand the files to the coordinator. Points to check before use: permission from the photographers and the people in them (faces are clearly visible); that nobody in the photos looks under age for a ticketed party page; and file size (resize and compress each photo for phones, aim under about 150 KB each, a single hero image per screen load; static assets do not count as Worker requests). Mobile first (idea 6): the dark, busy photos need a dark overlay so white text stays readable.
+- Logo and favicon: the owner wants them generated for Sahra. The brainstorm session cannot make images. Recommend a simple wordmark (the name "Sahra" in a bold typeface) as an SVG, which is free, sharp on every phone and tiny; the favicon is the first letter in the same style. The coordinator can draw it in SVG code, or the owner can use any image tool.
+- "Fillers" on cards: unclear, possibly "flyers" (each organiser uploads their own flyer or cover image for their party card). If so, it needs: an image upload per party, a size cap and resize in the browser, and storage in the files database (no R2); the 500 MB database size limit and the daily write budget apply, and the existing size health check should count it.
+- Effort: unknown until the words are confirmed
+- Rule conflicts: none so far; no R2; nothing bought (no paid fonts or stock images); no emojis in the interface.
