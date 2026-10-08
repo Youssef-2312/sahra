@@ -34,6 +34,19 @@ the `staging` branch; a finished piece the owner should try is pushed there too.
   https://bynova.vercel.app/favicon.svg) and an Instagram icon next to it
   linking to https://www.instagram.com/nova.dev26/ (Sahra has no Instagram).
 
+## Owner decisions during Phase 5 (2026-10-08)
+
+- Every page must also look good on a desktop (not only phones): wider layouts
+  and columns on large screens, inspired by newform and efferd (dark, clean,
+  rounded cards, generous spacing). Phones stay the first target.
+- The home page lists all parties, with sign-in for organisers and staff at the
+  top right. (This replaces the brief's "the homepage is the staff login".)
+- The scanner needs a back button.
+- Nova logo: the dot brightened to #2f6bff (owner's OK).
+- Privacy and Terms: approved as written ("Draft" line removed).
+- Production waits until the whole frontend is finished.
+- Order: home page first, then the rest through the approval queue cards.
+
 ## Shared pieces
 
 - `public/css/sahra.css`: the design (tokens, layout, buttons, forms, cards,
@@ -130,11 +143,6 @@ the `staging` branch; a finished piece the owner should try is pushed there too.
 
 ## Open questions for the owner
 
-- Privacy and Terms drafts: approve or change the wording (then remove the
-  "Draft" line). A contact for the site owner may be wanted on both pages.
-- Nova logo: the site's favicon.svg has a dark navy dot (hard to see on the
-  dark footer); the owner's image has a bright blue dot. Use as is, brighten
-  the dot (owner's OK needed), or the owner supplies the PNG/SVG.
 - Hero photos (idea 20) and the sign-in page look (idea 27): photos still to be
   handed over.
 
