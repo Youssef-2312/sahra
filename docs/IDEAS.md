@@ -317,3 +317,13 @@ coordinator's session. Status: agreed, rejected or open.
 - Owner's words: "im not sure about the favicon or the logo yet"
 - Nothing is to be built for the logo or favicon yet. Until the owner decides, the pages use the plain text name "Sahra" in a bold typeface and no custom icon. When the owner is ready, the options are: a simple "Sahra" wordmark with an "S" favicon drawn as a small SVG (free, sharp on phones), or an image the owner supplies. The brainstorm session cannot generate images.
 - Effort: small. Free-tier cost: none. Rule conflicts: none (nothing bought; no emojis).
+
+## 24. Year-round look: no Halloween theme
+
+- Status: agreed
+- Owner's words: "also please make sure that this website isnt themed in certain halloween colors since I want it to be open all year long"
+- The site must look right in every season: no orange and black, no pumpkins, ghosts, blood red or spooky wording as the base style. Use a neutral, party-neutral palette (for example a dark charcoal base with one calm accent colour) that organisers' own flyers can sit on without clashing.
+- Applies to the hero photos (idea 20): choose and crop them so they do not read as a costume or Halloween event. The shared photos include a costume-party image and a venue with red hand-painted signs that look like blood; these should not be used as the hero, or at least not those parts. Prefer the dancing crowd photo, or a crop that avoids the signs.
+- Organisers can still theme their own party through their flyer and text (idea 21). That is their party, not the site.
+- Also keep the separate Halloween-26 project untouched; this is only about Sahra's look.
+- Needs: a colour and tone rule for the frontend build and the photo choice. Effort: none extra. Free-tier cost: none. Rule conflicts: none.
