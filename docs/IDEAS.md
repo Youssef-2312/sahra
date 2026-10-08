@@ -167,3 +167,20 @@ coordinator's session. Status: agreed, rejected or open.
 - Free-tier cost: screenshots are the heavy part; load them one card at a time or on tap, small previews first, to protect the daily read budget and mobile data. Emails go through the outbox (daily Gmail cap applies).
 - Rule conflicts: none. Capacity is still enforced inside the approval statement; if full, the card says so and nothing is approved.
 - Simplicity requirement (owner: "but make sure its simple"): the card shows only what is needed to decide: name, ticket type, screenshot with the expected amount, and the buttons. Extra answers and email are hidden behind a small "Details" tap. The big green button "Approve and send QR" is the obvious default; "Approve" without QR and "Reject" are smaller and secondary. No settings, no extra steps, no confirmation pop-up for approve (an "Undo" for a few seconds instead is preferred if it is safe: it must not apply once a QR email is queued).
+
+## 12. Design principle: clean and uncluttered everywhere
+
+- Status: agreed
+- Owner's words: "I dont want the website to look clustered or too complex" (also "but make sure its simple", about the approval queue, idea 11)
+- Applies to every screen (guest, organiser, door scanner, site owner), on top of mobile first (idea 6).
+- Proposed rules for the Phase 5 build:
+  - one main job per screen, with one obvious primary button; everything else is smaller or behind a "More" or "Details" tap;
+  - lots of white space, one column, few colours; colour is kept for meaning (green admitted/approve, red rejected/used, amber uncertain);
+  - short plain wording, no jargon; no emojis;
+  - forms show only the fields needed; organiser extras only appear when the organiser added them;
+  - rarely used settings live on a separate settings page, not on the main dashboard;
+  - the door scanner shows nothing except the camera and the result.
+- Open question: for the approval queue, the owner's remark about "different fields for the button" was answered with this principle, not a specific layout. The coordinator should treat this principle as the answer.
+- Needs: a rule for the whole build, no new data. Effort: no extra screens; it shapes all of them.
+- Free-tier cost: none; lighter pages help
+- Rule conflicts: none
