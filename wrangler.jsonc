@@ -38,6 +38,9 @@
     { "name": "RL_AUTH", "namespace_id": "41001", "simple": { "limit": 20, "period": 60 } },
     { "name": "RL_SCAN", "namespace_id": "41002", "simple": { "limit": 120, "period": 60 } }
   ],
+  // Once a minute: the email sender (src/email/sender.ts). With no provider
+  // configured it returns before any query. About 1,440 invocations a day.
+  "triggers": { "crons": ["* * * * *"] },
   "env": {
     "staging": {
       "name": "sahra-staging",
@@ -62,7 +65,8 @@
         { "name": "RL_AUTH", "namespace_id": "42001", "simple": { "limit": 400, "period": 60 } },
         // Higher than production so the Checkpoint A script (one session acting as many phones) is not throttled.
         { "name": "RL_SCAN", "namespace_id": "42002", "simple": { "limit": 1000, "period": 60 } }
-      ]
+      ],
+      "triggers": { "crons": ["* * * * *"] }
     }
   }
 }

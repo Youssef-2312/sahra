@@ -26,6 +26,8 @@ import { linkPath, signLink, verifyLink } from "../guests/link";
 import { turnstileConfigured, verifyTurnstile } from "../guests/turnstile";
 import { base32, parseToken, sha256, sha256hex } from "../lib/crypto";
 import { clientIp, rateLimited, sameOrigin } from "../lib/http";
+import { PartyDb } from "../party/db";
+import { visiblePartyDetails } from "../party/details";
 import { signQr } from "../qr";
 import { FileStore, MAX_FILE_BYTES, sniffImage } from "../storage";
 
@@ -228,10 +230,11 @@ guestRoutes.get("/ticket", async (c) => {
   if (!t || t.link_version !== p.version) return json(c, 404, { error: "invalid_link" });
   const released = t.status === "approved" && t.released_at != null;
   const showQr = released && t.hold_at == null;
+  const party = await new PartyDb(c.var.db.driver).get(t.party_id);
+  if (!party) return json(c, 404, { error: "invalid_link" });
   return json(c, 200, {
-    // TODO(integration): the coordinator wires workstream A's
-    // visiblePartyDetails(party, viewer, now) (src/party/details.ts) here.
-    party: { id: t.party_id, name: t.party_name },
+    // Only what this ticket may see: the place stays hidden until its address mode allows it.
+    party: visiblePartyDetails(party, { kind: "ticket", status: t.status, released: t.released_at != null, onHold: t.hold_at != null }, c.var.deps.now()),
     ticket: {
       id: t.id,
       status: released ? "released" : t.status,

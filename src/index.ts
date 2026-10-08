@@ -15,6 +15,8 @@ export default {
   fetch: (req: Request, env: Env, ctx: ExecutionContext) => app.fetch(req, env, ctx),
   // Once a minute: send a few due outbox emails (src/email/sender.ts).
   scheduled: (_ctrl: ScheduledController, env: Env, ctx: ExecutionContext) => {
+    // A controlled recovery is running (scripts/recover.mjs): no database writes.
+    if (env.MAINTENANCE === "1") return;
     ctx.waitUntil(scheduledSend(env, new D1Driver(env.DB), { now: () => Date.now(), random: Math.random, connect: cfConnect, fetch: fetcher }));
   },
 } satisfies ExportedHandler<Env>;

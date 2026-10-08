@@ -283,6 +283,22 @@ describe("approval queue, release, screenshots", () => {
 });
 
 describe("guest ticket page", () => {
+  it("shows the address with the ticket only when the party's address mode allows it", async () => {
+    const h = await harness();
+    const { party, os } = await guestParty(h);
+    await env.DB.prepare("UPDATE parties SET address = 'Street 90, Sodic, 112389, Apt 12', venue_name = 'Ahmed''s place', address_mode = 'with_ticket' WHERE id = ?").bind(party).run();
+    const s = await signup(h, party);
+    const id = s.body.ticket_id!;
+    expect((await viewTicket(h, s.body.link!)).body.party).toMatchObject({ address: null, venue_name: null });
+    await h.req("/api/tickets/approve", api(os, { ids: [id] }));
+    expect((await viewTicket(h, s.body.link!)).body.party).toMatchObject({ address: null });
+    await h.req("/api/tickets/release", api(os, { ids: [id] }));
+    expect((await viewTicket(h, s.body.link!)).body.party).toMatchObject({ address: "Street 90, Sodic, 112389, Apt 12", venue_name: "Ahmed's place", reveal: null });
+    // Manual mode before "Reveal now": hidden even for a released ticket.
+    await env.DB.prepare("UPDATE parties SET address_mode = 'manual', revealed_at = NULL WHERE id = ?").bind(party).run();
+    expect((await viewTicket(h, s.body.link!)).body.party).toMatchObject({ address: null, reveal: { mode: "manual", waiting_for: "owner" } });
+  });
+
   it("shows the QR only when approved + released + not on hold", async () => {
     const h = await harness();
     const { party, os } = await guestParty(h);
@@ -291,7 +307,8 @@ describe("guest ticket page", () => {
     let v = await viewTicket(h, s.body.link!);
     expect(v.status).toBe(200);
     expect(v.body).toMatchObject({ party: { id: party, name: `Party ${party}` }, ticket: { status: "pending", qr: null, guest_name: "Page Guest" } });
-    expect(Object.keys(v.body.party as object)).toEqual(["id", "name"]);
+    // Party details through visiblePartyDetails: a pending ticket never sees a hidden place.
+    expect(v.body.party).toMatchObject({ address: null, map_url: null, venue_name: null, reveal: { waiting_for: "ticket" } });
     await h.req("/api/tickets/approve", api(os, { ids: [id] }));
     v = await viewTicket(h, s.body.link!);
     expect(v.body.ticket).toMatchObject({ status: "approved", qr: null });

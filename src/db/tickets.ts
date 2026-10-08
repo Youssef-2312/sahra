@@ -182,9 +182,12 @@ export class TicketDb {
     return rs[0]!.meta.changes === 1;
   }
 
+  /** Approval keeps the party within capacity (approved people + this ticket), checked in the statement. */
   approve(sess: SessionRef, id: string, now: number, actor: string, op: string) {
     return this.change(sess, ["owner", "admin"], id, "approved",
-      sql`status = 'approved', approved_at = ${now}, approved_by = ${actor}`, sql`status = 'pending'`, now, actor, op);
+      sql`status = 'approved', approved_at = ${now}, approved_by = ${actor}`,
+      sql`status = 'pending' AND (SELECT COALESCE(SUM(o.people), 0) FROM tickets o WHERE o.party_id = tickets.party_id AND o.status = 'approved')
+        + tickets.people <= (SELECT capacity FROM parties WHERE id = tickets.party_id)`, now, actor, op);
   }
 
   reject(sess: SessionRef, id: string, now: number, actor: string, op: string) {
