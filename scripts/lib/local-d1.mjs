@@ -14,9 +14,13 @@ export const LOCAL_IDS = {
   DB: "00000000-0000-4000-8000-00000000d001",
   LEDGER: "00000000-0000-4000-8000-00000000d002",
   FILES: "00000000-0000-4000-8000-00000000d003",
+  FILES_2: "00000000-0000-4000-8000-00000000d004",
+  FILES_3: "00000000-0000-4000-8000-00000000d005",
+  FILES_4: "00000000-0000-4000-8000-00000000d006",
 };
 
-const MIGRATIONS = { DB: "migrations", LEDGER: "migrations-ledger", FILES: "migrations-files" };
+const MIGRATIONS = { DB: "migrations", LEDGER: "migrations-ledger", FILES: "migrations-files", FILES_2: "migrations-files", FILES_3: "migrations-files", FILES_4: "migrations-files" };
+const DEFAULT_BINDINGS = ["DB", "LEDGER", "FILES"];
 
 export function npx(root, args, opts = {}) {
   const win = process.platform === "win32";
@@ -26,32 +30,35 @@ export function npx(root, args, opts = {}) {
   });
 }
 
-/** Creates <dir>/wrangler.json and applies every migration to fresh local databases in <dir>/state. */
-export function freshLocalD1(root, dir) {
+/** Creates <dir>/wrangler.json and applies every migration to fresh local databases in <dir>/state (only the bindings named). */
+export function freshLocalD1(root, dir, bindings = DEFAULT_BINDINGS) {
   mkdirSync(dir, { recursive: true });
   const config = join(dir, "wrangler.json");
   writeFileSync(config, JSON.stringify({
     name: "sahra-restore-drill",
     main: join(root, "src", "index.ts"),
     compatibility_date: "2026-08-01",
-    d1_databases: Object.entries(LOCAL_IDS).map(([binding, id]) => ({
+    d1_databases: Object.entries(LOCAL_IDS).filter(([b]) => bindings.includes(b)).map(([binding, id]) => ({
       binding, database_name: `drill-${binding.toLowerCase()}`, database_id: id, migrations_dir: join(root, MIGRATIONS[binding]),
     })),
   }, null, 2));
   const persistTo = join(dir, "state");
-  for (const binding of Object.keys(LOCAL_IDS)) {
+  for (const binding of bindings) {
     npx(root, ["wrangler", "d1", "migrations", "apply", binding, "--local", "--persist-to", persistTo, "-c", config]);
   }
   return { config, persistTo };
 }
 
-/** Miniflare over the same persisted files: real D1 bindings for DB, LEDGER and FILES. */
-export async function openLocalD1(root, persistTo) {
+/** Miniflare over the same persisted files: real D1 bindings for the given names (default DB, LEDGER, FILES). */
+export async function openLocalD1(root, persistTo, bindings = DEFAULT_BINDINGS) {
   const { Miniflare, convertV4MiniflareOptions } = await import(pathToFileURL(join(root, "node_modules", "miniflare", "dist", "src", "index.js")).href);
   const mf = new Miniflare(convertV4MiniflareOptions({
-    modules: true, script: "export default {}", resourcePersistencePath: join(persistTo, "v3"), d1Databases: LOCAL_IDS,
+    modules: true, script: "export default {}", resourcePersistencePath: join(persistTo, "v3"),
+    d1Databases: Object.fromEntries(bindings.map((b) => [b, LOCAL_IDS[b]])),
   }));
-  return { mf, DB: await mf.getD1Database("DB"), LEDGER: await mf.getD1Database("LEDGER"), FILES: await mf.getD1Database("FILES") };
+  const out = { mf };
+  for (const b of bindings) out[b] = await mf.getD1Database(b);
+  return out;
 }
 
 /** Bundles TypeScript modules from src/ for Node (as scripts/recover.mjs does) and imports them. */

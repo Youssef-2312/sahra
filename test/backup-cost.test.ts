@@ -72,8 +72,9 @@ it("rows read by a full backup of 4,000 tickets with screenshots", async () => {
     const u = usage();
     expect(u.written).toBe(0);
     const total = u.main + u.ledger + u.files;
-    // Each row is read once, plus the manifest's counts (about one more read per row) and one per screenshot download.
-    expect(total).toBeLessThan(rows * 2 + TICKETS + 2000);
+    // Each row is read once, plus the manifest's counts (about one more read per row), one per screenshot
+    // download, and one more per screenshot in the list and per download (the purge-mark lookup).
+    expect(total).toBeLessThan(rows * 2 + TICKETS * 3 + 2000);
     report[`page_${limit}`] = { requests: u.requests, rows_read: total, main: u.main, ledger: u.ledger, files: u.files };
   }
   // Hourly: ledger + screenshot list, no new screenshot to download.
@@ -91,15 +92,16 @@ it("rows read by a full backup of 4,000 tickets with screenshots", async () => {
   const body = await first.text();
   report.change_log_page_max = { ...usage(), response_bytes: body.length };
   // Measured (docs/DECISIONS.md, workstream E): 44,061 rows in the backup; a full export with
-  // counts and every screenshot downloaded reads 92,243 rows (main 48,213, ledger 32,019,
-  // files 12,011) whatever the page size; the manifest's counts alone read 44,170; without
-  // counts the manifest reads 109. A change-log page of 500 rows is about 313 KB of JSON.
+  // counts and every screenshot downloaded reads 100,268 rows (main 48,219, ledger 32,019,
+  // files 20,030: list and download each also look up the purge mark) whatever the page
+  // size; the manifest's counts alone read 44,194; without counts the manifest reads 133. A change-log page of 500 rows is about 313 KB of JSON.
   expect(report.manifest_without_counts).toMatchObject({ requests: 1, written: 0 });
-  // Hourly (ledger + screenshot list, nothing new to download; 500-row pages): 20,113 rows read
-  // (main 83: manifest and schedule, ledger 16,019, files 4,011) in 45 requests.
+  // Hourly (ledger + screenshot list, nothing new to download; 500-row pages): 24,138 rows read
+  // (main 89: manifest and schedule, ledger 16,019, files 8,030: each listed screenshot also
+  // looks up its purge mark) in 46 requests.
   const hourly = report.hourly as { main: number; ledger: number; files: number; written: number };
   expect(hourly.written).toBe(0);
   expect(hourly.main).toBeLessThan(200);
-  expect(hourly.ledger + hourly.files).toBeLessThan(rows / 2);
+  expect(hourly.ledger + hourly.files).toBeLessThan(rows * 0.6);
   expect((report.change_log_page_max as { ledger: number }).ledger).toBeLessThanOrEqual(PAGE_MAX);
 }, 180_000);

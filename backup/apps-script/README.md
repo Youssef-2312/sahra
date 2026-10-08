@@ -28,13 +28,17 @@ while the site runs; a restore goes into new databases with
   (`POST /api/backup/done`, signed like every call). The Worker's health check
   tells the site owners when the last reported backup is more than 26 hours old,
   so a script that stopped running is noticed too.
-- Screenshots are stored once in `screenshots/` (they never change). Each new one
-  is downloaded, its SHA-256 compared with the Worker's, its size with the list,
-  then saved to Drive, read back from Drive and checked again. Progress is saved
+- Screenshots of every screenshot database (FILES, FILES_2, ...) are stored once in
+  `screenshots/` (they never change): database 1 under its id, the others as
+  `files_N-<id>`. Each new one is downloaded, its SHA-256 compared with the
+  Worker's, its size with the list, then saved to Drive, read back from Drive and
+  checked again. Screenshots the site's retention already deleted are listed as
+  "purged": not downloaded and not a failure; a copy made before the deletion stays
+  in Drive. Progress is saved
   in Script Properties every 20 files; a run stops after 5 minutes (Apps Script
   stops at 6) and a one-off trigger continues one minute later.
 - `summary.json` and `SUMMARY.txt` in each backup folder: rows per table,
-  screenshots copied / already there / failed, the measured database sizes (D1's
+  screenshots copied / already there / purged / failed, the measured database sizes (D1's
   own `size_after`), time taken.
 - Keeps every backup for 48 hours, then the newest nightly of each day for 30
   days (hourly ones are deleted after 48 hours). Screenshots are never deleted.

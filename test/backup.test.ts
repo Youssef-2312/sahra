@@ -3,16 +3,16 @@
 // a full export -> restore into fresh databases -> identical rows and identical
 // screenshot bytes, checked again by the recovery engine (verify / replay).
 import { applyD1Migrations, env } from "cloudflare:test";
-import { MAX_FILE_BYTES } from "../src/storage";
+import { MAX_FILE_BYTES, purgeOldScreenshots, resetUploadTarget } from "../src/storage";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { canonical, signedHeaders, SIG_HEADER, TIME_HEADER } from "../src/backup/auth";
-import { EXCLUDED, EXPORTED, INTERNAL_TABLE, PAGE_MAX, schedule, tablesFor } from "../src/backup/export";
+import { EXPORTED, excludedIn, exportedFor, INTERNAL_TABLE, PAGE_MAX, schedule, selectOf, tablesFor, type BackupDb, type TableSpec } from "../src/backup/export";
 import { BUDGET_STOP_AT } from "../src/limits";
 import { compareRestore, loadBackup, sha256hexBytes } from "../src/backup/restore";
 import { D1Driver, type SqlDriver } from "../src/db/driver";
 import { newId } from "../src/lib/crypto";
 import { flushAll, replay, verify } from "../src/recovery";
-import { api, backupGet, backupPost, exportAll, guestParty, harness, JPEG, openParty, ORIGIN, scan, seedDoor, signup, testTickets, type Harness } from "./helpers";
+import { api, backupGet, backupPost, exportAll, seedOwner, seedSession, guestParty, harness, JPEG, openParty, ORIGIN, scan, seedDoor, signup, testTickets, type Harness } from "./helpers";
 
 let logs: string[] = [];
 beforeEach(() => {
@@ -27,6 +27,26 @@ const parsed = (evt: string) => logs.filter((l) => l.startsWith(`{"evt":"${evt}"
 const BIG = MAX_FILE_BYTES;
 let bigShot: Uint8Array;
 let h: Harness;
+/** Screenshots in the second files database (FILES_2), and screenshots the retention purge emptied. */
+const shard2: { ticket: string; id: number; sha: string }[] = [];
+const purged: { db: "files" | "files_2"; id: number }[] = [];
+
+/** Both files databases the tests bind (FILES, FILES_2). */
+const SPECS = exportedFor(["files", "files_2"]);
+const live = (db: BackupDb): D1Database => (db === "main" ? env.DB : db === "ledger" ? env.LEDGER : db === "files" ? env.FILES! : env.FILES_2!);
+const restored = (db: BackupDb): D1Database => (db === "main" ? env.RESTORE_MAIN : db === "ledger" ? env.RESTORE_LEDGER : db === "files" ? env.RESTORE_FILES : env.RESTORE_FILES_2);
+const selectAll = (spec: TableSpec) => { const s = selectOf(spec); return `SELECT ${s.cols} FROM ${s.from} ORDER BY ${spec.key.map(s.key).join(", ")}`; };
+
+/** A files database that reports itself `bytes` big (D1's meta.size_after), so uploads move on to the next one. */
+function sized(d: D1Database, bytes: number): D1Database {
+  return new Proxy(d, {
+    get(t, p) {
+      if (p === "prepare") return (q: string) => (q === "SELECT 1" ? { all: async () => ({ results: [{ 1: 1 }], meta: { size_after: bytes } }) } : t.prepare(q));
+      const v = (t as unknown as Record<string | symbol, unknown>)[p];
+      return typeof v === "function" ? (v as (...a: unknown[]) => unknown).bind(t) : v;
+    },
+  });
+}
 
 /** Tickets, an admission, guest sign-ups with screenshots (one of the maximum size), an approval, a release, a cancel with its intent. */
 async function world() {
@@ -52,6 +72,29 @@ async function world() {
   expect((await h.req("/api/tickets/approve", api(g.os, { ids: ids.slice(0, 2) }))).status).toBe(200);
   expect((await h.req("/api/tickets/release", api(g.os, { ids: ids.slice(0, 1) }))).status).toBe(200);
   expect((await h.req(`/api/tickets/${ids[3]}/cancel`, api(g.os, { op: newId() }))).status).toBe(200);
+  // Two sign-ups land in the second files database (the first reports itself past 70%).
+  resetUploadTarget();
+  const h2 = await harness({ clock: h.clock, env: { FILES: sized(env.FILES!, 360e6), FILES_2: env.FILES_2 } as never });
+  const ids2: string[] = [];
+  for (let i = 0; i < 2; i++) {
+    const shot = new Uint8Array(3000 + i * 500);
+    crypto.getRandomValues(shot);
+    shot.set(JPEG);
+    const s2 = await signup(h2, g.party, { screenshot: shot });
+    expect(s2.status).toBe(201);
+    const key = String(await env.DB.prepare("SELECT screenshot_key FROM tickets WHERE id = ?").bind(s2.body.ticket_id).first("screenshot_key"));
+    expect(key).toMatch(/^f2:/);
+    shard2.push({ ticket: s2.body.ticket_id!, id: Number(key.slice(3)), sha: await sha256hexBytes(shot) });
+    ids2.push(s2.body.ticket_id!);
+  }
+  resetUploadTarget();
+  // Retention: a cancelled ticket's screenshot is emptied 30 days later (one in each database).
+  expect((await h.req(`/api/tickets/${ids2[1]}/cancel`, api(g.os, { op: newId() }))).status).toBe(200);
+  const purge = await purgeOldScreenshots(env, new D1Driver(env.DB), h.clock.now() + 31 * 86_400_000);
+  expect(purge.databases.map((d) => d.deleted.cancelled ?? 0)).toEqual([1, 1]);
+  for (const [db, d] of [["files", env.FILES!], ["files_2", env.FILES_2!]] as const) {
+    for (const r of (await d.prepare("SELECT id FROM file_tombstones").all<{ id: number }>()).results) purged.push({ db, id: r.id });
+  }
   // Composite primary keys with several rows sharing a first key column, to cross page boundaries inside them.
   const op = newId();
   for (let i = 0; i < 5; i++) {
@@ -71,7 +114,7 @@ beforeAll(async () => {
 
 async function allCounts() {
   const out: Record<string, unknown> = {};
-  for (const [name, db] of [["main", env.DB], ["ledger", env.LEDGER], ["files", env.FILES!]] as const) {
+  for (const [name, db] of [["main", env.DB], ["ledger", env.LEDGER], ["files", env.FILES!], ["files_2", env.FILES_2!]] as const) {
     const tables = (await db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE '_cf_%' AND name NOT LIKE 'sqlite_%'").all<{ name: string }>()).results;
     for (const t of tables) out[`${name}.${t.name}`] = await db.prepare(`SELECT COUNT(*) AS n FROM ${t.name}`).first("n");
   }
@@ -158,8 +201,9 @@ describe("read-only", () => {
     logs = [];
     const exp = await exportAll(h, 3);
     expect(exp.files.size).toBeGreaterThan(0);
+    expect(exp.purged).toBe(2);
     for (const p of ["/api/backup/schedule", "/api/backup/manifest", "/api/backup/rows/main/nope", "/api/backup/rows/main/sessions", "/api/backup/rows/main/outbox",
-      "/api/backup/rows/main/tickets?limit=0", "/api/backup/rows/main/tickets?after=AAAA", "/api/backup/file/999999", "/api/backup/file/abc"]) {
+      "/api/backup/rows/main/tickets?limit=0", "/api/backup/rows/main/tickets?after=AAAA", "/api/backup/file/files/999999", "/api/backup/file/files/abc"]) {
       expect((await backupGet(h, p)).status, p).not.toBe(500);
     }
     const reqs = parsed("req");
@@ -177,6 +221,10 @@ describe("read-only", () => {
       expect((await backupGet(h, `/api/backup/rows/main/${t}`)).status, t).toBe(404);
     }
     expect((await backupGet(h, "/api/backup/rows/files/files?limit=1")).status).toBe(200);
+    expect((await backupGet(h, "/api/backup/rows/files_2/files?limit=1")).status).toBe(200);
+    // A files database that is not bound.
+    expect((await backupGet(h, "/api/backup/rows/files_3/files")).status).toBe(404);
+    expect((await backupGet(h, "/api/backup/rows/files_9/files")).status).toBe(404);
     expect((await backupGet(h, `/api/backup/rows/main/tickets?limit=${PAGE_MAX + 1}`)).status).toBe(400);
     expect((await backupGet(h, "/api/backup/rows/main/tickets?limit=-1")).status).toBe(400);
     expect((await backupGet(h, "/api/backup/rows/main/tickets?after=WyJ4Il0x")).status).toBe(400);
@@ -191,7 +239,7 @@ describe("read-only", () => {
 
   it("a screenshot is served with its SHA-256 and size, never cached", async () => {
     const f = await env.FILES!.prepare("SELECT id, size FROM files WHERE size = ?").bind(BIG).first<{ id: number; size: number }>();
-    const r = await backupGet(h, `/api/backup/file/${f!.id}`);
+    const r = await backupGet(h, `/api/backup/file/files/${f!.id}`);
     expect(r.status).toBe(200);
     const bytes = new Uint8Array(await r.arrayBuffer());
     expect(bytes.length).toBe(BIG);
@@ -199,15 +247,34 @@ describe("read-only", () => {
     expect(r.headers.get("x-sahra-size")).toBe(String(BIG));
     expect(r.headers.get("cache-control")).toBe("no-store");
   });
+
+  it("screenshots of the second database are served from it; purged ones answer 410; an unbound database 404", async () => {
+    const live2 = shard2[0]!;
+    const r = await backupGet(h, `/api/backup/file/files_2/${live2.id}`);
+    expect(r.status).toBe(200);
+    expect(r.headers.get("x-sahra-sha256")).toBe(live2.sha);
+    expect((await backupGet(h, `/api/backup/file/files/${live2.id}`)).status).toBe(404);
+    for (const p of purged) {
+      const g = await backupGet(h, `/api/backup/file/${p.db}/${p.id}`);
+      expect(g.status).toBe(410);
+      expect(((await g.json()) as { error: string }).error).toBe("purged");
+    }
+    // The list says which are purged, and why.
+    const list = (await (await backupGet(h, "/api/backup/rows/files_2/files")).json()) as { rows: { id: number; purged_at: number | null; purged_reason: string | null; size: number }[] };
+    const pr = list.rows.find((x) => x.purged_at !== null)!;
+    expect(pr.purged_reason).toMatch(/cancelled/);
+    expect(pr.size).toBeGreaterThan(0);
+    expect((await backupGet(h, `/api/backup/file/files_3/${live2.id}`)).status).toBe(404);
+    expect((await backupGet(h, `/api/backup/file/nope/${live2.id}`)).status).toBe(404);
+  });
 });
 
 describe("paging", () => {
   it("every exported table, every page size: each row exactly once, across page boundaries", async () => {
     for (const limit of [1, 2, 3, 7, 200]) {
       const exp = await exportAll(h, limit);
-      for (const spec of EXPORTED) {
-        const db = spec.db === "main" ? env.DB : spec.db === "ledger" ? env.LEDGER : env.FILES!;
-        const want = (await db.prepare(`SELECT ${spec.columns?.join(", ") ?? "*"} FROM ${spec.table} ORDER BY ${spec.key.join(", ")}`).all()).results;
+      for (const spec of SPECS) {
+        const want = (await live(spec.db).prepare(selectAll(spec)).all()).results;
         const got = exp.tables.get(`${spec.db}.${spec.table}`)!;
         const keyOf = (r: Record<string, unknown>) => JSON.stringify(spec.key.map((k) => r[k]));
         expect(new Set(got.map(keyOf)).size, `${spec.table} limit ${limit}: duplicates`).toBe(got.length);
@@ -255,7 +322,8 @@ describe("manifest", () => {
       databases: Record<string, { size_bytes: number; page_size: number; migrations: string[]; tables: { name: string; rows: number }[]; excluded: { name: string; reason: string }[]; unknown: string[] }>;
     };
     expect(m.order.at(-1)).toEqual({ db: "ledger", table: "change_log", key: ["event_id"] });
-    for (const [name, db] of [["main", env.DB], ["ledger", env.LEDGER], ["files", env.FILES!]] as const) {
+    expect((m.databases.files_2 as unknown as { binding: string; shard: number })).toMatchObject({ binding: "FILES_2", shard: 2 });
+    for (const [name, db] of [["main", env.DB], ["ledger", env.LEDGER], ["files", env.FILES!], ["files_2", env.FILES_2!]] as const) {
       const info = m.databases[name]!;
       expect(info.size_bytes, name).toBeGreaterThan(0);
       expect(info.page_size, name).toBe(4096);
@@ -266,7 +334,7 @@ describe("manifest", () => {
       for (const e of info.excluded) expect(e.reason.length).toBeGreaterThan(3);
       // Every table in the database is accounted for.
       const all = (await db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all<{ name: string }>()).results.map((x) => x.name).filter((x) => !INTERNAL_TABLE.test(x));
-      for (const t of all) expect(EXPORTED.some((s) => s.db === name && s.table === t) || EXCLUDED.some((s) => s.db === name && s.table === t), `${name}.${t}`).toBe(true);
+      for (const t of all) expect(SPECS.some((s) => s.db === name && s.table === t) || excludedIn(name).some((s) => s.table === t), `${name}.${t}`).toBe(true);
     }
     // A 1.5 MB screenshot is in the files database, so its measured size is at least that.
     expect(m.databases.files!.size_bytes).toBeGreaterThan(BIG);
@@ -279,11 +347,11 @@ describe("manifest", () => {
   });
 
   it("without the files database the manifest says so and the export skips screenshots", async () => {
-    const h2 = await harness({ env: { FILES: undefined } });
+    const h2 = await harness({ env: { FILES: undefined, FILES_2: undefined } });
     const m = (await (await backupGet(h2, "/api/backup/manifest")).json()) as { databases: { files: unknown }; order: { db: string }[] };
     expect(m.databases.files).toEqual({ configured: false });
     expect(m.order.some((o) => o.db === "files")).toBe(false);
-    expect((await backupGet(h2, "/api/backup/file/1")).status).toBe(404);
+    expect((await backupGet(h2, "/api/backup/file/files/1")).status).toBe(404);
   });
 });
 
@@ -336,16 +404,19 @@ describe("schedule", () => {
 
 describe("export -> restore into fresh databases", () => {
   it("identical rows, identical screenshot bytes (1.5 MB included), and the change log matches the restored database", async () => {
-    for (const [db, ms] of [[env.RESTORE_MAIN, env.TEST_MIGRATIONS], [env.RESTORE_LEDGER, env.TEST_LEDGER_MIGRATIONS], [env.RESTORE_FILES, env.TEST_FILES_MIGRATIONS]] as const) {
+    for (const [db, ms] of [[env.RESTORE_MAIN, env.TEST_MIGRATIONS], [env.RESTORE_LEDGER, env.TEST_LEDGER_MIGRATIONS], [env.RESTORE_FILES, env.TEST_FILES_MIGRATIONS], [env.RESTORE_FILES_2, env.TEST_FILES_MIGRATIONS]] as const) {
       await applyD1Migrations(db, ms);
     }
     // Rows other tests in this file seeded directly; in production every row is logged when created.
     await flushAll(new D1Driver(env.DB), new D1Driver(env.LEDGER), 0);
     const exp = await exportAll(h);
-    const t = { main: new D1Driver(env.RESTORE_MAIN), ledger: new D1Driver(env.RESTORE_LEDGER), files: new D1Driver(env.RESTORE_FILES) };
+    const t = targets();
     const load = await loadBackup(t, exp.source);
     expect(load.file_problems).toEqual([]);
     expect(load.files).toBe(exp.files.size);
+    // Purged before this backup: restored as purged (empty bytes and a tombstone), like the live database.
+    expect(load.purged_without_bytes).toBe(2);
+    expect(load.purged_restored).toBe(0);
     const cmp = await compareRestore(t, exp.source);
     expect(cmp.blob_mismatches).toEqual([]);
     for (const [k, v] of Object.entries(cmp.tables)) expect(v.different, k).toBe(0);
@@ -356,11 +427,17 @@ describe("export -> restore into fresh databases", () => {
     const back = new Uint8Array(big!.bytes);
     expect(back.length === bigShot.length && back.every((b, i) => b === bigShot[i])).toBe(true);
     // Same row contents as the live databases, table by table.
-    for (const spec of EXPORTED) {
-      const [src, dst] = spec.db === "main" ? [env.DB, env.RESTORE_MAIN] : spec.db === "ledger" ? [env.LEDGER, env.RESTORE_LEDGER] : [env.FILES!, env.RESTORE_FILES];
+    for (const spec of SPECS) {
       const q = `SELECT * FROM ${spec.table} ORDER BY ${spec.key.join(", ")}`;
-      expect((await dst.prepare(q).all()).results, spec.table).toEqual((await src.prepare(q).all()).results);
+      expect((await restored(spec.db).prepare(q).all()).results, `${spec.db}.${spec.table}`).toEqual((await live(spec.db).prepare(q).all()).results);
     }
+    // Each files database restored into its own database, purge marks included.
+    for (const db of ["files", "files_2"] as const) {
+      const q = "SELECT id, party_id, ticket_id, reason FROM file_tombstones ORDER BY id";
+      expect((await restored(db).prepare(q).all()).results, db).toEqual((await live(db).prepare(q).all()).results);
+    }
+    const s2 = await env.RESTORE_FILES_2.prepare("SELECT bytes FROM files WHERE id = ?").bind(shard2[0]!.id).first<{ bytes: ArrayBuffer }>();
+    expect(await sha256hexBytes(new Uint8Array(s2!.bytes))).toBe(shard2[0]!.sha);
     // The recovery engine: every restored row's rev is in the restored change log with the same state.
     const v = await verify(t.main, t.ledger);
     expect(v.mismatches).toEqual([]);
@@ -373,11 +450,7 @@ describe("export -> restore into fresh databases", () => {
   }, 30_000);
 
   it("a change made after the main tables were exported comes back through the change log (ledger exported last)", async () => {
-    // Empty the restore databases again (children first).
-    for (const spec of [...EXPORTED].reverse()) {
-      if (spec.db === "main") await env.RESTORE_MAIN.prepare(`DELETE FROM ${spec.table}`).run();
-      if (spec.db === "ledger") await env.RESTORE_LEDGER.prepare(`DELETE FROM ${spec.table}`).run();
-    }
+    await emptyRestore();
     // Main tables first...
     const before = await exportAll(h);
     // ...then a scan admits a guest while the backup runs...
@@ -389,7 +462,7 @@ describe("export -> restore into fresh databases", () => {
     // ...and the ledger, exported last, has it.
     const after = await exportAll(h);
     const mixed = { rows: async (db: string, table: string) => (db === "ledger" ? after : before).tables.get(`${db}.${table}`) ?? [], file: before.source.file };
-    const t = { main: new D1Driver(env.RESTORE_MAIN), ledger: new D1Driver(env.RESTORE_LEDGER), files: null };
+    const t = { main: new D1Driver(env.RESTORE_MAIN), ledger: new D1Driver(env.RESTORE_LEDGER), files: {} };
     await loadBackup(t, mixed);
     const v = await verify(t.main, t.ledger);
     expect(v.ok).toBe(true);
@@ -399,14 +472,51 @@ describe("export -> restore into fresh databases", () => {
     const used = await env.RESTORE_MAIN.prepare("SELECT used_at FROM tickets WHERE id = ?").bind(tk!.id).first("used_at");
     expect(used).not.toBeNull();
   }, 30_000);
+
+  it("a screenshot purged after it was backed up comes back with its bytes from the backup", async () => {
+    await emptyRestore();
+    const before = await exportAll(h);
+    const victim = shard2[0]!;
+    const own = await env.DB.prepare("SELECT party_id FROM tickets WHERE id = ?").bind(victim.ticket).first<string>("party_id");
+    const os = await seedSession(own!, (await seedOwner(own!)).id, "owner", h.clock);
+    expect((await h.req(`/api/tickets/${victim.ticket}/cancel`, api(os, { op: newId() }))).status).toBe(200);
+    await purgeOldScreenshots(env, new D1Driver(env.DB), h.clock.now() + 31 * 86_400_000);
+    await flushAll(new D1Driver(env.DB), new D1Driver(env.LEDGER), 0);
+    const after = await exportAll(h);
+    expect(after.tables.get("files_2.files")!.find((r) => r.id === victim.id)!.purged_at).not.toBeNull();
+    // The newer backup lists it as purged; the bytes copied earlier are still in "Drive".
+    const mixed = { rows: after.source.rows, file: async (db: string, id: number) => (await after.source.file(db, id)) ?? before.source.file(db, id) };
+    const t = targets();
+    const load = await loadBackup(t, mixed);
+    expect(load.file_problems).toEqual([]);
+    expect(load.purged_restored).toBe(1);
+    expect(load.purged_without_bytes).toBe(2);
+    const cmp = await compareRestore(t, mixed);
+    expect(cmp.blob_mismatches).toEqual([]);
+    expect(cmp.purged).toBe(2);
+    const back = await env.RESTORE_FILES_2.prepare("SELECT bytes FROM files WHERE id = ?").bind(victim.id).first<{ bytes: ArrayBuffer }>();
+    expect(await sha256hexBytes(new Uint8Array(back!.bytes))).toBe(victim.sha);
+    expect(await env.RESTORE_FILES_2.prepare("SELECT COUNT(*) AS n FROM file_tombstones WHERE id = ?").bind(victim.id).first("n")).toBe(0);
+  }, 30_000);
 });
+
+function targets() {
+  return { main: new D1Driver(env.RESTORE_MAIN), ledger: new D1Driver(env.RESTORE_LEDGER), files: { files: new D1Driver(env.RESTORE_FILES), files_2: new D1Driver(env.RESTORE_FILES_2) } };
+}
+
+/** Empties the restore databases (children first). */
+async function emptyRestore() {
+  for (const spec of [...SPECS].reverse()) await restored(spec.db).prepare(`DELETE FROM ${spec.table}`).run();
+  for (const db of ["files", "files_2"] as const) await restored(db).prepare("DELETE FROM file_tombstones").run();
+}
 
 describe("hourly backups: ledger and screenshot list only", () => {
   it("the manifest for an hourly backup lists the screenshot list and the ledger, never the main tables", async () => {
     const m = (await (await backupGet(h, "/api/backup/manifest?kind=hourly")).json()) as { kind: string; order: { db: string; table: string }[] };
     expect(m.kind).toBe("hourly");
-    expect(m.order.map((o) => `${o.db}.${o.table}`)).toEqual(["files.files", "ledger.party_control", "ledger.intents", "ledger.change_log"]);
+    expect(m.order.map((o) => `${o.db}.${o.table}`)).toEqual(["files.files", "files_2.files", "ledger.party_control", "ledger.intents", "ledger.change_log"]);
     expect(tablesFor("nightly")).toEqual(EXPORTED);
+    expect(tablesFor("nightly", ["files", "files_2"])).toEqual(SPECS);
   });
 });
 

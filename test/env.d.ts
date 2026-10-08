@@ -15,6 +15,7 @@ declare global {
       RESTORE_MAIN: D1Database;
       RESTORE_LEDGER: D1Database;
       RESTORE_FILES: D1Database;
+      RESTORE_FILES_2: D1Database;
     }
   }
 }

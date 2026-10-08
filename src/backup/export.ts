@@ -13,7 +13,17 @@ import type { SqlDriver } from "../db/driver";
 import { sql, raw, join, type Sql } from "../db/sql";
 import { budgetOk } from "../limits";
 
-export type BackupDb = "main" | "ledger" | "files";
+/**
+ * The screenshot databases, one backup "db" per binding (src/storage/:
+ * FILES = sahra-files-1, FILES_2..FILES_4). "files" keeps its name for database 1.
+ */
+export const FILES_DBS = ["files", "files_2", "files_3", "files_4"] as const;
+export type FilesDb = (typeof FILES_DBS)[number];
+export type BackupDb = "main" | "ledger" | FilesDb;
+
+export const isFilesDb = (db: string): db is FilesDb => (FILES_DBS as readonly string[]).includes(db);
+/** Database number (1..4) of a files db, as in the ticket's key "f<N>:<id>". */
+export const shardOf = (db: FilesDb) => FILES_DBS.indexOf(db) + 1;
 
 export interface TableSpec {
   db: BackupDb;
@@ -22,12 +32,37 @@ export interface TableSpec {
   key: readonly string[];
   /** Integer key columns (the cursor carries numbers for these). */
   intKey?: readonly string[];
-  /** Explicit column list; default every column (columns added later are exported too). */
+  /** Explicit select list (expressions with aliases allowed); default every column (columns added later are exported too). */
   columns?: readonly string[];
+  /** FROM clause when it is not just the table; then key columns are qualified with `keyPrefix`. */
+  from?: string;
+  keyPrefix?: string;
+  /** Exported columns that are not columns of the table (restore leaves them out of the INSERT). */
+  derived?: readonly string[];
 }
 
-/** In restore order (parents before children, foreign keys). */
-export const EXPORTED: readonly TableSpec[] = [
+/**
+ * The screenshot list of one files database, without the bytes (each file's
+ * bytes come from /api/backup/file/:db/:id). A screenshot the retention purge
+ * emptied (src/storage/, file_tombstones) is listed with purged_at and
+ * purged_reason: it is not downloaded and not served; a copy made before the
+ * purge stays in Drive.
+ */
+function filesSpec(db: FilesDb): TableSpec {
+  return {
+    db, table: "files", key: ["id"], intKey: ["id"],
+    columns: ["f.id AS id", "f.party_id AS party_id", "f.ticket_id AS ticket_id", "f.content_type AS content_type", "f.size AS size",
+      "f.created_at AS created_at", "d.deleted_at AS purged_at", "d.reason AS purged_reason"],
+    from: "files f LEFT JOIN file_tombstones d ON d.id = f.id", keyPrefix: "f.", derived: ["purged_at", "purged_reason"],
+  };
+}
+
+/** Every exported table with the given files databases, in restore order (parents before children, foreign keys). */
+export function exportedFor(filesDbs: readonly FilesDb[]): TableSpec[] {
+  return BASE.flatMap((t) => (t.db === "files" ? filesDbs.map(filesSpec) : [t]));
+}
+
+const BASE: readonly TableSpec[] = [
   { db: "main", table: "platform_admins", key: ["id"] },
   { db: "main", table: "organisers", key: ["id"] },
   { db: "main", table: "organiser_invites", key: ["id"] },
@@ -39,14 +74,17 @@ export const EXPORTED: readonly TableSpec[] = [
   { db: "main", table: "scans", key: ["scan_id"] },
   { db: "main", table: "audit", key: ["id"], intKey: ["id"] },
   { db: "main", table: "email_quota", key: ["provider", "hour"], intKey: ["hour"] },
-  // The screenshot list without the bytes; each file's bytes come from /api/backup/file/:id.
-  { db: "files", table: "files", key: ["id"], intKey: ["id"], columns: ["id", "party_id", "ticket_id", "content_type", "size", "created_at"] },
+  // One entry per bound files database (filesSpec).
+  { db: "files", table: "files", key: ["id"] },
   { db: "ledger", table: "party_control", key: ["party_id"] },
   { db: "ledger", table: "intents", key: ["op_id", "entity", "entity_id"] },
   { db: "ledger", table: "change_log", key: ["event_id"] },
 ];
 
-/** Tables deliberately left out of the backup. */
+/** With database 1 only (the tests' default and an older single-database setup). */
+export const EXPORTED: readonly TableSpec[] = exportedFor(["files"]);
+
+/** Tables deliberately left out of the backup ("files" rows apply to every files database). */
 export const EXCLUDED: readonly { db: BackupDb; table: string; reason: string }[] = [
   { db: "main", table: "sessions", reason: "sign-in sessions (hash of each session token): short-lived, and every restore ends all sessions anyway" },
   { db: "main", table: "platform_sessions", reason: "site owner / organiser sessions: same as sessions" },
@@ -58,7 +96,7 @@ export const EXCLUDED: readonly { db: BackupDb; table: string; reason: string }[
   { db: "main", table: "d1_migrations", reason: "recreated by applying migrations to the fresh database; the names are in the manifest" },
   { db: "ledger", table: "d1_migrations", reason: "same" },
   { db: "files", table: "d1_migrations", reason: "same" },
-  { db: "files", table: "file_tombstones", reason: "which screenshots the retention purge emptied (src/storage/): a restore brings their bytes back from Drive, and the next daily purge empties them again" },
+  { db: "files", table: "file_tombstones", reason: "exported inside the screenshot list (purged_at, purged_reason); a restore brings the bytes back from Drive when the backup has them (the next daily purge empties them again), otherwise it writes the tombstone again" },
 ];
 
 /** D1's and SQLite's own tables, never ours. */
@@ -72,12 +110,27 @@ export const INTERNAL_TABLE = /^(_cf_|sqlite_)/;
  * ledger and screenshots, then replay (newest rev per entity wins).
  */
 export type BackupKind = "nightly" | "hourly";
-export function tablesFor(kind: BackupKind): readonly TableSpec[] {
-  return kind === "hourly" ? EXPORTED.filter((t) => t.db !== "main") : EXPORTED;
+export function tablesFor(kind: BackupKind, filesDbs: readonly FilesDb[] = ["files"]): TableSpec[] {
+  const all = exportedFor(filesDbs);
+  return kind === "hourly" ? all.filter((t) => t.db !== "main") : all;
 }
 
+const ALL = exportedFor(FILES_DBS);
 export function specOf(db: string, table: string): TableSpec | null {
-  return EXPORTED.find((t) => t.db === db && t.table === table) ?? null;
+  return ALL.find((t) => t.db === db && t.table === table) ?? null;
+}
+
+export function excludedIn(db: BackupDb) {
+  return EXCLUDED.filter((e) => e.db === db || (e.db === "files" && isFilesDb(db)));
+}
+
+/** SELECT list and FROM clause of a spec (shared by the export and the restore check). */
+export function selectOf(spec: TableSpec): { cols: string; from: string; key: (k: string) => string } {
+  return {
+    cols: spec.columns ? spec.columns.join(", ") : "*",
+    from: spec.from ?? spec.table,
+    key: (k) => `${spec.keyPrefix ?? ""}${k}`,
+  };
 }
 
 export const PAGE_DEFAULT = 200;
@@ -119,14 +172,14 @@ export interface Page {
 
 /** One page of a table, ordered by its primary key. Rows read is about `limit` (an index range, no scan). */
 export async function readPage(d: SqlDriver, spec: TableSpec, after: KeyValue[] | null, limit: number): Promise<Page> {
-  const cols = raw(spec.columns ? spec.columns.join(", ") : "*");
-  const keyList = spec.key.join(", ");
+  const sel = selectOf(spec);
+  const keyList = spec.key.map(sel.key).join(", ");
   let where: Sql = sql``;
   if (after) {
     const vals = join(after.map((v) => sql`${v}`), ", ");
-    where = spec.key.length === 1 ? sql`WHERE ${raw(spec.key[0]!)} > ${after[0]}` : sql`WHERE (${raw(keyList)}) > (${vals})`;
+    where = spec.key.length === 1 ? sql`WHERE ${raw(sel.key(spec.key[0]!))} > ${after[0]}` : sql`WHERE (${raw(keyList)}) > (${vals})`;
   }
-  const r = await d.all<Row>(sql`SELECT ${cols} FROM ${raw(spec.table)} ${where} ORDER BY ${raw(keyList)} LIMIT ${limit}`);
+  const r = await d.all<Row>(sql`SELECT ${raw(sel.cols)} FROM ${raw(sel.from)} ${where} ORDER BY ${raw(keyList)} LIMIT ${limit}`);
   const last = r.results.at(-1);
   const next = r.results.length === limit && last ? encodeCursor(spec.key.map((k) => last[k] as KeyValue)) : null;
   return { rows: r.results, next, rows_read: r.meta.rows_read };
@@ -161,7 +214,7 @@ export interface DbInfo {
  * the backup itself, so the Apps Script asks for counts only on nightly runs).
  */
 export async function dbInfo(d: SqlDriver, db: BackupDb, counts: boolean, size: Promise<number | null>): Promise<DbInfo> {
-  const specs = EXPORTED.filter((t) => t.db === db);
+  const specs = ALL.filter((t) => t.db === db);
   // page_count is not allowed on D1 (SQLITE_AUTH); D1's own measured size comes with every result.
   const ps = await d.all<{ page_size: number }>(sql`PRAGMA page_size`);
   const tables = await d.all<{ name: string }>(sql`SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name`);
@@ -173,8 +226,8 @@ export async function dbInfo(d: SqlDriver, db: BackupDb, counts: boolean, size: 
     page_size: ps.results[0]?.page_size ?? null,
     migrations,
     tables: specs.map((s) => ({ name: s.table, key: s.key })),
-    excluded: EXCLUDED.filter((e) => e.db === db).map((e) => ({ name: e.table, reason: e.reason })),
-    unknown: tables.results.map((t) => t.name).filter((n) => !INTERNAL_TABLE.test(n) && !specOf(db, n) && !EXCLUDED.some((e) => e.db === db && e.table === n)),
+    excluded: excludedIn(db).map((e) => ({ name: e.table, reason: e.reason })),
+    unknown: tables.results.map((t) => t.name).filter((n) => !INTERNAL_TABLE.test(n) && !specOf(db, n) && !excludedIn(db).some((e) => e.table === n)),
   };
   if (counts && specs.length) {
     const q = specs.map((s) => `(SELECT COUNT(*) FROM ${s.table}) AS ${s.table}`).join(", ");

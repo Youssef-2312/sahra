@@ -29,8 +29,9 @@
  * (POST /api/backup/done), whose health check alerts when backups stop.
  *
  * Drive folder layout:
- *   screenshots/<id>.<ext>             each screenshot once (they never change)
- *   screenshots/index.json             id -> SHA-256, size, Drive file id
+ *   screenshots/<id>.<ext>             each screenshot once (they never change); database 1 by
+ *                                      its id, database N as files_N-<id>.<ext>
+ *   screenshots/index.json             "<id>" / "files_N:<id>" -> SHA-256, size, Drive file id
  *   sahra-backup-YYYY-MM-DDTHHmmZ/     a nightly (full) backup (UTC time it started)
  *   sahra-ledger-YYYY-MM-DDTHHmmZ/     an hourly backup (ledger + screenshot list)
  *     manifest.json                    tables, measured database sizes, migrations
@@ -161,7 +162,7 @@ function start_(cfg, kind, now) {
     name: name, folderId: folder.getId(), kind: kind, startedAt: now, runs: 0, failures: 0,
     order: manifest.order.map(function (t) { return t.db + '.' + t.table; }),
     phase: 'tables', t: 0, cursor: null, part: 1, rows: {}, parts: [], requests: 1,
-    filePart: 0, fileRow: 0, files: { listed: 0, bytesListed: 0, copied: 0, alreadyCopied: 0, bytesCopied: 0, failed: 0, problems: [] },
+    filePart: 0, fileRow: 0, files: { listed: 0, bytesListed: 0, copied: 0, alreadyCopied: 0, bytesCopied: 0, purged: 0, failed: 0, problems: [] },
     sizes: {
       main: manifest.databases.main.size_bytes,
       ledger: manifest.databases.ledger.size_bytes,
@@ -204,24 +205,31 @@ function work_(cfg, props, state, started) {
     if (!timeLeft()) return false;
   }
 
-  // 2. Screenshots: only the ones not already in Drive, each checked by size and SHA-256.
+  // 2. Screenshots of every files database: only the ones not already in Drive, each
+  // checked by size and SHA-256. A screenshot the retention purge emptied is not
+  // downloaded (and not a failure); a copy made before the purge stays in Drive.
   if (state.phase === 'files') {
     var shots = screenshotsFolder_(cfg);
     var index = readIndex_(shots);
-    var parts = state.parts.filter(function (p) { return p.indexOf('files.files.') === 0; });
+    var parts = state.parts.filter(function (p) { return FILES_PART.test(p); });
     var sinceSave = 0;
     while (state.filePart < parts.length) {
+      var db = FILES_PART.exec(parts[state.filePart])[1];
       var rows = JSON.parse(readGz_(folder, parts[state.filePart]));
       while (state.fileRow < rows.length) {
         if (!timeLeft()) { saveIndex_(shots, index); save(); return false; }
         var f = rows[state.fileRow];
-        var have = index.files[String(f.id)];
+        var have = index.files[shotKey_(db, f.id)];
         if (have && have.size === f.size) {
           state.files.alreadyCopied++;
+        } else if (f.purged_at != null) {
+          state.files.purged++;
         } else {
-          var problem = copyScreenshot_(cfg, shots, f, index);
+          var problem = copyScreenshot_(cfg, shots, db, f, index);
           state.requests++;
-          if (problem) {
+          if (problem === PURGED) {
+            state.files.purged++;
+          } else if (problem) {
             state.files.failed++;
             // Only the first 50 are kept (Script Properties hold at most 9 KB per value).
             if (state.files.problems.length < 50) state.files.problems.push({ id: f.id, problem: problem });
@@ -241,7 +249,8 @@ function work_(cfg, props, state, started) {
     // This backup's screenshots, with the hash each was checked against.
     var mine = {};
     parts.forEach(function (p) {
-      JSON.parse(readGz_(folder, p)).forEach(function (r) { var e = index.files[String(r.id)]; if (e) mine[String(r.id)] = e; });
+      var pdb = FILES_PART.exec(p)[1];
+      JSON.parse(readGz_(folder, p)).forEach(function (r) { var k = shotKey_(pdb, r.id); if (index.files[k]) mine[k] = index.files[k]; });
     });
     writeText_(folder, 'files.index.json', JSON.stringify({ v: 1, folder: 'screenshots', files: mine }));
     state.phase = 'summary';
@@ -306,16 +315,27 @@ function reportPending_(cfg, props) {
   log_('backup report not delivered (' + code + '); tried again next run');
 }
 
-/** Downloads one screenshot, checks it, saves it, reads it back from Drive and checks again. Returns a problem or null. */
-function copyScreenshot_(cfg, shots, f, index) {
-  var res = signedFetch_(cfg, '/api/backup/file/' + f.id, '', null);
+/** Part files of a files database's list: "files.files.0001.json.gz", "files_2.files.0001.json.gz", ... */
+var FILES_PART = /^(files(?:_[2-4])?)\.files\.\d{4}\.json\.gz$/;
+var PURGED = 'purged';
+
+/** Index key and Drive name of a screenshot: database 1 keeps the bare id. */
+function shotKey_(db, id) { return db === 'files' ? String(id) : db + ':' + id; }
+
+/**
+ * Downloads one screenshot, checks it, saves it, reads it back from Drive and
+ * checks again. Returns null, PURGED (emptied by retention meanwhile) or a problem.
+ */
+function copyScreenshot_(cfg, shots, db, f, index) {
+  var res = signedFetch_(cfg, '/api/backup/file/' + db + '/' + f.id, '', null);
+  if (res.getResponseCode() === 410) return PURGED;
   if (res.getResponseCode() !== 200) return 'download answered ' + res.getResponseCode();
   var headers = lowerKeys_(res.getAllHeaders ? res.getAllHeaders() : res.getHeaders());
   var bytes = res.getContent();
   var sha = hex_(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, bytes));
   if (sha !== String(headers['x-sahra-sha256'])) return 'SHA-256 differs from the Worker\'s';
   if (bytes.length !== f.size || String(bytes.length) !== String(headers['x-sahra-size'])) return 'size differs (' + bytes.length + ' bytes, list says ' + f.size + ')';
-  var name = f.id + extOf_(f.content_type);
+  var name = shotKey_(db, f.id).replace(':', '-') + extOf_(f.content_type);
   var old = shots.getFilesByName(name);
   while (old.hasNext()) old.next().setTrashed(true);
   var file = shots.createFile(Utilities.newBlob(bytes, 'application/octet-stream', name));
@@ -326,7 +346,7 @@ function copyScreenshot_(cfg, shots, f, index) {
     file.setTrashed(true);
     return 'the copy in Drive does not match';
   }
-  index.files[String(f.id)] = { name: name, sha256: sha, size: f.size, type: f.content_type, drive_id: file.getId(), copied_at: new Date().toISOString() };
+  index.files[shotKey_(db, f.id)] = { db: db, id: f.id, name: name, sha256: sha, size: f.size, type: f.content_type, drive_id: file.getId(), copied_at: new Date().toISOString() };
   return null;
 }
 
@@ -519,7 +539,8 @@ function summaryText_(s) {
   ];
   Object.keys(s.rows).forEach(function (k) { lines.push('  ' + k + ': ' + s.rows[k]); });
   lines.push('Screenshots: ' + s.screenshots.listed + ' listed, ' + s.screenshots.copied + ' copied and verified this time (' + mb_(s.screenshots.bytesCopied)
-    + '), ' + s.screenshots.alreadyCopied + ' already in Drive, ' + s.screenshots.failed + ' problem(s)');
+    + '), ' + s.screenshots.alreadyCopied + ' already in Drive, ' + (s.screenshots.purged || 0) + ' purged by retention and never copied, '
+    + s.screenshots.failed + ' problem(s)');
   lines.push(s.ok ? 'Result: OK' : 'Result: PROBLEMS (see summary.json)');
   return lines.join('\n') + '\n';
 }
