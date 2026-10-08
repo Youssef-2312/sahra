@@ -1,11 +1,12 @@
 // Every endpoint reachable without a session, with missing, junk or forged
 // credentials, must write ZERO rows to either database. The only planned
-// exceptions are door join WITH a valid invitation (covered in invites.test.ts) and
-// guest sign-up (Phase 4, Turnstile-protected).
+// exceptions are door join WITH a valid invitation (covered in invites.test.ts),
+// guest sign-up and "resend my ticket link" (Turnstile-protected, covered in
+// guests.test.ts); here they are sent with a failing or missing Turnstile check.
 import { env } from "cloudflare:test";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { newId, newToken } from "../src/lib/crypto";
-import { googleLogin, harness, ORIGIN, seedParty, type Harness } from "./helpers";
+import { googleLogin, harness, ORIGIN, seedParty, signupInit, type Harness } from "./helpers";
 
 let logs: string[] = [];
 beforeEach(() => {
@@ -22,6 +23,17 @@ function lastReq() {
 const JSON_H = { origin: ORIGIN, "sec-fetch-site": "same-origin", "content-type": "application/json" };
 const junkCookie = { "__Host-sahra_s": newToken() };
 const id = newId();
+
+const tid = "0123456789ABCDEF";
+// A party guests can sign up for (default form: screenshot required).
+const GP = "unauth-guests";
+beforeAll(async () => {
+  await env.DB.prepare("INSERT OR IGNORE INTO parties (id, name, capacity, created_at, logged_rev) VALUES (?, 'Guests', 300, 0, 1)").bind(GP).run();
+});
+const failingBot = { TURNSTILE_SECRET: "2x0000000000000000000000000000000AA" };
+const withEnv = async (e: Record<string, unknown>, f: (h: Harness) => Promise<Response>) => f(await harness({ env: e as never }));
+const signupPath = `/api/guest/parties/${GP}/signup`;
+const resendPath = `/api/guest/parties/${GP}/resend`;
 
 type Case = [label: string, method: string, path: string, run: (h: Harness) => Promise<Response>];
 
@@ -54,6 +66,29 @@ const cases: Case[] = [
   ["test door invite, junk session", "POST", "/api/test/door-invite", (h) => h.req("/api/test/door-invite", { method: "POST", headers: JSON_H, cookies: junkCookie, body: "{}" })],
   ["test revoke door access, junk session", "POST", "/api/test/revoke-door-access", (h) => h.req("/api/test/revoke-door-access", { method: "POST", headers: JSON_H, cookies: junkCookie, body: "{}" })],
   ["test ledger check, junk session", "GET", "/api/test/ledger-check", (h) => h.req("/api/test/ledger-check", { cookies: junkCookie })],
+  ["guest form", "GET", "/api/guest/parties/:party", (h) => h.req(`/api/guest/parties/${GP}`)],
+  ["guest sign-up, Turnstile fails", "POST", "/api/guest/parties/:party/signup", () => withEnv(failingBot, async (h) => h.req(signupPath, await signupInit()))],
+  ["guest sign-up, Turnstile token already spent", "POST", "/api/guest/parties/:party/signup", () => withEnv({ TURNSTILE_SECRET: "3x0000000000000000000000000000000AA" }, async (h) => h.req(signupPath, await signupInit()))],
+  ["guest sign-up, no Turnstile token", "POST", "/api/guest/parties/:party/signup", async (h) => h.req(signupPath, await signupInit({ turnstile: null }))],
+  ["guest sign-up, Turnstile secret missing", "POST", "/api/guest/parties/:party/signup", () => withEnv({ TURNSTILE_SECRET: undefined }, async (h) => h.req(signupPath, await signupInit()))],
+  ["guest sign-up, test secret in production", "POST", "/api/guest/parties/:party/signup", () => withEnv({ ENABLE_TEST_TICKETS: "0" }, async (h) => h.req(signupPath, await signupInit()))],
+  ["guest sign-up, siteverify unreachable", "POST", "/api/guest/parties/:party/signup", async (h) => { h.turnstile.down = true; return h.req(signupPath, await signupInit()); }],
+  ["guest sign-up, wrong origin", "POST", "/api/guest/parties/:party/signup", async (h) => { const i = await signupInit(); return h.req(signupPath, { ...i, headers: { ...(i.headers as Record<string, string>), origin: "https://evil.example" } }); }],
+  ["resend link, Turnstile fails", "POST", "/api/guest/parties/:party/resend", () => withEnv(failingBot, (h) => h.req(resendPath, { method: "POST", headers: JSON_H, body: JSON.stringify({ email: "a@example.com", turnstile: "XXXX.DUMMY.TOKEN.XXXX" }) }))],
+  ["resend link, no Turnstile token", "POST", "/api/guest/parties/:party/resend", (h) => h.req(resendPath, { method: "POST", headers: JSON_H, body: JSON.stringify({ email: "a@example.com" }) })],
+  ["guest ticket page, forged link", "GET", "/api/guest/ticket", (h) => h.req("/api/guest/ticket", { headers: { "x-sahra-ticket": `T1.${GP.toUpperCase()}.1${tid}.1.${"A".repeat(26)}` } })],
+  ["ticket list, junk session", "GET", "/api/tickets", (h) => h.req("/api/tickets", { cookies: junkCookie })],
+  ["guest form get, junk session", "GET", "/api/tickets/form", (h) => h.req("/api/tickets/form", { cookies: junkCookie })],
+  ["guest form set, junk session", "POST", "/api/tickets/form", (h) => h.req("/api/tickets/form", { method: "POST", headers: JSON_H, cookies: junkCookie, body: JSON.stringify({ form: { questions: [] } }) })],
+  ["export, junk session", "GET", "/api/tickets/export", (h) => h.req("/api/tickets/export", { cookies: junkCookie })],
+  ["screenshot, junk session", "GET", "/api/tickets/:id/screenshot", (h) => h.req(`/api/tickets/${tid}/screenshot`, { cookies: junkCookie })],
+  ["approve, junk session", "POST", "/api/tickets/approve", (h) => h.req("/api/tickets/approve", { method: "POST", headers: JSON_H, cookies: junkCookie, body: JSON.stringify({ ids: [tid] }) })],
+  ["reject, junk session", "POST", "/api/tickets/reject", (h) => h.req("/api/tickets/reject", { method: "POST", headers: JSON_H, cookies: junkCookie, body: JSON.stringify({ ids: [tid] }) })],
+  ["release, junk session", "POST", "/api/tickets/release", (h) => h.req("/api/tickets/release", { method: "POST", headers: JSON_H, cookies: junkCookie, body: JSON.stringify({ ids: [tid] }) })],
+  ["cancel, junk session", "POST", "/api/tickets/:id/cancel", (h) => h.req(`/api/tickets/${tid}/cancel`, { method: "POST", headers: JSON_H, cookies: junkCookie, body: JSON.stringify({ op: newId() }) })],
+  ["reissue, junk session", "POST", "/api/tickets/:id/reissue", (h) => h.req(`/api/tickets/${tid}/reissue`, { method: "POST", headers: JSON_H, cookies: junkCookie, body: JSON.stringify({ op: newId() }) })],
+  ["transfer, junk session", "POST", "/api/tickets/:id/transfer", (h) => h.req(`/api/tickets/${tid}/transfer`, { method: "POST", headers: JSON_H, cookies: junkCookie, body: JSON.stringify({ op: newId(), name: "X" }) })],
+  ["approve, no session", "POST", "/api/tickets/approve", (h) => h.req("/api/tickets/approve", { method: "POST", headers: JSON_H, body: JSON.stringify({ ids: [tid] }) })],
   ["unknown API path", "GET", "/api/*", (h) => h.req("/api/nothing-here")],
 ];
 
@@ -71,7 +106,7 @@ describe("endpoints without a session write nothing", () => {
       await seedParty();
       const before = await counts();
       const res = await run(h);
-      if (res.status === 200) {
+      if (res.status === 200 && label !== "guest form") {
         // The scanner protocol always answers 200 with a verdict; without a session it must be this one.
         expect(await res.clone().json(), label).toEqual({ verdict: "not_signed_in" });
       }
@@ -85,9 +120,10 @@ describe("endpoints without a session write nothing", () => {
 });
 
 async function counts() {
-  const tables = ["parties", "staff", "invites", "sessions", "audit", "tickets", "scans"];
+  const tables = ["parties", "staff", "invites", "sessions", "audit", "tickets", "scans", "outbox"];
   const out: Record<string, unknown> = {};
   for (const t of tables) out[t] = await env.DB.prepare(`SELECT COUNT(*) AS n, COALESCE(SUM(rev), 0) AS r FROM ${t}`).first().catch(async () => env.DB.prepare(`SELECT COUNT(*) AS n FROM ${t}`).first());
-  for (const t of ["change_log", "party_control"]) out[t] = await env.LEDGER.prepare(`SELECT COUNT(*) AS n FROM ${t}`).first("n");
+  for (const t of ["change_log", "party_control", "intents"]) out[t] = await env.LEDGER.prepare(`SELECT COUNT(*) AS n FROM ${t}`).first("n");
+  out.files = await env.FILES!.prepare("SELECT COUNT(*) AS n FROM files").first("n");
   return out;
 }

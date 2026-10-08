@@ -13,6 +13,12 @@ export interface Env {
   QR_KEY_ID?: string;
   QR_MASTER_K1?: string;
   LINK_MASTER_K1?: string;
+  LINK_KEY_ID?: string;
+  /** sahra-files-N: payment screenshots (src/storage/). Not created yet: without it, uploads answer 503. */
+  FILES?: D1Database;
+  /** Cloudflare Turnstile for guest sign-up and "resend my link" (the secret is a Cloudflare secret). */
+  TURNSTILE_SITE_KEY?: string;
+  TURNSTILE_SECRET?: string;
   COOKIE_MASTER_K1?: string;
   COOKIE_KEY_ID?: string;
 }
