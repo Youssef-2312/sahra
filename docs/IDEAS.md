@@ -328,3 +328,17 @@ coordinator's session. Status: agreed, rejected or open.
 - Organisers can still theme their own party through their flyer and text (idea 21). That is their party, not the site.
 - Also keep the separate Halloween-26 project untouched; this is only about Sahra's look.
 - Needs: a colour and tone rule for the frontend build and the photo choice. Effort: none extra. Free-tier cost: none. Rule conflicts: none.
+
+## 25. Dashboard look: the owner likes the efferd dashboard style
+
+- Status: agreed as a visual reference only (not copied; static HTML, idea 22)
+- Owner's words: "dashboard is relaly nice" (screenshot of the efferd dashboard: near-black background, thin grey borders, a row of four number tiles with small "vs last week" changes, bar and line charts, a left sidebar, recent-items table and activity list)
+- What to take from it: the dark charcoal look (matches idea 24), thin-bordered tiles with one big number each (matches the top of the organiser dashboard in idea 10: approved out of capacity, waiting requests, money expected, cash, countdown), plenty of spacing, small muted labels, tables with few columns.
+- What to change for Sahra:
+  - phone first (idea 6): no permanent left sidebar on a phone; use a simple top bar with a menu button, and a stack of single-column tiles;
+  - uncluttered (idea 12): far fewer panels than the screenshot; no billing, API keys, integrations or changelog areas;
+  - charts only if they earn their place: at most one small chart (sign-ups per day) drawn as inline SVG or plain CSS, no chart library, so pages stay light;
+  - tiles use Sahra's real numbers, and the same look serves the organiser dashboard and the site-owner panel (idea 13).
+- Needs: a visual style guide for the coordinator's frontend build. Effort: no extra screens.
+- Free-tier cost: none (static pages; no chart library)
+- Rule conflicts: none; colour kept for meaning only (green good, red bad, amber uncertain).
