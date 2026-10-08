@@ -3,6 +3,7 @@ import { createApp, type Deps } from "../src/app";
 import { GOOGLE_JWKS_URL, GOOGLE_TOKEN_URL, JwksCache } from "../src/auth/google";
 import { b64url, csrfFor, newId, newToken, parseToken, sha256, sha256hex } from "../src/lib/crypto";
 import type { Intent, Ledger, LogEntry } from "../src/ledger";
+import { TURNSTILE_VERIFY_URL } from "../src/guests/turnstile";
 
 export const ORIGIN = "https://sahra.test";
 export const CLIENT_ID = "test-client.apps.googleusercontent.com";
@@ -179,9 +180,37 @@ export class FlakyLedger implements Ledger {
   }
 }
 
+/**
+ * Stands in for Turnstile's siteverify, answering like Cloudflare does for its
+ * documented test secrets: 1x...AA always passes, 2x...AA always fails, 3x...AA
+ * answers "token already spent"; any other secret is invalid. `down` simulates an
+ * unreachable siteverify.
+ */
+export class FakeTurnstile {
+  calls = 0;
+  down = false;
+  async fetch(init?: RequestInit): Promise<Response> {
+    this.calls++;
+    if (this.down) throw new Error("network down");
+    const form = new URLSearchParams(String(init?.body ?? ""));
+    const secret = form.get("secret") ?? "";
+    const response = form.get("response") ?? "";
+    const fail = (codes: string[]) => Response.json({ success: false, "error-codes": codes });
+    if (!response) return fail(["missing-input-response"]);
+    if (secret === "1x0000000000000000000000000000000AA") return Response.json({ success: true, hostname: "example.com", "error-codes": [] });
+    if (secret === "2x0000000000000000000000000000000AA") return fail(["invalid-input-response"]);
+    if (secret === "3x0000000000000000000000000000000AA") return fail(["timeout-or-duplicate"]);
+    return fail(["invalid-input-secret"]);
+  }
+}
+
+/** Cloudflare's documented dummy token (what the test site keys produce). */
+export const TURNSTILE_TOKEN = "XXXX.DUMMY.TOKEN.XXXX";
+
 export interface Harness {
   clock: Clock;
   google: FakeGoogle;
+  turnstile: FakeTurnstile;
   ledger: FlakyLedger;
   jwks: JwksCache;
   app: ReturnType<typeof createApp>;
@@ -192,7 +221,9 @@ export async function harness(opts: { google?: FakeGoogle; clock?: Clock; env?: 
   const clock = opts.clock ?? new Clock();
   const google = opts.google ?? (await FakeGoogle.create());
   const ledger = new FlakyLedger(null as unknown as Ledger);
-  const fetcher = google.fetcher(clock);
+  const turnstile = new FakeTurnstile();
+  const googleFetch = google.fetcher(clock);
+  const fetcher = (input: string, init?: RequestInit) => input === TURNSTILE_VERIFY_URL ? turnstile.fetch(init) : googleFetch(input, init);
   const jwks = new JwksCache(fetcher);
   const deps: Deps = { fetch: fetcher, now: clock.now, jwks, ledger: (base) => { ledger.inner = base; return ledger; },
     driver: (base, which) => new OutageDriver(base, which) };
@@ -204,7 +235,7 @@ export async function harness(opts: { google?: FakeGoogle; clock?: Clock; env?: 
     }
     return app.request(`${ORIGIN}${path}`, { ...init, headers }, opts.env ? { ...env, ...opts.env } : env);
   };
-  return { clock, google, ledger, jwks, app, req };
+  return { clock, google, turnstile, ledger, jwks, app, req };
 }
 
 export function setCookies(res: Response): Record<string, { value: string; attrs: string }> {
@@ -333,4 +364,61 @@ export async function scan(h: Harness, sess: { token: string; csrf: string }, qr
   const r = await h.req("/api/scan", api(sess, { scan_id: scanId, qr }));
   if (r.status !== 200) return { verdict: `http_${r.status}` };
   return (await r.json()) as Verdict;
+}
+
+// ------------------------------------------------------------- guests
+
+/** Smallest byte strings the image check accepts (signatures only; nothing decodes them). */
+export const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4]);
+export const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 16, 0x4a, 0x46, 0x49, 0x46]);
+
+export interface SignupFields {
+  signup?: string;
+  name?: string;
+  email?: string;
+  people?: number | string;
+  answers?: unknown;
+  screenshot?: Uint8Array | null;
+  turnstile?: string | null;
+}
+
+/** A guest sign-up request as the page sends it: multipart with a Content-Length. */
+export async function signupInit(f: SignupFields = {}): Promise<RequestInit> {
+  const fd = new FormData();
+  fd.set("signup", f.signup ?? newToken());
+  fd.set("name", f.name ?? "Guest Name");
+  fd.set("email", f.email ?? `guest-${newId().slice(0, 8)}@example.com`);
+  fd.set("people", String(f.people ?? 1));
+  if (f.answers !== undefined) fd.set("answers", JSON.stringify(f.answers));
+  const shot = f.screenshot === undefined ? PNG : f.screenshot;
+  if (shot) fd.set("screenshot", new File([shot], "shot.png", { type: "image/png" }));
+  if (f.turnstile !== null) fd.set("cf-turnstile-response", f.turnstile ?? TURNSTILE_TOKEN);
+  const r = new Request("https://x.invalid/", { method: "POST", body: fd });
+  const body = new Uint8Array(await r.arrayBuffer());
+  return {
+    method: "POST",
+    body,
+    headers: { origin: ORIGIN, "sec-fetch-site": "same-origin", "content-type": r.headers.get("content-type")!, "content-length": String(body.length) },
+  };
+}
+
+export async function signup(h: Harness, party: string, f: SignupFields = {}) {
+  const res = await h.req(`/api/guest/parties/${party}/signup`, await signupInit(f));
+  return { res, status: res.status, body: (await res.clone().json()) as { status?: string; ticket_id?: string; link?: string; error?: string } };
+}
+
+/** Party with chosen capacity and people per ticket, plus an owner session. */
+export async function guestParty(h: Harness, a: { capacity?: number; maxPeople?: number; form?: unknown } = {}) {
+  const party = `g${newId().slice(0, 8)}`;
+  await env.DB.prepare("INSERT INTO parties (id, name, capacity, max_people_per_ticket, created_at, logged_rev, guest_form) VALUES (?, ?, ?, ?, ?, 1, ?)")
+    .bind(party, `Party ${party}`, a.capacity ?? 300, a.maxPeople ?? 4, Date.now(), a.form === undefined ? null : JSON.stringify(a.form)).run();
+  const owner = await seedOwner(party);
+  const os = await seedSession(party, owner.id, "owner", h.clock);
+  return { party, owner, os };
+}
+
+export async function viewTicket(h: Harness, link: string) {
+  const token = link.replace(/^.*#t=/, "");
+  const r = await h.req("/api/guest/ticket", { headers: { "x-sahra-ticket": token } });
+  return { status: r.status, body: (await r.json()) as { ticket?: { status: string; qr: string | null; reject_reason: string | null; on_hold: boolean; guest_name: string }; party?: unknown; error?: string } };
 }
