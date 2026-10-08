@@ -3,7 +3,7 @@
 // everything else is here. Safe to run again after a stop.
 
 import type { SqlDriver } from "../db/driver";
-import { applyHolds, flushAll, holdsFromIntents, pauseAll, replay, revokeAccess, syncPause, verify, type Hold } from "./index";
+import { applyHolds, flushAll, holdsFromIntents, pauseAll, reopenedTickets, replay, revokeAccess, syncPause, verify, type Hold } from "./index";
 
 export interface RecoveryReport {
   paused: string[];
@@ -75,13 +75,25 @@ export async function recover(o: {
   const synced = await syncPause(o.main, o.ledger, o.now(), op);
   log(`6. ${synced} part${synced === 1 ? "y" : "ies"} set to the control object's pause_number (still paused; reopen from the dashboard)`);
 
-  // Record this procedure's own changes, then the final check.
-  const flushedAfter = await flushAll(o.main, o.ledger, o.now());
+  // Record this procedure's own changes. Then replay once more: a request that was
+  // still running when maintenance began may have reached the ledger after the
+  // first replay; the newest state must still win.
+  let flushedAfter = await flushAll(o.main, o.ledger, o.now());
+  const late = await replay(o.main, o.ledger);
+  if (late.applied || late.holds.length) {
+    const lateHeld = await applyHolds(o.main, late.holds, o.now(), op);
+    flushedAfter += await flushAll(o.main, o.ledger, o.now());
+    log(`   late changes: ${late.applied} replayed, ${lateHeld} held`);
+    for (const h of late.holds) holds.set(`${h.entity}:${h.id}`, h);
+  }
   const final = await verify(o.main, o.ledger);
-  log(`final check: ${final.ok ? "OK, every row matches the change log" : `${final.mismatches.length} mismatch(es)`}`);
+  // Nothing reopens: every ticket the change log says is used is used in the database.
+  const reopened = await reopenedTickets(o.main, o.ledger);
+  const finalOk = final.ok && reopened.length === 0;
+  log(`final check: ${final.ok ? "every row matches the change log" : `${final.mismatches.length} mismatch(es)`}; ${reopened.length} ticket(s) reopened${finalOk ? " (OK)" : ""}`);
 
   return {
-    paused, mainChecked, flushedBefore, mismatchesBefore, replayed: r.applied, holds: list, held,
-    sessionsRevoked: revoked.sessions, invitesRevoked: revoked.invites, partiesSynced: synced, flushedAfter, finalOk: final.ok,
+    paused, mainChecked, flushedBefore, mismatchesBefore, replayed: r.applied, holds: [...holds.values()], held,
+    sessionsRevoked: revoked.sessions, invitesRevoked: revoked.invites, partiesSynced: synced, flushedAfter, finalOk,
   };
 }

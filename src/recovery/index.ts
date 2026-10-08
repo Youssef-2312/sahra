@@ -57,6 +57,8 @@ export interface EntityKey {
 export interface Hold extends EntityKey {
   party_id: string;
   reason: string;
+  /** The change log's newest rev for this entity: the hold's rev must be above it. */
+  min_rev?: number;
 }
 
 const PAGE = 1000;
@@ -255,8 +257,39 @@ function literalSafe(name: string) {
  * applied only if its rev is newer than the database's (or the row is missing).
  * An older entry never overwrites a newer state.
  */
+/**
+ * Admission invariant: once a ticket has an admission record ("admitted") newer
+ * than its last owner reset ("admission_reset"), the ticket stays used. Returns
+ * the ticket ids for which that holds.
+ */
+export function admissionsThatStand(entries: LedgerEntry[]): Set<string> {
+  const admitted = new Map<string, number>();
+  const reset = new Map<string, number>();
+  for (const e of entries) {
+    if (e.entity !== "ticket") continue;
+    const m = e.action === "admitted" ? admitted : e.action === "admission_reset" ? reset : null;
+    if (m && e.rev > (m.get(e.entity_id) ?? 0)) m.set(e.entity_id, e.rev);
+  }
+  return new Set([...admitted].filter(([id, rev]) => rev > (reset.get(id) ?? 0)).map(([id]) => id));
+}
+
+/** Tickets the change log says are used (admission standing) but the database does not: must be none. */
+export async function reopenedTickets(main: SqlDriver, ledger: SqlDriver): Promise<Hold[]> {
+  const stand = admissionsThatStand(await ledgerEntries(ledger));
+  const out: Hold[] = [];
+  for (const r of await allRows(main, "tickets")) {
+    // A held ticket cannot be admitted, so it does not count as reopened.
+    if (stand.has(String(r.id)) && r.used_scan_id == null && r.hold_at == null) {
+      out.push({ entity: "ticket", id: String(r.id), party_id: String(r.party_id), reason: "admitted in the change log but not used in the database" });
+    }
+  }
+  return out;
+}
+
 export async function replay(main: SqlDriver, ledger: SqlDriver): Promise<ReplayResult> {
-  const newest = newestByEntity(await ledgerEntries(ledger));
+  const entries = await ledgerEntries(ledger);
+  const newest = newestByEntity(entries);
+  const stand = admissionsThatStand(entries);
   const res: ReplayResult = { applied: 0, unchanged: 0, holds: [] };
   for (const { entity, table } of ENTITY_TABLES) {
     const cols = await columnsOf(main, table);
@@ -272,6 +305,13 @@ export async function replay(main: SqlDriver, ledger: SqlDriver): Promise<Replay
       if (row && Number(row.rev) === e.rev) {
         if (sameState(row, e.state)) res.unchanged++;
         else res.holds.push({ entity, id: e.entity_id, party_id: e.party_id, reason: `database and change log differ at rev ${e.rev}` });
+        continue;
+      }
+      // Never let replay clear an admission: a newer state without the admission
+      // (other than the owner's logged reset) is an anomaly; keep the database row
+      // and hold the ticket so it cannot be admitted until an owner checks it.
+      if (entity === "ticket" && stand.has(e.entity_id) && e.state.used_scan_id == null) {
+        res.holds.push({ entity, id: e.entity_id, party_id: e.party_id, reason: `change log rev ${e.rev} would clear an admission`, min_rev: e.rev });
         continue;
       }
       // Missing row, or the ledger is newer: write the entry's full state.
@@ -305,17 +345,17 @@ export async function applyHolds(main: SqlDriver, holds: Hold[], now: number, op
   const writes: Sql[] = [];
   for (const h of holds) {
     if (h.entity === "ticket") {
-      writes.push(sql`UPDATE tickets SET hold_at = ${now}, hold_reason = ${h.reason}, rev = rev + 1, last_op = ${op}, last_action = 'recovery_hold'
+      writes.push(sql`UPDATE tickets SET hold_at = ${now}, hold_reason = ${h.reason}, rev = MAX(rev, ${h.min_rev ?? 0}) + 1, last_op = ${op}, last_action = 'recovery_hold'
         WHERE id = ${h.id} AND hold_at IS NULL`);
     } else if (h.entity === "staff") {
-      writes.push(sql`UPDATE staff SET hold_at = ${now}, hold_reason = ${h.reason}, disabled_at = ${now}, rev = rev + 1, last_op = ${op},
+      writes.push(sql`UPDATE staff SET hold_at = ${now}, hold_reason = ${h.reason}, disabled_at = ${now}, rev = MAX(rev, ${h.min_rev ?? 0}) + 1, last_op = ${op},
           last_action = 'recovery_hold'
         WHERE id = ${h.id} AND hold_at IS NULL AND disabled_at IS NULL`);
     } else if (h.entity === "party" || h.entity === "organiser" || h.entity === "platform_admin") {
       // An unconfirmed switch-off: switched off until a site owner checks it
       // (a party is turned back on from the site owner page; it stays paused).
       const table = raw(h.entity === "party" ? "parties" : h.entity === "organiser" ? "organisers" : "platform_admins");
-      writes.push(sql`UPDATE ${table} SET disabled_at = ${now}, rev = rev + 1, last_op = ${op}, last_action = 'recovery_hold'
+      writes.push(sql`UPDATE ${table} SET disabled_at = ${now}, rev = MAX(rev, ${h.min_rev ?? 0}) + 1, last_op = ${op}, last_action = 'recovery_hold'
         WHERE id = ${h.id} AND disabled_at IS NULL`);
     }
   }
