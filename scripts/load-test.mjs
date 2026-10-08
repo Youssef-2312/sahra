@@ -602,7 +602,7 @@ if (reqLog) {
   const complete = m.requests >= sent.requests;
   rows = { source: `${reqLog.source}: ${m.requests} request log lines for ${sent.requests} requests sent${complete ? "" : " (some events missing: the totals are a lower bound; the estimate is shown too)"}`,
     requests_sent: sent.requests, main_rows_read: m.rows_read, main_rows_written: m.rows_written, ledger_rows_read: m.ledger_rows_read, ledger_rows_written: m.ledger_rows_written,
-    estimate_rows_written: Math.round(est.written), estimate_rows_read: Math.round(est.read), tail_exceeded_cpu: reqLog.exceededCpu, unreadable: reqLog.unreadable };
+    estimate_rows_written: EST.total.written, estimate_rows_read: EST.total.read, tail_exceeded_cpu: reqLog.exceededCpu, unreadable: reqLog.unreadable };
   console.log(`\nPer endpoint (${reqLog.source}); kind: cold = isolate's first request, first = endpoint's first in a warm isolate, warm = the rest`);
   console.log("endpoint                          kind      n   cpu p50  p95  p99  max   rows/req main r/w   ledger r/w   statuses");
   const f = (v) => (v === null ? "  -" : String(v).padStart(4));
@@ -612,7 +612,7 @@ if (reqLog) {
   if (!endpoints.some((e) => e.cpu_n > 0)) console.log("  (no CPU time in this source" + (LOCAL ? ": local runs have none)" : ")"));
 }
 console.log(`\nRows: ${rows.source}`);
-if (reqLog) console.log(`  main read ${fmt(rows.main_rows_read)}, main written ${fmt(rows.main_rows_written)}, ledger read ${fmt(rows.ledger_rows_read)}, ledger written ${fmt(rows.ledger_rows_written)}; estimate was written ${fmt(rows.estimate_rows_written)}, read ${fmt(rows.estimate_rows_read)}`);
+if (reqLog) console.log(`  main read ${fmt(rows.main_rows_read)}, main written ${fmt(rows.main_rows_written)}, ledger read ${fmt(rows.ledger_rows_read)}, ledger written ${fmt(rows.ledger_rows_written)}; pre-run estimate: written ${fmt(EST.total.written)}, read ${fmt(EST.total.read)}`);
 else console.log(`  written about ${fmt(rows.rows_written)}, read about ${fmt(rows.rows_read)}`);
 console.log(`  Worker requests sent: ${fmt(sent.requests)} (pre-run estimate ${fmt(EST.total.requests)}).`);
 

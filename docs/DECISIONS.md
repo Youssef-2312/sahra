@@ -1219,7 +1219,32 @@ budget 2.5 M). Rows written are dominated by the tickets themselves (5,220 x 5 =
 budget (90%)**: if the day's other usage is more than about 5,000 rows written,
 the script refuses; lower `--tickets` or the burst then.
 
-LOCAL_REHEARSAL_PLACEHOLDER
+**Local rehearsal (LOCAL numbers: `wrangler dev --env staging` with local D1 on
+the session's own machine, test-only keys from `vitest.config.ts`; not
+Cloudflare):** fresh local databases, one seeded party with a door invitation,
+`SAHRA_LIVE_CHECK_LOCAL=1 node scripts/load-test.mjs --invite <local link>
+--tickets 400 --minutes 2 --burst-seconds 30 --log-file <wrangler dev output> --yes`
+(10 parties x 4 scanners, as in the full run):
+
+- Admissions: steady 400/400 in 124 s (3.5 requests/s), burst 120/120 in 32 s
+  (7.4 scans/s for a target of 8: each phone waits for its answer, so a slow
+  answer delays its next slot); 672 scans in all (80 repeats, 36 denied, 36
+  same-ID retries). Errors 0 of 672. Second admits 0, violations 0. Ledger check
+  10/10 parties: admissions == ledger records == the script's count == tickets
+  used (52 each), missing 0, orphan 0, reopened 0. Cleanup 10/10.
+- Client round trip (local, no real network): scans p50 17 / p95 24 / p99 119 /
+  max 125 ms (n = 672); new admissions p50 17 / p95 25 / p99 120 ms (n = 520).
+- Rows (from the 856 request log lines for 856 requests): main read 43,390,
+  main written 4,377, ledger read 25,291, ledger written 1,272. Pre-run estimate
+  (after calibration): 896 requests, 6,150 written, 98,511 read; so writes were
+  92% of the estimate and reads 70%. Per scan (warm, n = 671): 16.8 main rows read,
+  1.69 written; ledger 1.81 read, 0.77 written. The ledger check read about 1,400
+  main and 2,400 ledger rows per party at that small size.
+- No CPU numbers locally (`wrangler dev` reports none).
+- An earlier attempt was cut short by `wrangler dev` itself crashing ("Error
+  inside ProxyWorker", while the vitest suite ran at the same time); every scan
+  after that failed with no answer and none was counted as an admission. That run
+  led to the "half of the last 100 scans failed" stop and the end-of-run probe.
 
 **What it proves, and what it cannot**
 
