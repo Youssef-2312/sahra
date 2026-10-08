@@ -1,0 +1,201 @@
+// A local stand-in for the Google Apps Script services that
+// backup/apps-script/Code.gs uses, so the real script runs unchanged in Node
+// against a local Worker (scripts/backup-e2e.mjs). Drive is a folder on disk;
+// UrlFetchApp is a synchronous HTTP client (a worker thread + Atomics.wait),
+// like the real one. Byte arrays are plain arrays of signed bytes (-128..127),
+// as in Apps Script, so the script's own hex and hash code is exercised.
+//
+// It proves the script's logic and the file layout. It cannot prove real Drive
+// behaviour, real quotas (6 minutes per run, 90 minutes per day of triggers,
+// UrlFetch and Drive limits) or real timings.
+
+import { createHash, createHmac } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { runInContext, createContext } from "node:vm";
+import { MessageChannel, receiveMessageOnPort, Worker } from "node:worker_threads";
+import { gunzipSync, gzipSync } from "node:zlib";
+
+const toSigned = (buf) => Array.from(new Int8Array(buf.buffer, buf.byteOffset, buf.byteLength));
+const toBuf = (v) => (typeof v === "string" ? Buffer.from(v, "utf8") : Buffer.from(Int8Array.from(v).buffer));
+
+function syncHttp() {
+  const { port1, port2 } = new MessageChannel();
+  const flag = new Int32Array(new SharedArrayBuffer(4));
+  const worker = new Worker(`
+    const { workerData } = require("node:worker_threads");
+    const { port, flag } = workerData;
+    port.on("message", async ({ url, init }) => {
+      let out;
+      try {
+        const r = await fetch(url, init);
+        out = { status: r.status, headers: Object.fromEntries(r.headers), body: new Uint8Array(await r.arrayBuffer()) };
+      } catch (e) { out = { error: String(e && e.message || e) }; }
+      port.postMessage(out);
+      Atomics.store(flag, 0, 1);
+      Atomics.notify(flag, 0);
+    });`, { eval: true, workerData: { port: port2, flag }, transferList: [port2] });
+  worker.unref();
+  return {
+    fetch(url, init) {
+      Atomics.store(flag, 0, 0);
+      port1.postMessage({ url, init });
+      Atomics.wait(flag, 0, 0, 120_000);
+      const m = receiveMessageOnPort(port1);
+      if (!m) throw new Error("no HTTP answer");
+      if (m.message.error) throw new Error(`Address unavailable: ${url} (${m.message.error})`);
+      return m.message;
+    },
+    close: () => worker.terminate(),
+  };
+}
+
+class Blob {
+  constructor(bytes, type = "application/octet-stream", name = null) { this.bytes = bytes; this.type = type; this.name = name; }
+  getBytes() { return toSigned(this.bytes); }
+  getDataAsString() { return this.bytes.toString("utf8"); }
+  getContentType() { return this.type; }
+  getName() { return this.name; }
+  setName(n) { this.name = n; return this; }
+}
+
+/** Drive on disk. Folder and file ids are stable strings; trashed items move to <root>/.trash. */
+class Drive {
+  constructor(rootDir) {
+    this.root = rootDir;
+    mkdirSync(join(rootDir, ".trash"), { recursive: true });
+    this.paths = new Map([["root", rootDir]]);
+    this.names = new Map();
+    this.n = 0;
+  }
+  idFor(path, name) {
+    for (const [id, p] of this.paths) if (p === path) return id;
+    const id = `id${++this.n}`;
+    this.paths.set(id, path);
+    this.names.set(id, name);
+    return id;
+  }
+  nameOf(id, path) { return this.names.get(id) ?? path.split("/").pop(); }
+  uniquePath(dir, name) {
+    // Drive allows two items with one name; on disk the second gets a suffix.
+    let p = join(dir, name);
+    for (let i = 2; existsSync(p); i++) p = join(dir, `${name}~${i}`);
+    return p;
+  }
+  trash(id) {
+    const p = this.paths.get(id);
+    const dest = this.uniquePath(join(this.root, ".trash"), p.split("/").pop());
+    renameSync(p, dest);
+    this.paths.set(id, dest);
+  }
+  folder(id) {
+    const d = this;
+    const path = () => d.paths.get(id);
+    const iter = (list) => { let i = 0; return { hasNext: () => i < list.length, next: () => list[i++] }; };
+    const children = (dirs) => readdirSync(path()).filter((n) => n !== ".trash")
+      .map((n) => join(path(), n)).filter((p) => statSync(p).isDirectory() === dirs)
+      .map((p) => { const cid = d.idFor(p); return dirs ? d.folder(cid) : d.file(cid); });
+    return {
+      getId: () => id,
+      getName: () => d.nameOf(id, path()),
+      setName: (n) => { const to = d.uniquePath(join(path(), ".."), n); renameSync(path(), to); d.paths.set(id, to); d.names.set(id, n); },
+      setTrashed: (t) => { if (t) d.trash(id); },
+      createFolder: (name) => { const p = d.uniquePath(path(), name); mkdirSync(p); const fid = d.idFor(p, name); return d.folder(fid); },
+      createFile: (blob) => { const p = d.uniquePath(path(), blob.getName()); writeFileSync(p, blob.bytes); return d.file(d.idFor(p, blob.getName())); },
+      getFolders: () => iter(children(true)),
+      getFoldersByName: (n) => iter(children(true).filter((f) => f.getName() === n)),
+      getFilesByName: (n) => iter(children(false).filter((f) => f.getName() === n)),
+    };
+  }
+  file(id) {
+    const d = this;
+    const path = () => d.paths.get(id);
+    return {
+      getId: () => id,
+      getName: () => d.nameOf(id, path()),
+      getSize: () => statSync(path()).size,
+      getBlob: () => new Blob(readFileSync(path()), "application/octet-stream", d.nameOf(id, path())),
+      setContent: (text) => { writeFileSync(path(), text); },
+      setTrashed: (t) => { if (t) d.trash(id); },
+    };
+  }
+}
+
+/**
+ * Loads Code.gs into a fresh context with the simulated services.
+ * @param {{ code: string, driveDir: string, props: Record<string,string>, timeZone?: string, overrides?: Record<string, unknown> }} o
+ */
+export function loadAppsScript(o) {
+  const http = syncHttp();
+  const drive = new Drive(o.driveDir);
+  const props = new Map(Object.entries(o.props));
+  const sim = { mails: [], triggers: [], logs: [], fetches: 0, http, drive, props };
+  const tz = o.timeZone ?? "Africa/Cairo";
+  const formatDate = (date, zone, fmt) => {
+    const parts = Object.fromEntries(new Intl.DateTimeFormat("en-GB", { timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
+      .formatToParts(date).map((p) => [p.type, p.value]));
+    const known = { "H": String(Number(parts.hour)), "yyyy-MM-dd": `${parts.year}-${parts.month}-${parts.day}`, "yyyy-MM-dd'T'HHmm'Z'": `${parts.year}-${parts.month}-${parts.day}T${parts.hour}${parts.minute}Z` };
+    if (!(fmt in known)) throw new Error(`formatDate: format ${fmt} not simulated`);
+    return known[fmt];
+  };
+  const services = {
+    UrlFetchApp: {
+      fetch(url, opts = {}) {
+        sim.fetches++;
+        const r = http.fetch(url, { method: (opts.method ?? "get").toUpperCase(), headers: opts.headers ?? {}, redirect: opts.followRedirects === false ? "manual" : "follow" });
+        const body = Buffer.from(r.body);
+        if (r.status >= 400 && !opts.muteHttpExceptions) throw new Error(`Request failed for ${url} returned code ${r.status}`);
+        return {
+          getResponseCode: () => r.status,
+          getContent: () => toSigned(body),
+          getContentText: () => body.toString("utf8"),
+          getHeaders: () => r.headers,
+          getAllHeaders: () => r.headers,
+        };
+      },
+    },
+    Utilities: {
+      DigestAlgorithm: { SHA_256: "sha256" },
+      computeDigest: (alg, v) => toSigned(createHash(alg).update(toBuf(v)).digest()),
+      computeHmacSha256Signature: (v, key) => toSigned(createHmac("sha256", toBuf(key)).update(toBuf(v)).digest()),
+      base64DecodeWebSafe: (s) => {
+        if (!/^[A-Za-z0-9_-]*=*$/.test(s) || s.length % 4) throw new Error("Could not decode string.");
+        return toSigned(Buffer.from(s, "base64url"));
+      },
+      newBlob: (data, type, name) => new Blob(toBuf(data), type, name ?? null),
+      gzip: (blob, name) => new Blob(gzipSync(blob.bytes), "application/x-gzip", name ?? `${blob.getName()}.gz`),
+      ungzip: (blob) => new Blob(gunzipSync(blob.bytes), "application/octet-stream", null),
+      formatDate,
+      sleep: () => {},
+    },
+    DriveApp: { getFolderById: (id) => { if (!drive.paths.has(id)) throw new Error(`No item with the given ID could be found: ${id}`); return drive.folder(id); } },
+    PropertiesService: {
+      getScriptProperties: () => ({
+        getProperty: (k) => (props.has(k) ? props.get(k) : null),
+        setProperty: (k, v) => {
+          if (String(v).length > 9 * 1024) throw new Error(`Script Property ${k} over 9 KB (${String(v).length})`);
+          props.set(k, String(v));
+        },
+        deleteProperty: (k) => { props.delete(k); },
+      }),
+    },
+    LockService: { getScriptLock: () => ({ tryLock: () => true, releaseLock: () => {} }) },
+    ScriptApp: {
+      getProjectTriggers: () => sim.triggers.slice(),
+      deleteTrigger: (t) => { sim.triggers = sim.triggers.filter((x) => x !== t); },
+      newTrigger: (handler) => {
+        const t = { handler, getHandlerFunction: () => handler };
+        const b = { timeBased: () => b, after: (ms) => { t.after = ms; return b; }, everyHours: (n) => { t.everyHours = n; return b; }, create: () => { sim.triggers.push(t); return t; } };
+        return b;
+      },
+    },
+    MailApp: { sendEmail: (to, subject, body) => { sim.mails.push({ to, subject, body }); } },
+    Session: { getScriptTimeZone: () => tz, getEffectiveUser: () => ({ getEmail: () => "owner@example.com" }) },
+    console: { log: (m) => sim.logs.push(String(m)), warn: (m) => sim.logs.push(String(m)), error: (m) => sim.logs.push(String(m)) },
+  };
+  const ctx = createContext({ ...services });
+  runInContext(o.code, ctx, { filename: "Code.gs" });
+  for (const [k, v] of Object.entries(o.overrides ?? {})) runInContext(`${k} = ${JSON.stringify(v)};`, ctx);
+  sim.call = (fn) => runInContext(`${fn}()`, ctx);
+  return sim;
+}

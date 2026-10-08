@@ -6,7 +6,7 @@
 import { env } from "cloudflare:test";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { newId, newToken } from "../src/lib/crypto";
-import { googleLogin, harness, ORIGIN, platformLogin, seedParty, signupInit, type Harness } from "./helpers";
+import { backupGet, googleLogin, harness, ORIGIN, platformLogin, seedParty, signupInit, type Harness } from "./helpers";
 
 let logs: string[] = [];
 beforeEach(() => {
@@ -137,6 +137,14 @@ const cases: Case[] = [
   ["site owner list, junk session", "GET", "/api/platform/site-owners", (h) => h.req("/api/platform/site-owners", { cookies: junkPlatform })],
   ["site owner remove, junk session", "POST", "/api/platform/site-owners/:id/remove", (h) => h.req(`/api/platform/site-owners/${id}/remove`, { method: "POST", headers: JSON_H, cookies: junkPlatform })],
   ["site owner remove, no session", "POST", "/api/platform/site-owners/:id/remove", (h) => h.req(`/api/platform/site-owners/${id}/remove`, { method: "POST", headers: JSON_H })],
+  ["backup schedule, unsigned", "GET", "/api/backup/schedule", (h) => h.req("/api/backup/schedule")],
+  ["backup manifest, unsigned", "GET", "/api/backup/manifest", (h) => h.req("/api/backup/manifest?counts=1")],
+  ["backup manifest, session cookie instead of a signature", "GET", "/api/backup/manifest", (h) => h.req("/api/backup/manifest", { cookies: junkCookie })],
+  ["backup manifest, forged signature", "GET", "/api/backup/manifest", (h) => h.req("/api/backup/manifest", { headers: { "x-sahra-backup-time": String(Math.floor(h.clock.now() / 1000)), "x-sahra-backup-signature": "0".repeat(64) } })],
+  ["backup manifest, BACKUP_KEY not set", "GET", "/api/backup/manifest", () => withEnv({ BACKUP_KEY: undefined }, (h) => backupGet(h, "/api/backup/manifest", { key: env.BACKUP_KEY! }))],
+  ["backup rows, unsigned", "GET", "/api/backup/rows/:db/:table", (h) => h.req("/api/backup/rows/main/tickets")],
+  ["backup rows, expired signature", "GET", "/api/backup/rows/:db/:table", (h) => backupGet(h, "/api/backup/rows/main/tickets", { at: h.clock.now() - 10 * 60_000 })],
+  ["backup file, unsigned", "GET", "/api/backup/file/:id", (h) => h.req("/api/backup/file/1")],
   ["unknown API path", "GET", "/api/*", (h) => h.req("/api/nothing-here")],
 ];
 
