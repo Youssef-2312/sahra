@@ -41,6 +41,9 @@ echo   10  Run the live checks against STAGING
 echo   11  Verify ledger records vs admissions (STAGING, read-only)
 echo   12  Measure CPU per endpoint, cold vs warm (STAGING)
 echo   13  Revoke ALL door invitations and door sessions (STAGING)
+echo  Recovery
+echo   20  Controlled recovery on STAGING (rehearsal: Time Travel restore + replay)
+echo   21  Controlled recovery on PRODUCTION (only when something went wrong)
 echo    0  Exit
 echo ================================================
 set "choice="
@@ -59,5 +62,7 @@ if "%choice%"=="10" node scripts\ops.mjs checkpoint
 if "%choice%"=="11" node scripts\ops.mjs verify-ledger
 if "%choice%"=="12" node scripts\ops.mjs measure-cpu
 if "%choice%"=="13" node scripts\ops.mjs revoke-door-staging
+if "%choice%"=="20" node scripts\recover.mjs staging
+if "%choice%"=="21" node scripts\recover.mjs prod
 pause
 goto menu

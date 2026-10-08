@@ -15,6 +15,8 @@ export interface Env {
   LINK_MASTER_K1?: string;
   COOKIE_MASTER_K1?: string;
   COOKIE_KEY_ID?: string;
+  /** "1" only while a controlled recovery runs (set and removed by scripts/recover.mjs). */
+  MAINTENANCE?: string;
 }
 
 export const CONFIG = {

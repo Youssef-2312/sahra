@@ -13,6 +13,7 @@ import { staffRoutes } from "./routes/staff";
 import { scanRoutes } from "./routes/scan";
 import { admissionRoutes } from "./routes/admission";
 import { testingRoutes } from "./routes/testing";
+import { recoveryRoutes } from "./routes/recovery";
 
 export type { Deps } from "./context";
 
@@ -86,6 +87,13 @@ export function createApp(deps: Deps) {
     );
   });
 
+  // Controlled recovery (src/recovery): while the owner's script runs, the secret
+  // MAINTENANCE is "1" and every API request answers 503 (scanners: can't verify).
+  app.use("/api/*", async (c, next) => {
+    if (c.env.MAINTENANCE === "1") return json(c, 503, { error: "maintenance", retry: true });
+    await next();
+  });
+
   app.onError((err, c) => {
     if (err instanceof LogPendingError) {
       return json(c, 503, { status: "pending", error: "not_recorded_yet", retry: true });
@@ -110,6 +118,7 @@ export function createApp(deps: Deps) {
   app.route("/api/scan", scanRoutes);
   app.route("/api/admission", admissionRoutes);
   app.route("/api/test", testingRoutes);
+  app.route("/api/recovery", recoveryRoutes);
 
   app.get("/api/me", requireAuth(["owner", "admin", "door"]), async (c) => {
     const a = c.var.auth;

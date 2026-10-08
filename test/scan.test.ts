@@ -373,6 +373,17 @@ describe("staging-only cleanup and ledger check (cloud runs without database acc
       outcomes: { admitted: 3, already_used: 1 } });
   });
 
+  it("ledger check: a ticket the change log says is used but the database does not is reported as reopened", async () => {
+    const { h, door, os } = await setup();
+    const [t] = await testTickets(h, os, 1);
+    expect((await scan(h, door, t!.qr)).verdict).toBe("admit");
+    let r = (await (await h.req("/api/test/ledger-check", { ...api(door), method: "GET" })).json()) as Record<string, unknown>;
+    expect(r).toMatchObject({ reopened: 0, nothing_reopened: true });
+    await env.DB.prepare("UPDATE tickets SET used_scan_id = NULL, used_at = NULL WHERE id = ?").bind(t!.id).run();
+    r = (await (await h.req("/api/test/ledger-check", { ...api(door), method: "GET" })).json()) as Record<string, unknown>;
+    expect(r).toMatchObject({ reopened: 1, nothing_reopened: false });
+  });
+
   it("ledger check: an admission without its record is reported", async () => {
     const { h, door, os } = await setup();
     const [t] = await testTickets(h, os, 1);

@@ -2,7 +2,7 @@ import { env } from "cloudflare:test";
 import { createApp, type Deps } from "../src/app";
 import { GOOGLE_JWKS_URL, GOOGLE_TOKEN_URL, JwksCache } from "../src/auth/google";
 import { b64url, csrfFor, newId, newToken, parseToken, sha256, sha256hex } from "../src/lib/crypto";
-import type { Ledger, LogEntry } from "../src/ledger";
+import type { Intent, Ledger, LogEntry } from "../src/ledger";
 
 export const ORIGIN = "https://sahra.test";
 export const CLIENT_ID = "test-client.apps.googleusercontent.com";
@@ -139,6 +139,8 @@ export class FlakyLedger implements Ledger {
   admissionMode: "ok" | "fail" | "lose_ack" = "ok";
   /** Control object reads. */
   controlMode: "ok" | "fail" = "ok";
+  /** Intent writes (putIntents). */
+  intentMode: "ok" | "fail" = "ok";
   /** Runs inside recordAdmission AFTER the record is committed (e.g. to pause the party). */
   afterAdmissionWrite: null | (() => Promise<void>) = null;
   writes = 0;
@@ -149,6 +151,10 @@ export class FlakyLedger implements Ledger {
     await this.inner.putEntries(entries);
     this.writes++;
     if (this.mode === "lose_ack") throw new Error("injected lost acknowledgement");
+  }
+  async putIntents(intents: Intent[]) {
+    if (this.intentMode === "fail") throw new Error("injected intent write failure");
+    await this.inner.putIntents(intents);
   }
   async getControl(partyId: string) {
     if (this.controlMode === "fail") throw new Error("injected control read failure");

@@ -1,6 +1,7 @@
 import { Hono } from "hono/tiny";
 import { normalizeEmail } from "../auth/google";
 import { flushChangeLog } from "../changelog";
+import { recordIntent } from "../changes";
 import { json, readJson, requireAuth, type AppEnv } from "../context";
 import { CONFIG } from "../env";
 import { isUuid, newId, parseToken, sha256hex } from "../lib/crypto";
@@ -82,7 +83,10 @@ staffRoutes.post("/:id/role", requireAuth(["owner"]), async (c) => {
   if (!isUuid(id) || (b?.role !== "owner" && b?.role !== "admin")) return json(c, 400, { error: "invalid_request" });
   const a = c.var.auth;
   const now = c.var.deps.now();
-  const r = await c.var.db.changeRole({ hash: a.hash, partyId: a.info.party_id }, a.info.staff_id, id, b.role, now, newId());
+  const op = newId();
+  // Losing a demotion in a recovery would hand the role back: intent first (src/changes.ts).
+  await recordIntent(c.var.ledger, op, a.info.party_id, "role_changed", [{ entity: "staff", id }], now);
+  const r = await c.var.db.changeRole({ hash: a.hash, partyId: a.info.party_id }, a.info.staff_id, id, b.role, now, op);
   if (r === "rejected") return json(c, 409, { error: "not_allowed" });
   await flushChangeLog(c.var.db, c.var.ledger, now);
   return json(c, 200, { status: r });
@@ -93,7 +97,9 @@ staffRoutes.post("/:id/disable", requireAuth(["owner"]), async (c) => {
   if (!isUuid(id)) return json(c, 400, { error: "invalid_request" });
   const a = c.var.auth;
   const now = c.var.deps.now();
-  const r = await c.var.db.disableStaff({ hash: a.hash, partyId: a.info.party_id }, a.info.staff_id, id, now, newId());
+  const op = newId();
+  await recordIntent(c.var.ledger, op, a.info.party_id, "staff_disabled", [{ entity: "staff", id }], now);
+  const r = await c.var.db.disableStaff({ hash: a.hash, partyId: a.info.party_id }, a.info.staff_id, id, now, op);
   if (r === "rejected") return json(c, 409, { error: "not_allowed" });
   await flushChangeLog(c.var.db, c.var.ledger, now);
   return json(c, 200, { status: r });

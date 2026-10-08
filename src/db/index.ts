@@ -307,6 +307,21 @@ export class Db {
     return r.meta.changes;
   }
 
+  /**
+   * Releases a recovery hold on a staff member (owner only, reason required,
+   * audited): re-enables them. Only a hold set by recovery can be released here;
+   * an ordinary disable stays permanent.
+   */
+  async releaseStaffHold(sess: SessionRef, actor: string, staffId: string, reason: string, now: number, op: string): Promise<boolean> {
+    const ok = sessionValid(sess, ["owner"], now);
+    const rs = await this.driver.batch([
+      sql`UPDATE staff SET hold_at = NULL, hold_reason = NULL, disabled_at = NULL, rev = rev + 1, last_op = ${op}, last_action = 'hold_released'
+        WHERE id = ${staffId} AND party_id = ${sess.partyId} AND hold_at IS NOT NULL AND id != ${actor} AND ${ok}`,
+      audit(now, actor, "hold_released", "staff", sql`SELECT party_id, id, rev FROM staff WHERE id = ${staffId} AND last_op = ${op}`, reason),
+    ]);
+    return rs[0]!.meta.changes === 1;
+  }
+
   /** Revokes an invitation and the session created from it. Idempotent. */
   async revokeInvite(sess: SessionRef, actor: string, inviteId: string, now: number, op: string) {
     const ok = sessionValid(sess, ["owner"], now);

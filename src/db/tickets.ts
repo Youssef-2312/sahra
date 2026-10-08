@@ -73,7 +73,7 @@ export class TicketDb {
           used_by = (SELECT staff_id FROM sessions WHERE id_hash = ${a.sessionHash}),
           rev = rev + 1, last_op = ${a.op}, last_action = 'admitted'
         WHERE id = ${a.ticketId} AND party_id = ${a.partyId} AND qr_version = ${a.qrVersion}
-          AND status = 'approved' AND released_at IS NOT NULL AND used_scan_id IS NULL
+          AND status = 'approved' AND released_at IS NOT NULL AND used_scan_id IS NULL AND hold_at IS NULL
           AND NOT EXISTS (SELECT 1 FROM scans WHERE scan_id = ${a.scanId})
           AND ${partyOpen} AND ${ok}`,
       sql`INSERT INTO scans (scan_id, party_id, session_hash, staff_id, ticket_id, qr_version, qr_fingerprint,
@@ -85,6 +85,7 @@ export class TicketDb {
             WHEN t.id IS NULL THEN 'unknown_ticket'
             WHEN t.qr_version != ${a.qrVersion} THEN 'old_version'
             WHEN t.used_scan_id IS NOT NULL THEN 'already_used'
+            WHEN t.hold_at IS NOT NULL THEN 'not_approved'
             WHEN t.status != 'approved' THEN 'not_approved'
             WHEN t.released_at IS NULL THEN 'not_released'
             ELSE 'paused'
@@ -206,6 +207,15 @@ export class TicketDb {
   reissue(sess: SessionRef, id: string, now: number, actor: string, op: string) {
     return this.change(sess, ["owner", "admin"], id, "reissued",
       sql`qr_version = qr_version + 1`, sql`status = 'approved' AND used_scan_id IS NULL`, now, actor, op);
+  }
+
+  /**
+   * Releases a recovery hold (section 8.3): owner only, reason required, logged.
+   * The ticket keeps every other field; the owner checks it before releasing.
+   */
+  releaseHold(sess: SessionRef, id: string, reason: string, now: number, actor: string, op: string) {
+    return this.change(sess, ["owner"], id, "hold_released",
+      sql`hold_at = NULL, hold_reason = NULL`, sql`hold_at IS NOT NULL`, now, actor, op, reason);
   }
 
   /** Privileged admission reset: owner only, reason required, logged. Makes a used ticket usable again. */

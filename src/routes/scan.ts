@@ -95,6 +95,7 @@ scanRoutes.post("/", async (c) => {
       return verdict(c, { verdict: "used", when: r.ticket?.used_at ?? null, by: r.usedByName });
     }
     if (scan.outcome === "paused") return verdict(c, { verdict: "paused" });
+    if (r.ticket?.hold_at != null) return verdict(c, { verdict: "stop", reason: "ticket on hold after a database recovery, ask the owner" });
     return verdict(c, { verdict: "stop", reason: reasonText[scan.outcome] ?? scan.outcome });
   }
 
