@@ -17,7 +17,7 @@ coordinator's session. Status: agreed, rejected or open.
 - Effort: medium (mostly writing and checking Arabic wording, and RTL layout)
 - Free-tier cost: none (static assets do not count as Worker requests)
 - Rule conflicts: none. No emojis in either language.
-- Open point: do emails follow the guest's language? Not yet asked.
+- Emails: owner decision, "emails are always english". All emails are in English whatever language the guest picked on the site, so no guest-language field is needed. (Pages still have the switch; the organiser's own text is shown as typed.)
 
 ## 2. Guest sign-up page: order of content
 
