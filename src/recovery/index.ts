@@ -27,7 +27,7 @@
 import type { SqlDriver } from "../db/driver";
 import { sql, raw, type Sql } from "../db/sql";
 
-export type Entity = "party" | "staff" | "invite" | "ticket" | "platform_admin" | "organiser" | "organiser_invite";
+export type Entity = "party" | "staff" | "invite" | "ticket" | "platform_admin" | "organiser" | "organiser_invite" | "ticket_type";
 
 /** Logged tables, parents before children (foreign keys). */
 export const ENTITY_TABLES: readonly { entity: Entity; table: string }[] = [
@@ -35,6 +35,7 @@ export const ENTITY_TABLES: readonly { entity: Entity; table: string }[] = [
   { entity: "organiser", table: "organisers" },
   { entity: "organiser_invite", table: "organiser_invites" },
   { entity: "party", table: "parties" },
+  { entity: "ticket_type", table: "ticket_types" },
   { entity: "staff", table: "staff" },
   { entity: "invite", table: "invites" },
   { entity: "ticket", table: "tickets" },

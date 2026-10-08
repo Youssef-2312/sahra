@@ -34,6 +34,10 @@ export interface PartyDetailsRow {
   email_ticket_body?: string | null;
   email_link_subject?: string | null;
   email_link_body?: string | null;
+  /** Registration rules (migrations/0014); NULL = no rule. */
+  registration_opens_at?: number | null;
+  registration_closes_at?: number | null;
+  max_tickets_per_email?: number | null;
 }
 
 /**
@@ -133,6 +137,8 @@ export function staffView(p: PartyDetailsRow, now: number) {
     address_mode: mode(p.address_mode), reveal_at: p.reveal_at, revealed_at: p.revealed_at,
     address_locked_at: p.address_locked_at,
     address_locked: p.address_locked_at !== null && p.address_locked_at <= now,
+    registration_opens_at: p.registration_opens_at ?? null, registration_closes_at: p.registration_closes_at ?? null,
+    max_tickets_per_email: p.max_tickets_per_email ?? null,
     emails: {
       ticket_subject: p.email_ticket_subject ?? null, ticket_body: p.email_ticket_body ?? null,
       link_subject: p.email_link_subject ?? null, link_body: p.email_link_body ?? null,

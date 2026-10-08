@@ -50,3 +50,42 @@ export function noticeInsert(a: { partyId: string; op: string; subject: string; 
     WHERE ${guard}
     ON CONFLICT (id) DO NOTHING`;
 }
+
+// ------------------------------------------------------------ announcements
+
+/** Who an announcement goes to. Rejected and cancelled tickets never get one. */
+export const AUDIENCES = ["released", "approved", "everyone"] as const;
+export type Audience = (typeof AUDIENCES)[number];
+
+/** Tickets with an email in the audience, optionally of one ticket type. */
+export function announceRecipients(partyId: string, audience: Audience, typeId: string | null): Sql {
+  const who = audience === "released" ? sql`status = 'approved' AND released_at IS NOT NULL`
+    : audience === "approved" ? sql`status = 'approved'`
+      : sql`status IN ('pending', 'approved')`;
+  const type = typeId === null ? sql`` : sql`AND type_id = ${typeId}`;
+  return sql`SELECT id, guest_email FROM tickets WHERE party_id = ${partyId} AND ${who} ${type} AND guest_email IS NOT NULL`;
+}
+
+/** The email text: the organisers' own words, plus one line saying who sent it. Plain text only. */
+export function announceText(partyName: string, subject: string, body: string) {
+  const s = subject;
+  const b = `${body}\n\nSent by the organisers of ${partyName} through Sahra.\n`;
+  assertPlainText(s);
+  assertPlainText(b);
+  return { subject: s, body: b };
+}
+
+/**
+ * One outbox row per recipient (awaiting approval, like a notice), only when
+ * `guard` holds (the session check). Ids are `announce:<op>:<ticket>`, so a retry
+ * of the same announcement queues nobody twice.
+ */
+export function announceInsert(a: { partyId: string; op: string; audience: Audience; typeId: string | null; subject: string; body: string;
+  now: number; createdBy: string }, guard: Sql): Sql {
+  return sql`INSERT INTO outbox (id, party_id, kind, to_email, ticket_id, subject, body_text, status, created_at, created_by, next_attempt_at)
+    SELECT 'announce:' || ${a.op} || ':' || r.id, ${a.partyId}, 'party_announcement', r.guest_email, r.id, ${a.subject}, ${a.body},
+      'awaiting_approval', ${a.now}, ${a.createdBy}, NULL
+    FROM (${announceRecipients(a.partyId, a.audience, a.typeId)} ORDER BY id LIMIT ${MAX_NOTICES_PER_EDIT}) r
+    WHERE ${guard}
+    ON CONFLICT (id) DO NOTHING`;
+}

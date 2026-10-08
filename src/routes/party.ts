@@ -10,12 +10,14 @@
 import { Hono } from "hono/tiny";
 import { flushChangeLog } from "../changelog";
 import { json, readJson, requireAuth, type AppEnv } from "../context";
-import { newId } from "../lib/crypto";
+import { isUuid, newId } from "../lib/crypto";
+import { GuestDb } from "../guests/db";
+import { isTypeId } from "../guests/types";
 import { chargeStaff } from "../limits";
 import { PartyDb } from "../party/db";
 import { doorView, staffView, visiblePartyDetails, type Viewer } from "../party/details";
-import { parseEdit, TIME_OR_PLACE } from "../party/input";
-import { noticeText } from "../party/notice";
+import { parseEdit, text, TIME_OR_PLACE } from "../party/input";
+import { announceText, AUDIENCES, noticeText, type Audience } from "../party/notice";
 
 export const partyRoutes = new Hono<AppEnv>();
 
@@ -56,7 +58,7 @@ partyRoutes.post("/details", requireAuth(["owner", "admin"]), async (c) => {
   }
   const r = await db.edit({ hash: a.hash, partyId: a.info.party_id }, a.info.staff_id, parsed.values, now, newId(), notice);
   if (r.status === "rejected") {
-    const code = r.reason === "end_before_start" || r.reason === "reveal_time_required" ? 400 : 409;
+    const code = r.reason === "end_before_start" || r.reason === "reveal_time_required" || r.reason === "registration_close_before_open" ? 400 : 409;
     return json(c, code, { error: r.reason, ...(r.held !== undefined ? { held: r.held } : {}) });
   }
   await flushChangeLog(c.var.db, c.var.ledger, now);
@@ -103,4 +105,87 @@ partyRoutes.get("/public/:id", async (c) => {
   const p = await partyDb(c).get(id);
   if (!p) return json(c, 404, { error: "not_found" });
   return json(c, 200, visiblePartyDetails(p, { kind: "public" }, c.var.deps.now()));
+});
+
+/**
+ * Announcement to guests (owner/admin): free text, queued in the outbox awaiting
+ * approval like a guest notice (nothing is sent from here). Body: op (UUID; a
+ * retry queues nobody twice), subject, body, audience ("released": QR sent,
+ * default; "approved"; "everyone": pending too), type_id (optional).
+ */
+partyRoutes.post("/announce", requireAuth(["owner", "admin"]), async (c) => {
+  const b = await readJson(c);
+  const subject = text(b?.subject, 150, false);
+  const body = text(b?.body, 3000, true);
+  const audience = (b?.audience ?? "released") as Audience;
+  const typeId = b?.type_id === undefined || b?.type_id === null ? null : b.type_id;
+  if (!b || !isUuid(b.op) || !subject || !body || !AUDIENCES.includes(audience) || (typeId !== null && !isTypeId(typeId))) {
+    return json(c, 400, { error: "invalid_request", audience: AUDIENCES });
+  }
+  const a = c.var.auth;
+  const now = c.var.deps.now();
+  const over = await chargeStaff(c, "announce", 1);
+  if (over) return over;
+  const mail = announceText(a.info.party_name, subject, body);
+  const r = await partyDb(c).announce({ hash: a.hash, partyId: a.info.party_id }, { op: b.op, audience, typeId, ...mail }, a.info.staff_id, now);
+  if (!r.ok) return json(c, 401, { error: "not_signed_in" });
+  return json(c, 200, { status: "awaiting_approval", queued: r.queued, not_queued: Math.max(0, r.recipients - r.queued) });
+});
+
+/**
+ * The capacity indicator and check-in figures (owner, admin and door): places
+ * held and left, per ticket type, admissions per 10 minutes and per scanner.
+ * Reads the party's tickets twice; poll it once a minute at most.
+ */
+partyRoutes.get("/stats", requireAuth(["owner", "admin", "door"]), async (c) => {
+  const a = c.var.auth;
+  const now = c.var.deps.now();
+  const s = await new GuestDb(c.var.db.driver).stats({ hash: a.hash, partyId: a.info.party_id }, now, ["owner", "admin", "door"]);
+  if (s.byType.length === 0) return json(c, 401, { error: "not_signed_in" });
+  const capacity = s.byType[0]!.capacity;
+  const sum = (k: "tickets" | "pending" | "approved" | "released" | "admitted" | "admitted_tickets") =>
+    s.byType.reduce((n, r) => n + Number(r[k] ?? 0), 0);
+  const held = sum("pending") + sum("approved");
+  const names = new Map(s.types.map((t) => [t.id, t]));
+  const byType = s.byType.filter((r) => r.type_id !== null || Number(r.tickets) > 0).map((r) => {
+    const t = r.type_id ? names.get(r.type_id) : undefined;
+    return {
+      type_id: r.type_id, name: r.type_name ?? (r.type_id ? "?" : "No type"), quantity: t?.quantity ?? null,
+      pending: r.pending, approved: r.approved, released: r.released, admitted: r.admitted,
+      places_left: t && t.quantity !== null ? Math.max(0, t.quantity - r.pending - r.approved) : null,
+    };
+  });
+  // Types without any ticket yet.
+  for (const t of s.types) {
+    if (t.archived_at === null && !byType.some((r) => r.type_id === t.id)) {
+      byType.push({ type_id: t.id, name: t.name, quantity: t.quantity, pending: 0, approved: 0, released: 0, admitted: 0, places_left: t.quantity });
+    }
+  }
+  const slots = new Map<number, { at: number; tickets: number; people: number }>();
+  const scanners = new Map<string, { staff_id: string | null; name: string | null; tickets: number; people: number }>();
+  for (const r of s.slots) {
+    const slot = slots.get(r.slot) ?? { at: r.slot * 600_000, tickets: 0, people: 0 };
+    slot.tickets += Number(r.tickets);
+    slot.people += Number(r.people);
+    slots.set(r.slot, slot);
+    const key = r.used_by ?? "";
+    const sc = scanners.get(key) ?? { staff_id: r.used_by, name: r.scanner, tickets: 0, people: 0 };
+    sc.tickets += Number(r.tickets);
+    sc.people += Number(r.people);
+    scanners.set(key, sc);
+  }
+  return json(c, 200, {
+    at: now,
+    capacity,
+    held,
+    places_left: Math.max(0, capacity - held),
+    pending: sum("pending"),
+    approved: sum("approved"),
+    released: sum("released"),
+    inside: sum("admitted"),
+    admitted_tickets: sum("admitted_tickets"),
+    by_type: byType,
+    check_ins_per_10_min: [...slots.values()],
+    by_scanner: [...scanners.values()].sort((x, y) => y.people - x.people),
+  });
 });

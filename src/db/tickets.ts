@@ -39,6 +39,10 @@ export interface RedeemResult {
   /** The ticket named by the scan row, as it is now. */
   ticket: TicketRow | null;
   usedByName: string | null;
+  /** The ticket's type (migrations/0014), its "entry from" time, and the party's time zone (to show that time). */
+  typeName: string | null;
+  typeEntryFrom: number | null;
+  partyTimeZone: string | null;
   /** Session valid right now for this party (any scanning role). */
   sessionOk: boolean;
   /** Party of the presented session if it exists and is otherwise valid (to explain a wrong-party code). */
@@ -74,6 +78,7 @@ export class TicketDb {
           rev = rev + 1, last_op = ${a.op}, last_action = 'admitted'
         WHERE id = ${a.ticketId} AND party_id = ${a.partyId} AND qr_version = ${a.qrVersion}
           AND status = 'approved' AND released_at IS NOT NULL AND used_scan_id IS NULL AND hold_at IS NULL
+          AND NOT EXISTS (SELECT 1 FROM ticket_types tt WHERE tt.id = tickets.type_id AND tt.entry_from > ${a.now})
           AND NOT EXISTS (SELECT 1 FROM scans WHERE scan_id = ${a.scanId})
           AND ${partyOpen} AND ${ok}`,
       sql`INSERT INTO scans (scan_id, party_id, session_hash, staff_id, ticket_id, qr_version, qr_fingerprint,
@@ -88,6 +93,9 @@ export class TicketDb {
             WHEN t.hold_at IS NOT NULL THEN 'not_approved'
             WHEN t.status != 'approved' THEN 'not_approved'
             WHEN t.released_at IS NULL THEN 'not_released'
+            -- Also a ticket whose type's entry time has not come yet: the scans table
+            -- keeps its first outcome list (a CHECK), and the scan route tells the
+            -- door "too early" from the read-back below. Never green either way.
             ELSE 'paused'
           END,
           t.rev
@@ -101,17 +109,25 @@ export class TicketDb {
             WHERE s.id_hash = ${a.sessionHash} AND s.revoked_at IS NULL AND s.expires_at > ${a.now}
               AND st.disabled_at IS NULL AND st.role = s.role) AS session_party
         FROM (SELECT 1) LEFT JOIN scans sc ON sc.scan_id = ${a.scanId}`,
-      sql`SELECT t.*, (SELECT name FROM staff WHERE id = t.used_by) AS used_by_name
-        FROM tickets t WHERE t.id = (SELECT ticket_id FROM scans WHERE scan_id = ${a.scanId})`,
+      sql`SELECT t.*, (SELECT name FROM staff WHERE id = t.used_by) AS used_by_name,
+          ty.name AS sahra_type_name, ty.entry_from AS sahra_type_entry_from,
+          -- Only read when there is an entry time to show (keeps the usual scan's reads as they were).
+          CASE WHEN ty.entry_from IS NOT NULL THEN (SELECT time_zone FROM parties WHERE id = t.party_id) END AS sahra_party_tz
+        FROM tickets t LEFT JOIN ticket_types ty ON ty.id = t.type_id
+        WHERE t.id = (SELECT ticket_id FROM scans WHERE scan_id = ${a.scanId})`,
     ]);
     const r = rs[2]!.results[0] as Record<string, unknown>;
-    const t = (rs[3]!.results[0] as (TicketRow & { used_by_name: string | null }) | undefined) ?? null;
+    const t = (rs[3]!.results[0] as (TicketRow & { used_by_name: string | null; sahra_type_name: string | null;
+      sahra_type_entry_from: number | null; sahra_party_tz: string | null }) | undefined) ?? null;
     let usedByName: string | null = null;
     let ticket: TicketRow | null = null;
+    let extra = { typeName: null as string | null, typeEntryFrom: null as number | null, partyTimeZone: null as string | null };
     if (t) {
-      const { used_by_name, ...rest } = t;
+      // Only the ticket's own columns stay in `ticket`: it is the state written to the ledger.
+      const { used_by_name, sahra_type_name, sahra_type_entry_from, sahra_party_tz, ...rest } = t;
       usedByName = used_by_name;
       ticket = rest as TicketRow;
+      extra = { typeName: sahra_type_name, typeEntryFrom: sahra_type_entry_from, partyTimeZone: sahra_party_tz };
     }
     return {
       scan: r.outcome == null ? null : {
@@ -127,6 +143,7 @@ export class TicketDb {
       },
       ticket,
       usedByName,
+      ...extra,
       sessionOk: Number(r.session_ok) === 1,
       sessionParty: r.session_party == null ? null : String(r.session_party),
     };

@@ -23,7 +23,7 @@ import type { SqlDriver } from "../db/driver";
 import { sessionValid, type Role } from "../db";
 import { sql, type Sql } from "../db/sql";
 
-export type LimitKind = "signup" | "resend_link" | "release" | "notice" | "outbox_approve" | "export" | "reject_stale";
+export type LimitKind = "signup" | "resend_link" | "release" | "notice" | "outbox_approve" | "export" | "reject_stale" | "issue" | "announce";
 
 export const DAY_MS = 86_400_000;
 
@@ -38,7 +38,8 @@ export const BUDGET_STOP_AT = ACCOUNT_DAILY_WRITES / 2;
  * the account's daily writes for each kind.
  */
 export const LIMITS: Record<LimitKind, { cap: number; essential: boolean; label: string }> = {
-  // 7 rows written each (ticket, index, audit, logged_rev, counter, ledger, file; measured).
+  // 8 rows written each (ticket, status index, email index, audit, logged_rev, counter, ledger, file; measured);
+  // 9 with a ticket type (its index).
   signup: { cap: 1000, essential: true, label: "guest sign-ups" },
   // At most one email per address per 10 minutes anyway; 3 rows per email.
   resend_link: { cap: 300, essential: true, label: "ticket link requests" },
@@ -52,6 +53,11 @@ export const LIMITS: Record<LimitKind, { cap: number; essential: boolean; label:
   export: { cap: 200, essential: false, label: "export pages" },
   // "Reject old pending requests": up to 20 tickets per call, about 5 rows each (ticket, index, audit, logged_rev, ledger).
   reject_stale: { cap: 100, essential: false, label: "bulk rejections of old requests" },
+  // Staff-issued tickets (complimentary / door list), one per call: about 9 rows (ticket + 3 index entries, audit,
+  // logged_rev, ledger, counter, and the email when sent at once). Essential: used at the door.
+  issue: { cap: 500, essential: true, label: "tickets issued by staff" },
+  // One announcement queues up to 1,000 emails awaiting approval (3 rows each), like a guest notice.
+  announce: { cap: 3, essential: false, label: "announcements" },
 };
 
 export const dayOf = (now: number) => Math.floor(now / DAY_MS);

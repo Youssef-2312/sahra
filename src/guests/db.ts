@@ -15,7 +15,9 @@
 import type { SqlDriver } from "../db/driver";
 import { audit, sessionValid, type SessionRef } from "../db/index";
 import { inList, join, sql, type Sql } from "../db/sql";
+import { isBase32 } from "../lib/crypto";
 import { outboxInsert, type OutboxRow } from "../outbox";
+import { hasPublicTypes, onSale, typeApproved, typeHeld } from "./types";
 
 const MANAGERS = ["owner", "admin"] as const;
 
@@ -33,6 +35,45 @@ export interface SignupParty {
   held: number;
   /** Party of the ticket with this sign-up's id, if it exists already (a retry). */
   existing_party: string | null;
+  registration_opens_at: number | null;
+  registration_closes_at: number | null;
+  max_tickets_per_email: number | null;
+  /** Pending + approved tickets of the party for the given email (0 without one). */
+  email_tickets: number;
+  /** 1 when the party has public ticket types: a request must then name one. */
+  has_types: number;
+  payment_instructions: string | null;
+  /** For the chosen type (if any): 1 when on sale to guests now, and its places left (NULL = no limit of its own). */
+  type_on_sale: number | null;
+  type_left: number | null;
+}
+
+/** Why a sign-up was not stored (the same rules as the insert, read in the same batch). */
+export type SignupRefusal = "registration_not_open" | "registration_closed" | "email_limit" | "type_required" | "type_unavailable"
+  | "type_full" | "full" | "refused";
+
+/** The registration rules of a party row aliased `p`, at `now`, for one email (all inside SQL). */
+function registrationRules(now: number, email: string) {
+  const emailCount = sql`(SELECT COUNT(*) FROM tickets e WHERE e.party_id = p.id AND e.guest_email = ${email} AND e.status IN ('pending', 'approved'))`;
+  return {
+    opened: sql`(p.registration_opens_at IS NULL OR p.registration_opens_at <= ${now})`,
+    notClosed: sql`(p.registration_closes_at IS NULL OR p.registration_closes_at > ${now})`,
+    emailOk: sql`(p.max_tickets_per_email IS NULL OR ${emailCount} < p.max_tickets_per_email)`,
+  };
+}
+
+/** The chosen type (or none) is allowed for a guest request of `people` at `now`. */
+function typeRules(typeId: string | null, people: number, now: number) {
+  if (typeId === null) {
+    const none = sql`NOT ${hasPublicTypes(sql`p.id`)}`;
+    return { chosenOk: none, placesOk: sql`1`, price: sql`NULL` };
+  }
+  const tt = sql`FROM ticket_types tt WHERE tt.id = ${typeId} AND tt.party_id = p.id`;
+  return {
+    chosenOk: sql`EXISTS (SELECT 1 ${tt} AND ${onSale(now)})`,
+    placesOk: sql`EXISTS (SELECT 1 ${tt} AND (tt.quantity IS NULL OR ${typeHeld(sql`tt.id`)} + ${people} <= tt.quantity))`,
+    price: sql`(SELECT tt.price ${tt})`,
+  };
 }
 
 export interface GuestTicket {
@@ -48,6 +89,8 @@ export interface GuestTicket {
   hold_at: number | null;
   used_at: number | null;
   reject_reason: string | null;
+  type_name: string | null;
+  price: number | null;
 }
 
 export type BulkResult = Record<string, "done" | "already" | "refused">;
@@ -60,9 +103,18 @@ export class GuestDb {
   // ------------------------------------------------------------ guests
 
   /** One read before sign-up: the party, its form, places held, and whether this sign-up already exists. */
-  async signupParty(partyId: string, ticketId: string): Promise<SignupParty | null> {
+  async signupParty(partyId: string, ticketId: string, o: { email?: string; typeId?: string | null; now?: number } = {}): Promise<SignupParty | null> {
+    const email = o.email ?? null;
+    const typeId = o.typeId ?? null;
+    const now = o.now ?? 0;
+    const tt = sql`FROM ticket_types tt WHERE tt.id = ${typeId} AND tt.party_id = p.id`;
     const r = await this.driver.all<SignupParty>(sql`SELECT p.id, p.name, p.capacity, p.max_people_per_ticket, p.guest_form,
-        ${held(sql`p.id`)} AS held, (SELECT party_id FROM tickets WHERE id = ${ticketId}) AS existing_party
+        ${held(sql`p.id`)} AS held, (SELECT party_id FROM tickets WHERE id = ${ticketId}) AS existing_party,
+        p.registration_opens_at, p.registration_closes_at, p.max_tickets_per_email, p.payment_instructions,
+        ${email === null ? sql`0` : sql`(SELECT COUNT(*) FROM tickets e WHERE e.party_id = p.id AND e.guest_email = ${email} AND e.status IN ('pending', 'approved'))`} AS email_tickets,
+        ${hasPublicTypes(sql`p.id`)} AS has_types,
+        ${typeId === null ? sql`NULL` : sql`EXISTS (SELECT 1 ${tt} AND ${onSale(now)})`} AS type_on_sale,
+        ${typeId === null ? sql`NULL` : sql`(SELECT tt.quantity - ${typeHeld(sql`tt.id`)} ${tt})`} AS type_left
       FROM parties p WHERE p.id = ${partyId}`);
     return r.results[0] ?? null;
   }
@@ -74,30 +126,46 @@ export class GuestDb {
    */
   async signup(a: {
     id: string; partyId: string; people: number; name: string; email: string; answers: string | null;
-    screenshotKey: string | null; now: number; op: string;
-  }): Promise<"created" | "already" | "full" | "refused"> {
+    screenshotKey: string | null; typeId: string | null; now: number; op: string;
+  }): Promise<"created" | "already" | SignupRefusal> {
+    const reg = registrationRules(a.now, a.email);
+    const ty = typeRules(a.typeId, a.people, a.now);
+    const roomOk = sql`${held(sql`p.id`)} + ${a.people} <= p.capacity`;
     const rs = await this.driver.batch([
-      sql`INSERT INTO tickets (id, party_id, status, people, guest_name, guest_email, answers, screenshot_key, created_at, last_op, last_action)
-        SELECT ${a.id}, p.id, 'pending', ${a.people}, ${a.name}, ${a.email}, ${a.answers}, ${a.screenshotKey}, ${a.now}, ${a.op}, 'ticket_requested'
+      sql`INSERT INTO tickets (id, party_id, status, people, guest_name, guest_email, answers, screenshot_key, type_id, price,
+          created_at, last_op, last_action)
+        SELECT ${a.id}, p.id, 'pending', ${a.people}, ${a.name}, ${a.email}, ${a.answers}, ${a.screenshotKey}, ${a.typeId}, ${ty.price},
+          ${a.now}, ${a.op}, 'ticket_requested'
         FROM parties p
-        WHERE p.id = ${a.partyId} AND ${a.people} <= p.max_people_per_ticket
-          AND ${held(sql`p.id`)} + ${a.people} <= p.capacity
+        WHERE p.id = ${a.partyId} AND ${a.people} <= p.max_people_per_ticket AND ${roomOk}
+          AND ${reg.opened} AND ${reg.notClosed} AND ${reg.emailOk} AND ${ty.chosenOk} AND ${ty.placesOk}
           AND NOT EXISTS (SELECT 1 FROM tickets x WHERE x.id = ${a.id})`,
       audit(a.now, null, "ticket_requested", "ticket", sql`SELECT party_id, id, rev FROM tickets WHERE id = ${a.id} AND last_op = ${a.op}`),
-      sql`SELECT t.party_id, t.last_op, ${held(sql`p.id`)} AS held, p.capacity
-        FROM parties p LEFT JOIN tickets t ON t.id = ${a.id} WHERE p.id = ${a.partyId}`,
+      // Why nothing was stored, from the same rules on the same state.
+      sql`SELECT (SELECT party_id FROM tickets WHERE id = ${a.id}) AS existing_party,
+          CASE
+            WHEN NOT ${reg.opened} THEN 'registration_not_open'
+            WHEN NOT ${reg.notClosed} THEN 'registration_closed'
+            WHEN NOT ${reg.emailOk} THEN 'email_limit'
+            WHEN NOT ${ty.chosenOk} THEN ${a.typeId === null ? "type_required" : "type_unavailable"}
+            WHEN NOT ${ty.placesOk} THEN 'type_full'
+            WHEN NOT ${roomOk} THEN 'full'
+            ELSE 'refused'
+          END AS why
+        FROM parties p WHERE p.id = ${a.partyId}`,
     ]);
-    const row = rs[2]!.results[0] as { party_id: string | null; last_op: string | null; held: number; capacity: number } | undefined;
     if (rs[0]!.meta.changes === 1) return "created";
-    if (row?.party_id === a.partyId) return "already";
-    if (row && row.party_id === null && row.held + a.people > row.capacity) return "full";
-    return "refused";
+    const row = rs[2]!.results[0] as { existing_party: string | null; why: SignupRefusal } | undefined;
+    if (row?.existing_party === a.partyId) return "already";
+    if (!row || row.existing_party !== null) return "refused";
+    return row.why;
   }
 
   /** The ticket named by a verified link, with its party's name. */
   async guestTicket(partyId: string, ticketId: string): Promise<GuestTicket | null> {
     const r = await this.driver.all<GuestTicket>(sql`SELECT t.id, t.party_id, p.name AS party_name, t.status, t.people, t.guest_name,
-        t.qr_version, t.link_version, t.released_at, t.hold_at, t.used_at, t.reject_reason
+        t.qr_version, t.link_version, t.released_at, t.hold_at, t.used_at, t.reject_reason,
+        (SELECT name FROM ticket_types WHERE id = t.type_id) AS type_name, t.price
       FROM tickets t JOIN parties p ON p.id = t.party_id WHERE t.id = ${ticketId} AND t.party_id = ${partyId}`);
     return r.results[0] ?? null;
   }
@@ -146,11 +214,16 @@ export class GuestDb {
 
   /** Approval queue and other lists: the party's tickets with one status, oldest first, paged by (created_at, id). */
   async list(sess: SessionRef, status: string, after: { at: number; id: string } | null, limit: number, now: number) {
-    const cursor = after ? sql`AND (created_at > ${after.at} OR (created_at = ${after.at} AND id > ${after.id}))` : sql``;
-    const r = await this.driver.all(sql`SELECT id, status, people, guest_name, guest_email, answers, screenshot_key IS NOT NULL AS has_screenshot,
-        created_at, approved_at, released_at, reject_reason, hold_at, used_at, qr_version, rev
-      FROM tickets WHERE party_id = ${sess.partyId} AND status = ${status} ${cursor} AND ${sessionValid(sess, MANAGERS, now)}
-      ORDER BY created_at, id LIMIT ${limit}`);
+    const cursor = after ? sql`AND (t.created_at > ${after.at} OR (t.created_at = ${after.at} AND t.id > ${after.id}))` : sql``;
+    // same_email: the address's other pending/approved tickets (the duplicate warning; index tickets_party_email).
+    const r = await this.driver.all(sql`SELECT t.id, t.status, t.people, t.guest_name, t.guest_email, t.answers,
+        t.screenshot_key IS NOT NULL AS has_screenshot, t.created_at, t.approved_at, t.released_at, t.reject_reason, t.hold_at,
+        t.used_at, t.qr_version, t.rev, t.type_id, (SELECT name FROM ticket_types WHERE id = t.type_id) AS type_name, t.price,
+        CASE WHEN t.guest_email IS NULL THEN 0 ELSE (SELECT COUNT(*) FROM tickets d WHERE d.party_id = t.party_id
+          AND d.guest_email = t.guest_email AND d.id != t.id AND d.status IN ('pending', 'approved')) END AS same_email
+      FROM tickets t WHERE t.party_id = ${sess.partyId} AND t.status = ${status} ${cursor}
+        AND ${sessionValid(sess, MANAGERS, now)}
+      ORDER BY t.created_at, t.id LIMIT ${limit}`);
     return r.results;
   }
 
@@ -184,10 +257,13 @@ export class GuestDb {
   approve(sess: SessionRef, ids: string[], now: number, actor: string, op: string) {
     const ok = sessionValid(sess, MANAGERS, now);
     const cap = sql`(SELECT capacity FROM parties WHERE id = ${sess.partyId})`;
+    // The type's places too (approved people of the type + this ticket), when it has a limit.
+    const typeOk = sql`(type_id IS NULL OR NOT EXISTS (SELECT 1 FROM ticket_types tq WHERE tq.id = tickets.type_id
+      AND tq.quantity IS NOT NULL AND ${typeApproved(sql`tq.id`)} + tickets.people > tq.quantity))`;
     return this.bulk(sess, ids, "approved", ids.map((id) => sql`UPDATE tickets SET status = 'approved', approved_at = ${now}, approved_by = ${actor},
         rev = rev + 1, last_op = ${op}, last_action = 'approved'
       WHERE id = ${id} AND party_id = ${sess.partyId} AND status = 'pending'
-        AND ${approvedPeople(sess.partyId)} + people <= ${cap} AND ${ok}`), [], now, actor, op, null,
+        AND ${approvedPeople(sess.partyId)} + people <= ${cap} AND ${typeOk} AND ${ok}`), [], now, actor, op, null,
       (r) => r.status === "approved");
   }
 
@@ -264,8 +340,10 @@ export class GuestDb {
   async exportPage(sess: SessionRef, after: string, limit: number, now: number) {
     const r = await this.driver.all(sql`SELECT t.id, t.status, t.people, t.guest_name, t.guest_email, t.answers, t.created_at,
         t.approved_at, ap.name AS approved_by, t.rejected_at, rj.name AS rejected_by, t.reject_reason,
-        t.released_at, rl.name AS released_by, t.used_at, us.name AS scanned_by, t.qr_version, t.hold_at
+        t.released_at, rl.name AS released_by, t.used_at, us.name AS scanned_by, t.qr_version, t.hold_at,
+        ty.name AS type_name, t.price, t.price * t.people AS total_price
       FROM tickets t
+        LEFT JOIN ticket_types ty ON ty.id = t.type_id
         LEFT JOIN staff ap ON ap.id = t.approved_by LEFT JOIN staff rj ON rj.id = t.rejected_by
         LEFT JOIN staff rl ON rl.id = t.released_by LEFT JOIN staff us ON us.id = t.used_by
       WHERE t.party_id = ${sess.partyId} AND t.id > ${after} AND ${sessionValid(sess, MANAGERS, now)}
@@ -293,6 +371,100 @@ export class GuestDb {
     return {
       ids: (rs[2]!.results as { id: string }[]).map((r) => r.id),
       remaining: Number((rs[3]!.results[0] as { n: number }).n),
+    };
+  }
+  // ------------------------------------------- staff-issued tickets, search, stats
+
+  /**
+   * A ticket issued by the owner/admin (complimentary or the door list): approved
+   * at once and, when asked, released with its email in the same batch. The same
+   * capacity and type-places rules as a guest request, in the insert; any active
+   * type of the party may be used, staff-only ones included, whatever its sales
+   * window. The id comes from the browser's op id, so a retry is the same ticket.
+   */
+  async issue(sess: SessionRef, a: {
+    id: string; name: string; email: string | null; people: number; typeId: string | null; complimentary: boolean;
+    release: boolean; mail: OutboxRow | null;
+  }, now: number, actor: string, op: string): Promise<"created" | "already" | "type_unavailable" | "type_full" | "full" | "too_many_people" | "refused"> {
+    const ok = sessionValid(sess, MANAGERS, now);
+    const tt = sql`FROM ticket_types tt WHERE tt.id = ${a.typeId} AND tt.party_id = p.id`;
+    const typeOk = a.typeId === null ? sql`1` : sql`EXISTS (SELECT 1 ${tt} AND tt.archived_at IS NULL)`;
+    const placesOk = a.typeId === null ? sql`1`
+      : sql`EXISTS (SELECT 1 ${tt} AND (tt.quantity IS NULL OR ${typeHeld(sql`tt.id`)} + ${a.people} <= tt.quantity))`;
+    const price = a.complimentary ? sql`0` : a.typeId === null ? sql`NULL` : sql`(SELECT tt.price ${tt})`;
+    const roomOk = sql`${held(sql`p.id`)} + ${a.people} <= p.capacity`;
+    const peopleOk = sql`${a.people} <= p.max_people_per_ticket`;
+    const rel = a.release ? now : null;
+    const rs = await this.driver.batch([
+      sql`INSERT INTO tickets (id, party_id, status, people, guest_name, guest_email, type_id, price, created_at,
+          approved_at, approved_by, released_at, released_by, last_op, last_action)
+        SELECT ${a.id}, p.id, 'approved', ${a.people}, ${a.name}, ${a.email}, ${a.typeId}, ${price}, ${now},
+          ${now}, ${actor}, ${rel}, ${a.release ? actor : null}, ${op}, 'ticket_issued'
+        FROM parties p
+        WHERE p.id = ${sess.partyId} AND ${ok} AND ${peopleOk} AND ${roomOk} AND ${typeOk} AND ${placesOk}
+          AND NOT EXISTS (SELECT 1 FROM tickets x WHERE x.id = ${a.id})`,
+      audit(now, actor, "ticket_issued", "ticket", sql`SELECT party_id, id, rev FROM tickets WHERE id = ${a.id} AND last_op = ${op}`,
+        a.complimentary ? "complimentary" : null),
+      ...(a.mail ? [outboxInsert(a.mail, sql`EXISTS (SELECT 1 FROM tickets WHERE id = ${a.id} AND party_id = ${sess.partyId}
+        AND last_op = ${op} AND last_action = 'ticket_issued' AND released_at IS NOT NULL AND guest_email = ${a.mail.toEmail})`)] : []),
+      sql`SELECT (SELECT party_id FROM tickets WHERE id = ${a.id}) AS existing_party, ${ok} AS session_ok,
+          CASE WHEN NOT ${peopleOk} THEN 'too_many_people' WHEN NOT ${typeOk} THEN 'type_unavailable'
+            WHEN NOT ${placesOk} THEN 'type_full' WHEN NOT ${roomOk} THEN 'full' ELSE 'refused' END AS why
+        FROM parties p WHERE p.id = ${sess.partyId}`,
+    ]);
+    if (rs[0]!.meta.changes === 1) return "created";
+    const d = rs.at(-1)!.results[0] as undefined | { existing_party: string | null; session_ok: number; why: string };
+    if (!d || !d.session_ok) return "refused";
+    if (d.existing_party === sess.partyId) return "already";
+    if (d.existing_party !== null) return "refused";
+    return d.why as "type_unavailable" | "type_full" | "full" | "too_many_people" | "refused";
+  }
+
+  /**
+   * Staff search (owner/admin): by ticket id, by email (starts with) or by name
+   * (contains; ASCII letters ignore case). Reads the party's tickets only.
+   */
+  async search(sess: SessionRef, q: string, now: number, limit = 20) {
+    const like = q.replace(/[\\%_]/g, (m) => `\\${m}`);
+    const where = isBase32(q, 16) ? sql`t.id = ${q}`
+      : q.includes("@") ? sql`t.guest_email LIKE ${`${like.toLowerCase()}%`} ESCAPE '\\'`
+        : sql`t.guest_name LIKE ${`%${like}%`} ESCAPE '\\'`;
+    const r = await this.driver.all(sql`SELECT t.id, t.status, t.people, t.guest_name, t.guest_email, t.created_at, t.approved_at,
+        t.released_at, t.used_at, t.hold_at, t.link_version, (SELECT name FROM ticket_types WHERE id = t.type_id) AS type_name
+      FROM tickets t WHERE t.party_id = ${sess.partyId} AND ${where} AND ${sessionValid(sess, MANAGERS, now)}
+      ORDER BY t.created_at DESC LIMIT ${limit}`);
+    return r.results;
+  }
+
+  /**
+   * The capacity indicator and check-in figures, from the party's tickets (no
+   * scan rows are read: scans has no party index, and an admission is the
+   * ticket's used_at/used_by). Two reads of the party's tickets.
+   */
+  async stats(sess: SessionRef, now: number, roles: readonly ("owner" | "admin" | "door")[]) {
+    const ok = sessionValid(sess, roles, now);
+    const rs = await this.driver.batch([
+      sql`SELECT p.capacity, t.type_id, ty.name AS type_name, ty.quantity, ty.archived_at, ty.staff_only,
+          COUNT(t.id) AS tickets,
+          COALESCE(SUM(CASE WHEN t.status = 'pending' THEN t.people END), 0) AS pending,
+          COALESCE(SUM(CASE WHEN t.status = 'approved' THEN t.people END), 0) AS approved,
+          COALESCE(SUM(CASE WHEN t.status = 'approved' AND t.released_at IS NOT NULL THEN t.people END), 0) AS released,
+          COALESCE(SUM(CASE WHEN t.used_at IS NOT NULL THEN t.people END), 0) AS admitted,
+          COALESCE(SUM(CASE WHEN t.used_at IS NOT NULL THEN 1 END), 0) AS admitted_tickets
+        FROM parties p LEFT JOIN tickets t ON t.party_id = p.id LEFT JOIN ticket_types ty ON ty.id = t.type_id
+        WHERE p.id = ${sess.partyId} AND ${ok}
+        GROUP BY t.type_id`,
+      sql`SELECT t.used_at / 600000 AS slot, t.used_by, st.name AS scanner, COUNT(*) AS tickets, SUM(t.people) AS people
+        FROM tickets t LEFT JOIN staff st ON st.id = t.used_by
+        WHERE t.party_id = ${sess.partyId} AND t.used_at IS NOT NULL AND ${ok}
+        GROUP BY slot, t.used_by ORDER BY slot`,
+      sql`SELECT id, name, quantity, archived_at, staff_only FROM ticket_types WHERE party_id = ${sess.partyId} AND ${ok}`,
+    ]);
+    return {
+      byType: rs[0]!.results as { capacity: number; type_id: string | null; type_name: string | null; quantity: number | null;
+        tickets: number; pending: number; approved: number; released: number; admitted: number; admitted_tickets: number }[],
+      slots: rs[1]!.results as { slot: number; used_by: string | null; scanner: string | null; tickets: number; people: number }[],
+      types: rs[2]!.results as { id: string; name: string; quantity: number | null; archived_at: number | null; staff_only: number }[],
     };
   }
 }

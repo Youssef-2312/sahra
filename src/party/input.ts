@@ -11,6 +11,7 @@ export const EDITABLE = [
   "name", "description", "starts_at", "ends_at", "time_zone", "venue_name", "address", "map_url", "rules",
   "payment_instructions", "capacity", "max_people_per_ticket", "address_mode", "reveal_at", "address_locked_at",
   "email_ticket_subject", "email_ticket_body", "email_link_subject", "email_link_body",
+  "registration_opens_at", "registration_closes_at", "max_tickets_per_email",
 ] as const;
 export type EditableField = (typeof EDITABLE)[number];
 export type EditValues = Partial<Record<EditableField, string | number | null>>;
@@ -20,21 +21,22 @@ export const TIME_OR_PLACE: readonly EditableField[] = ["starts_at", "ends_at", 
 /** Fields frozen once address_locked_at has passed (the lock itself included). */
 export const LOCKED: readonly EditableField[] = ["venue_name", "address", "map_url", "address_locked_at"];
 
-const TIME_FIELDS = ["starts_at", "ends_at", "reveal_at", "address_locked_at"] as const;
+const TIME_FIELDS = ["starts_at", "ends_at", "reveal_at", "address_locked_at", "registration_opens_at", "registration_closes_at"] as const;
 const TEXT_LIMITS: Partial<Record<EditableField, number>> = {
   description: 2000, venue_name: 120, address: 300, rules: 2000, payment_instructions: 1000,
 };
 const MULTILINE = new Set<EditableField>(["description", "rules", "payment_instructions", "address"]);
 // 2020-01-01 .. 2100-01-01 UTC: anything else is a unit mistake (seconds, not ms).
-const MIN_T = 1577836800000;
-const MAX_T = 4102444800000;
+export const MIN_T = 1577836800000;
+export const MAX_T = 4102444800000;
 export const MAX_CAPACITY = 100_000;
 export const MAX_PEOPLE_PER_TICKET = 50;
+export const MAX_TICKETS_PER_EMAIL = 100;
 
 // Same ranges as src/outbox.ts assertPlainText (rule 6: no emojis), plus control characters.
 const EMOJI = /[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{FE0F}]/u;
 
-function text(v: unknown, max: number, multiline: boolean): string | null | undefined {
+export function text(v: unknown, max: number, multiline: boolean): string | null | undefined {
   if (v === null) return null;
   if (typeof v !== "string") return undefined;
   let s = v.replace(/\r\n?/g, "\n").trim();
@@ -129,6 +131,12 @@ export function parseEdit(b: Record<string, unknown>): ParsedEdit {
     const v = b.max_people_per_ticket;
     if (typeof v !== "number" || !Number.isInteger(v) || v < 1 || v > MAX_PEOPLE_PER_TICKET) return bad("max_people_per_ticket");
     values.max_people_per_ticket = v;
+  }
+  // Pending + approved tickets per guest email; null = no limit.
+  if ("max_tickets_per_email" in b) {
+    const v = b.max_tickets_per_email;
+    if (v !== null && (typeof v !== "number" || !Number.isInteger(v) || v < 1 || v > MAX_TICKETS_PER_EMAIL)) return bad("max_tickets_per_email");
+    values.max_tickets_per_email = v as number | null;
   }
   // Owner-editable guest emails (src/guests/emails.ts). Only the listed
   // placeholders; the body must contain the guest's link, so a custom text can

@@ -290,6 +290,16 @@ Chosen extras (numbers from the brainstorm):
 - **Switching off an organiser leaves their party running.**
 - **A secret address hides the venue label too** (venue name, address and map link
   together); the party name is always visible.
+- **New parties take the creator's time zone** (Cloudflare's reading of the
+  connection), else **Africa/Cairo**. The organiser can change it.
+- **Guest email texts are editable** by the party's owner/admin (and site owners
+  managing the party): subject and text of the ticket email and of the link email,
+  with fixed placeholders; the guest's link is required in the text. Empty = the
+  default text. (migrations/0013_email_templates.sql)
+- **No waitlist** (removed from the list).
+- **Ticket types**, including "Early": what Early means is the owner's decision,
+  per party (an early-bird sales window, an earlier entry time, or both). See
+  "Ticket types and registration rules" below.
 
 ## Controlled recovery (Phase 3)
 
@@ -1531,3 +1541,88 @@ Cloudflare):** fresh local databases, one seeded party with a door invitation,
    flush reads (10 rows per run).
 3. Ledger check reads the whole change log (no `party_id` index in the ledger);
    fine for staging-only use, but it is the largest read cost of the run.
+
+## Ticket types and registration rules (owner request, 2026-10-08)
+
+Built together with the small quality-of-life set. One migration,
+`migrations/0014_types_and_registration.sql`, applied with 0013 in one run of
+setup.bat step 2.
+
+**Ticket types** (table `ticket_types`, a logged entity like parties and staff:
+rev, change log, audit, recovery replay, backup export):
+
+- Name, price in whole **EGP per person** (0 = free), optional **places**
+  (people; empty = only the party capacity limits it), optional **sales window**
+  (on sale from / until), optional **entry from** time at the door, **staff only**
+  (not on the public form; issued by staff, for example complimentary or the
+  guest list), payment instructions per type (empty = the party's), order.
+- At most 20 active types per party. **Archive** instead of delete: no new
+  tickets of it; existing tickets keep their type. Places cannot be lowered
+  below the people already holding a place of that type.
+- A party with no types works as before. When a party has public types, every
+  guest request must choose one.
+- The ticket stores the **price per person shown when it was requested**
+  (`tickets.price`), so a later price change does not rewrite what earlier
+  guests paid. The export shows type, price and total; Sahra still takes no
+  payments.
+
+**Where each rule is checked** (inside the statement, as everywhere):
+
+- Sign-up insert: party capacity as before, plus the type belongs to the party,
+  is active, not staff-only, inside its sales window, and its held places +
+  this request <= its places. The read-back in the same batch says which rule
+  refused it.
+- Approval: approved people of the type + this ticket <= its places (the party
+  rule unchanged).
+- **Door:** the redemption UPDATE also requires that the ticket's type has no
+  entry time in the future, so a ticket can never show green before its entry
+  time. The scans table keeps its original outcome list (a CHECK constraint that
+  cannot change without rebuilding the table), so this refusal is stored with
+  outcome `paused`; the scan route reads the type in the same read-back and tells
+  the door "too early: <type> enters from <time>". Fail closed either way.
+  Measured: an admission still writes 2 rows (+1 ledger) and reads the same 18
+  rows; the time zone is read only when there is an entry time to show.
+
+**Registration rules** (party edit): requests open from / close at, and **max
+tickets per email** (pending + approved; rejected and cancelled do not count).
+All three are checked in the sign-up insert. The **duplicate warning**: the
+sign-up answer says how many other requests the address already has, and the
+approval queue shows each request's same-email count. Read through a new partial
+index `tickets_party_email` (tickets without an email write nothing to it).
+
+**Staff tools:**
+
+- **Issue a ticket** (`POST /api/tickets/issue`, owner/admin): approved at once,
+  optionally sent at once (email in the same batch), complimentary (price 0) or
+  at the type's price; any active type including staff-only ones, whatever its
+  sales window; party capacity and type places as for guests. The id comes from
+  the browser's op id, so a retry is the same ticket. Limit: 500 per party per day
+  (essential, used at the door).
+- **Find a guest** (`GET /api/tickets/search`, owner/admin): ticket id, email
+  (starts with) or name (contains); 20 results. **Resend ticket**
+  (`POST /api/tickets/:id/resend`): the guest's link email, at most once per
+  ticket per 10 minutes (deterministic outbox id); the link is also shown to the
+  owner/admin to share by hand. Door staff cannot search (guest emails stay with
+  owners/admins).
+- **Announcements** (`POST /api/party/announce`, owner/admin): free text to guests
+  whose QR was sent (default), all approved, or everyone with a request,
+  optionally one type only. Queued awaiting approval in the outbox, like a guest
+  notice, at most 1,000 per announcement and 3 announcements per party per day
+  (non-essential). The same op queues nobody twice.
+- **Live numbers** (`GET /api/party/stats`, owner/admin/door): capacity, held,
+  places left, inside, per type, check-ins per 10 minutes and per scanner. Built
+  from the tickets (`used_at`, `used_by`), not the scans table (which has no party
+  index). Each call reads the party's tickets twice: the test page refreshes once
+  a minute, and Phase 5 must not poll faster.
+
+**Change-log flush:** every flush asks each small table for rows with
+`rev > logged_rev`. For `ticket_types` a partial index holds only those rows, so a
+flush reads none of the logged types however many parties add them (tested:
+15 more types, same rows read). Parties, staff and invites are still read whole
+on each flush, as before; the same index would fix that (open question for the
+owner, as it adds one index row per change of those tables).
+
+**Rows written (measured locally):** a guest sign-up is now 8 rows (the new email
+index), 9 with a type (its index); approving a typed ticket 5. The limits comment
+in src/limits/index.ts carries the numbers.
+

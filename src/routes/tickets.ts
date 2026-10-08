@@ -18,12 +18,14 @@ import { json, readJson, requireAuth, type AppEnv, type Ctx } from "../context";
 import { D1Driver } from "../db/driver";
 import { TicketDb } from "../db/tickets";
 import { GuestDb, MAX_BULK } from "../guests/db";
+import { isTypeId, parseType, TypeDb, typeIdFor } from "../guests/types";
 import { emailTemplates, linkEmail, releasedEmail } from "../guests/emails";
 import { parseForm, storedForm } from "../guests/form";
 import { linkPath, signLink } from "../guests/link";
-import { isBase32, isUuid, newId } from "../lib/crypto";
+import { base32, isBase32, isUuid, newId, sha256, sha256hex } from "../lib/crypto";
 import { chargeStaff } from "../limits";
 import type { OutboxRow } from "../outbox";
+import { PartyDb } from "../party/db";
 import { getScreenshot } from "../storage";
 import { guestEmail } from "./guests";
 
@@ -31,6 +33,8 @@ export const ticketRoutes = new Hono<AppEnv>();
 
 const MANAGERS = ["owner", "admin"] as const;
 const STATUSES = new Set(["pending", "approved", "rejected", "cancelled"]);
+/** One staff "resend ticket link" email per ticket per window (deterministic outbox id, as for guests). */
+const STAFF_RESEND_WINDOW_MS = 10 * 60_000;
 
 function envRecord(c: Ctx): Record<string, unknown> {
   return c.env as unknown as Record<string, unknown>;
@@ -102,6 +106,148 @@ ticketRoutes.get("/export", requireAuth(MANAGERS), async (c) => {
     tickets: rows.map((r) => ({ ...r, answers: r.answers ? JSON.parse(String(r.answers)) : {} })),
     next: rows.length === limit ? String(rows.at(-1)!.id) : null,
   });
+});
+
+// ------------------------------------------------------------ ticket types
+
+/** The party's ticket types (archived ones last) with places held, approved and admitted. */
+ticketRoutes.get("/types", requireAuth(MANAGERS), async (c) => {
+  const { sess, now } = sessOf(c);
+  const types = await new TypeDb(c.var.db.driver).list(sess, now);
+  return json(c, 200, {
+    currency: "EGP",
+    types: types.map((t) => ({ ...t, staff_only: !!t.staff_only, archived: t.archived_at !== null,
+      places_left: t.quantity === null ? null : Math.max(0, t.quantity - t.held) })),
+  });
+});
+
+async function partyZone(c: Ctx, partyId: string) {
+  return (await new PartyDb(c.var.db.driver).get(partyId))?.time_zone ?? null;
+}
+
+function typeAnswer(c: Ctx, r: Awaited<ReturnType<TypeDb["create"]>>) {
+  if (r.status !== "rejected") return null;
+  const code = r.reason === "not_found" ? 404 : r.reason === "sales_close_before_open" ? 400 : 409;
+  return json(c, code, { error: r.reason, ...(r.held !== undefined ? { held: r.held } : {}) });
+}
+
+/**
+ * New ticket type. Body: name (required), price (EGP per person), quantity (places,
+ * null = only the party capacity), sales_opens_at / sales_closes_at / entry_from
+ * (UTC ms, or *_local in the party's zone), staff_only, payment_instructions,
+ * description, sort, and `op` (a UUID: a retry after "pending" is the same type).
+ */
+ticketRoutes.post("/types", requireAuth(MANAGERS), async (c) => {
+  const b = await readJson(c);
+  if (!b || !isUuid(b.op)) return json(c, 400, { error: "invalid_request" });
+  const { sess, actor, now } = sessOf(c);
+  const parsed = parseType(b, await partyZone(c, sess.partyId), true);
+  if (!parsed.ok) return json(c, 400, { error: parsed.error });
+  const id = await typeIdFor(sess.partyId, b.op);
+  const tdb = new TypeDb(c.var.db.driver);
+  const r = await tdb.create(sess, id, parsed.values, now, actor, newId());
+  const refused = typeAnswer(c, r);
+  if (refused) return refused;
+  await flushChangeLog(c.var.db, c.var.ledger, now);
+  return json(c, r.status === "created" ? 201 : 200, { status: r.status, type: await tdb.get(sess.partyId, id) });
+});
+
+/** Edit a type; `archived: true` stops new tickets of it (existing ones keep it), `false` restores it. */
+ticketRoutes.post("/types/:id", requireAuth(MANAGERS), async (c) => {
+  const id = c.req.param("id");
+  const b = await readJson(c);
+  if (!isTypeId(id) || !b) return json(c, 400, { error: "invalid_request" });
+  const { sess, actor, now } = sessOf(c);
+  const { op: _op, ...body } = b;
+  const parsed = parseType(body, await partyZone(c, sess.partyId), false);
+  if (!parsed.ok) return json(c, 400, { error: parsed.error });
+  const tdb = new TypeDb(c.var.db.driver);
+  const r = await tdb.update(sess, id, parsed.values, parsed.archived, now, actor, newId());
+  const refused = typeAnswer(c, r);
+  if (refused) return refused;
+  await flushChangeLog(c.var.db, c.var.ledger, now);
+  return json(c, 200, { status: r.status, type: await tdb.get(sess.partyId, id) });
+});
+
+// ------------------------------------------------- staff-issued tickets, search
+
+/**
+ * Issue a ticket (complimentary or the door list): approved at once; with
+ * `release: true` its QR is sent too (email in the same batch when there is an
+ * address). Body: op (UUID), name, email?, people?, type_id?, complimentary?, release?.
+ * Same capacity and type-places rules as a guest request.
+ */
+ticketRoutes.post("/issue", requireAuth(MANAGERS), async (c) => {
+  const b = await readJson(c);
+  const name = typeof b?.name === "string" ? b.name.trim().replace(/\s+/g, " ") : "";
+  const email = b?.email === undefined || b?.email === null || b?.email === "" ? null : guestEmail(b.email);
+  const people = b?.people === undefined ? 1 : b.people;
+  const typeId = b?.type_id === undefined || b?.type_id === null ? null : b.type_id;
+  if (!b || !isUuid(b.op) || name.length < 1 || name.length > 80 || (b.email && !email)
+    || typeof people !== "number" || !Number.isInteger(people) || people < 1 || people > 100
+    || (typeId !== null && !isTypeId(typeId))
+    || (b.complimentary !== undefined && typeof b.complimentary !== "boolean") || (b.release !== undefined && typeof b.release !== "boolean")) {
+    return json(c, 400, { error: "invalid_request" });
+  }
+  const { sess, actor, now } = sessOf(c);
+  const id = base32((await sha256(`sahra-issue-v1|${sess.partyId}|${b.op}`)).subarray(0, 10), 16);
+  const gdb = new GuestDb(c.var.db.driver);
+  const env = envRecord(c);
+  const already = await gdb.ticket(sess, id, now);
+  let status: "created" | "already";
+  if (already) {
+    status = "already";
+  } else {
+    const over = await chargeStaff(c, "issue", 1, MANAGERS);
+    if (over) return over;
+    const release = b.release === true;
+    let mail: OutboxRow | null = null;
+    if (release && email) {
+      const party = await new PartyDb(c.var.db.driver).get(sess.partyId);
+      const link = await signLink(env, { partyId: sess.partyId, ticketId: id, version: 1 });
+      mail = releasedEmail({ origin: c.env.PUBLIC_ORIGIN, partyId: sess.partyId, partyName: party?.name ?? "", ticketId: id, to: email,
+        guestName: name, people, link, now, actor, templates: await emailTemplates(c.var.db.driver, sess.partyId) });
+    }
+    const r = await gdb.issue(sess, { id, name, email, people, typeId, complimentary: b.complimentary === true, release, mail }, now, actor, newId());
+    if (r !== "created" && r !== "already") return json(c, r === "too_many_people" ? 400 : 409, { error: r === "refused" ? "not_allowed" : r });
+    status = r;
+  }
+  await flushChangeLog(c.var.db, c.var.ledger, now, [id]);
+  return json(c, status === "created" ? 201 : 200, { status, ticket_id: id, link: linkPath(await signLink(env, { partyId: sess.partyId, ticketId: id, version: 1 })) });
+});
+
+/** Find a guest: `q` = ticket id, email (starts with) or name (contains). At most 20, newest first. */
+ticketRoutes.get("/search", requireAuth(MANAGERS), async (c) => {
+  const q = (c.req.query("q") ?? "").trim().replace(/\s+/g, " ");
+  if (q.length < 2 || q.length > 80) return json(c, 400, { error: "invalid_request", q: "2..80 characters" });
+  const { sess, now } = sessOf(c);
+  const rows = await new GuestDb(c.var.db.driver).search(sess, q, now);
+  return json(c, 200, { tickets: rows.map(({ link_version: _v, ...r }) => r) });
+});
+
+/**
+ * "Resend ticket" (owner/admin, one click): emails the guest their ticket link
+ * (the page shows the QR once it is sent). At most one such email per ticket per
+ * 10 minutes, checked by the outbox id. The link is also returned, to share by hand.
+ */
+ticketRoutes.post("/:id/resend", requireAuth(MANAGERS), async (c) => {
+  const id = c.req.param("id");
+  if (!isTicketId(id)) return json(c, 404, { error: "not_found" });
+  const { sess, actor, now } = sessOf(c);
+  const gdb = new GuestDb(c.var.db.driver);
+  const t = await gdb.ticket(sess, id, now);
+  if (!t) return json(c, 404, { error: "not_found" });
+  const env = envRecord(c);
+  const link = await signLink(env, { partyId: sess.partyId, ticketId: id, version: t.link_version });
+  if (!t.guest_email) return json(c, 409, { error: "no_email", link: linkPath(link) });
+  const over = await chargeStaff(c, "resend_link", 1, MANAGERS);
+  if (over) return over;
+  const mailId = `staff-link-${(await sha256hex(`${sess.partyId}|${id}|${Math.floor(now / STAFF_RESEND_WINDOW_MS)}`)).slice(0, 32)}`;
+  const queued = await gdb.addLinkEmail(linkEmail({
+    id: mailId, origin: c.env.PUBLIC_ORIGIN, partyId: sess.partyId, partyName: t.party_name, to: t.guest_email, links: [link],
+    ticketId: id, now, createdBy: actor, templates: await emailTemplates(c.var.db.driver, sess.partyId),
+  }), [{ id, link_version: t.link_version }]);
+  return json(c, 200, { status: queued ? "queued" : "already_queued", link: linkPath(link) });
 });
 
 /** The payment screenshot of one of this party's tickets. Owner/admin only, never cached. */

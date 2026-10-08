@@ -24,8 +24,10 @@
       box.value = t.id;
       cell(tr, "").appendChild(box);
       cell(tr, t.guest_name || "");
-      cell(tr, t.guest_email || "");
+      // Duplicate warning: the address's other pending/approved requests.
+      cell(tr, (t.guest_email || "") + (t.same_email ? " (also " + t.same_email + " other)" : ""));
       cell(tr, String(t.people));
+      cell(tr, t.type_name ? t.type_name + (t.price !== null ? " (EGP " + t.price + ")" : "") : "");
       cell(tr, JSON.stringify(t.answers));
       cell(tr, t.status + (t.released_at ? " (QR sent)" : "") + (t.reject_reason ? ": " + t.reject_reason : ""));
       var td = cell(tr, "");
@@ -127,11 +129,11 @@
     var keys = {};
     rows.forEach(function (t) { Object.keys(t.answers || {}).forEach(function (k) { keys[k] = true; }); });
     var qs = Object.keys(keys);
-    var head = ["ticket", "status", "name", "email", "people", "requested", "approved", "approved by", "rejected", "rejected by",
+    var head = ["ticket", "status", "name", "email", "people", "type", "price per person (EGP)", "total (EGP)", "requested", "approved", "approved by", "rejected", "rejected by",
       "reason", "QR sent", "QR sent by", "scanned", "scanned by"].concat(qs);
     var lines = [head.map(csvCell).join(",")];
     rows.forEach(function (t) {
-      lines.push([t.id, t.status, t.guest_name, t.guest_email, t.people, when(t.created_at), when(t.approved_at), t.approved_by,
+      lines.push([t.id, t.status, t.guest_name, t.guest_email, t.people, t.type_name, t.price, t.total_price, when(t.created_at), when(t.approved_at), t.approved_by,
         when(t.rejected_at), t.rejected_by, t.reject_reason, when(t.released_at), t.released_by, when(t.used_at), t.scanned_by]
         .concat(qs.map(function (q) { return (t.answers || {})[q]; })).map(csvCell).join(","));
     });

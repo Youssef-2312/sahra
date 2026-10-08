@@ -1,6 +1,6 @@
 // Door scanning (section 7). Rule shown to staff: NO GREEN, NO ENTRY.
 //
-// Verdicts: admit (name, people) | used (when, by) | stop (reason) | paused |
+// Verdicts: admit (name, people, type) | used (when, by, type) | stop (reason) | paused |
 // cant_verify | recording (retry with the SAME scan id) | not_signed_in.
 //
 // Order of work:
@@ -20,6 +20,7 @@ import { json, readJson, type AppEnv, type Ctx } from "../context";
 import { TicketDb } from "../db/tickets";
 import { csrfFor, isUuid, newId, parseToken, sha256hex, timingSafeEqualStr } from "../lib/crypto";
 import { COOKIE_SESSION, rateLimited, readCookie, sameOrigin } from "../lib/http";
+import { formatHuman } from "../party/time";
 import { verifyQr } from "../qr";
 
 export const scanRoutes = new Hono<AppEnv>();
@@ -92,7 +93,12 @@ scanRoutes.post("/", async (c) => {
   if (scan.outcome !== "admitted") {
     if (!r.sessionOk) return verdict(c, { verdict: "not_signed_in" });
     if (scan.outcome === "already_used") {
-      return verdict(c, { verdict: "used", when: r.ticket?.used_at ?? null, by: r.usedByName });
+      return verdict(c, { verdict: "used", when: r.ticket?.used_at ?? null, by: r.usedByName, type: r.typeName });
+    }
+    // A ticket type with an entry time still to come (see TicketDb.redeem).
+    if (scan.outcome === "paused" && r.typeEntryFrom != null && r.typeEntryFrom > scan.created_at) {
+      const at = formatHuman(r.typeEntryFrom, r.partyTimeZone ?? "UTC");
+      return verdict(c, { verdict: "stop", reason: `too early: ${r.typeName ?? "this ticket"} enters from ${at}`, entry_from: r.typeEntryFrom, type: r.typeName });
     }
     if (scan.outcome === "paused") return verdict(c, { verdict: "paused" });
     if (r.ticket?.hold_at != null) return verdict(c, { verdict: "stop", reason: "ticket on hold after a database recovery, ask the owner" });
@@ -128,5 +134,5 @@ scanRoutes.post("/", async (c) => {
   }
   // The record is written either way; a revoked scanner still gets no green.
   if (!r.sessionOk) return verdict(c, { verdict: "not_signed_in" });
-  return verdict(c, { verdict: "admit", name: t.guest_name, people: t.people });
+  return verdict(c, { verdict: "admit", name: t.guest_name, people: t.people, type: r.typeName });
 });

@@ -29,7 +29,7 @@ import { wranglerDriver, wranglerOnce } from "./lib/d1-wrangler.mjs";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const ENVS = { staging: ["--env", "staging"], prod: ["--env="] };
-const APP_TABLES_DELETE_ORDER = ["sessions", "scans", "outbox", "audit", "tickets", "invites", "staff", "parties"];
+const APP_TABLES_DELETE_ORDER = ["sessions", "scans", "outbox", "audit", "tickets", "ticket_types", "invites", "staff", "parties"];
 
 async function ask(q) {
   const rl = createInterface({ input: stdin, output: stdout });

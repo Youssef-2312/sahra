@@ -32,6 +32,7 @@ export const EXPORTED: readonly TableSpec[] = [
   { db: "main", table: "organisers", key: ["id"] },
   { db: "main", table: "organiser_invites", key: ["id"] },
   { db: "main", table: "parties", key: ["id"] },
+  { db: "main", table: "ticket_types", key: ["id"] },
   { db: "main", table: "staff", key: ["id"] },
   { db: "main", table: "invites", key: ["id"] },
   { db: "main", table: "tickets", key: ["id"] },

@@ -19,11 +19,12 @@ import { Hono } from "hono/tiny";
 import { flushChangeLog } from "../changelog";
 import { json, readJson, type AppEnv, type Ctx } from "../context";
 import { D1Driver } from "../db/driver";
-import { GuestDb } from "../guests/db";
+import { GuestDb, type SignupParty, type SignupRefusal } from "../guests/db";
 import { emailTemplates, groupNote, linkEmail } from "../guests/emails";
 import { checkAnswers, storedForm } from "../guests/form";
 import { linkPath, signLink, verifyLink } from "../guests/link";
 import { turnstileConfigured, verifyTurnstile } from "../guests/turnstile";
+import { isTypeId, TypeDb } from "../guests/types";
 import { base32, parseToken, sha256, sha256hex } from "../lib/crypto";
 import { clientIp, rateLimited, sameOrigin } from "../lib/http";
 import { chargeGuest } from "../limits";
@@ -71,6 +72,31 @@ async function signupIds(partyId: string, token: string) {
 
 const shotsOk = (cap: FilesCapacity) => cap.state === "ok";
 
+/** Registration state at `now` (party rules, migrations/0014). */
+function registration(p: Pick<SignupParty, "registration_opens_at" | "registration_closes_at">, now: number) {
+  const notYet = p.registration_opens_at !== null && p.registration_opens_at > now;
+  const over = p.registration_closes_at !== null && p.registration_closes_at <= now;
+  return { opens_at: p.registration_opens_at, closes_at: p.registration_closes_at, open: !notYet && !over,
+    state: notYet ? "not_open_yet" : over ? "closed" : "open" } as const;
+}
+
+/** Guest-facing words for a refused request. */
+const REFUSAL: Record<SignupRefusal, { status: number; message: string }> = {
+  registration_not_open: { status: 409, message: "Requests for this party are not open yet." },
+  registration_closed: { status: 409, message: "Requests for this party are closed." },
+  email_limit: { status: 409, message: "This email address already has the most tickets allowed for this party." },
+  type_required: { status: 400, message: "Please choose a ticket type." },
+  type_unavailable: { status: 409, message: "This ticket type is not on sale right now." },
+  type_full: { status: 409, message: "This ticket type is sold out." },
+  full: { status: 409, message: "This party is full." },
+  refused: { status: 409, message: "This request cannot be made." },
+};
+
+function refusal(c: Ctx, why: SignupRefusal) {
+  const r = REFUSAL[why];
+  return json(c, r.status, { error: why === "refused" ? "not_allowed" : why, message: r.message });
+}
+
 function turnstileAnswer(c: Ctx, r: "failed" | "not_configured" | "unavailable") {
   if (r === "not_configured") return json(c, 503, { error: "bot_check_not_configured" });
   if (r === "unavailable") return json(c, 503, { error: "bot_check_unavailable", retry: true });
@@ -84,12 +110,28 @@ guestRoutes.get("/parties/:party", async (c) => {
   const p = await new GuestDb(c.var.db.driver).signupParty(partyId, "");
   if (!p) return json(c, 404, { error: "not_found" });
   const form = storedForm(p.guest_form);
+  const now = c.var.deps.now();
+  const partyLeft = Math.max(0, p.capacity - p.held);
+  const types = p.has_types ? await new TypeDb(c.var.db.driver).publicList(partyId, now) : [];
   return json(c, 200, {
     party: { id: p.id, name: p.name },
     form,
     max_people_per_ticket: p.max_people_per_ticket,
-    places_left: Math.max(0, p.capacity - p.held),
+    places_left: partyLeft,
     full: p.held >= p.capacity,
+    registration: registration(p, now),
+    max_tickets_per_email: p.max_tickets_per_email,
+    payment_instructions: p.payment_instructions,
+    // Prices are whole Egyptian pounds per person. A request must name one of these when the list is not empty.
+    types: types.map((t) => {
+      const left = t.quantity === null ? partyLeft : Math.max(0, Math.min(partyLeft, t.quantity - t.held));
+      return {
+        id: t.id, name: t.name, description: t.description, price: t.price, currency: "EGP",
+        places_left: left, sold_out: left === 0, on_sale: !!t.on_sale && left > 0,
+        sales_opens_at: t.sales_opens_at, sales_closes_at: t.sales_closes_at,
+        payment_instructions: t.payment_instructions ?? p.payment_instructions,
+      };
+    }),
     uploads: shotsOk(await uploadTarget(c.env, c.var.deps.now())),
     turnstile_site_key: turnstileConfigured(c.env) ? c.env.TURNSTILE_SITE_KEY : null,
   });
@@ -116,9 +158,12 @@ guestRoutes.post("/parties/:party/signup", async (c) => {
   const name = guestName(form.get("name"));
   const email = guestEmail(form.get("email"));
   const people = Number(form.get("people") ?? 1);
+  const typeField = form.get("type_id");
+  const typeId = typeField === null || typeField === "" ? null : typeField;
   const answersText = form.get("answers");
   const file = form.get("screenshot");
-  if (typeof token !== "string" || !parseToken(token) || !name || !email || !Number.isInteger(people) || people < 1 || people > 100) {
+  if (typeof token !== "string" || !parseToken(token) || !name || !email || !Number.isInteger(people) || people < 1 || people > 100
+    || (typeId !== null && !isTypeId(typeId))) {
     return json(c, 400, { error: "invalid_request" });
   }
   let answersRaw: unknown = {};
@@ -148,14 +193,17 @@ guestRoutes.post("/parties/:party/signup", async (c) => {
 
   const gdb = new GuestDb(c.var.db.driver);
   const { ticketId, fileId } = await signupIds(partyId, token);
-  const party = await gdb.signupParty(partyId, ticketId);
-  if (!party) return json(c, 404, { error: "not_found" });
   const now = c.var.deps.now();
+  const party = await gdb.signupParty(partyId, ticketId, { email, typeId, now });
+  if (!party) return json(c, 404, { error: "not_found" });
   const env = envRecord(c);
   const done = async (status: number) => {
     await flushChangeLog(c.var.db, c.var.ledger, now, [ticketId]);
     const link = await signLink(env, { partyId, ticketId, version: 1 });
-    return json(c, status, { status: "requested", ticket_id: ticketId, link: linkPath(link) });
+    // Duplicate warning: the address's other pending/approved requests for this party.
+    const earlier = party.existing_party === null ? party.email_tickets : Math.max(0, party.email_tickets - 1);
+    return json(c, status, { status: "requested", ticket_id: ticketId, link: linkPath(link), earlier_requests: earlier,
+      ...(earlier > 0 ? { notice: `This email already has ${earlier} other request${earlier === 1 ? "" : "s"} for this party.` } : {}) });
   };
   // A retry of a sign-up that was already stored: finish its change log only.
   if (party.existing_party === partyId) return done(200);
@@ -167,8 +215,15 @@ guestRoutes.post("/parties/:party/signup", async (c) => {
   if (people > party.max_people_per_ticket) return json(c, 400, { error: "too_many_people", max_people_per_ticket: party.max_people_per_ticket });
   if (pf.screenshot === "required" && !shot) return json(c, 400, { error: "screenshot_required" });
   if (pf.screenshot === "none" && shot) return json(c, 400, { error: "screenshot_not_wanted" });
-  // Early answer when already full (the insert below re-checks in the same statement).
-  if (party.held + people > party.capacity) return json(c, 409, { error: "full" });
+  // Early answers (the insert below re-checks every rule in the same statement).
+  const reg = registration(party, now);
+  if (reg.state === "not_open_yet") return refusal(c, "registration_not_open");
+  if (reg.state === "closed") return refusal(c, "registration_closed");
+  if (party.max_tickets_per_email !== null && party.email_tickets >= party.max_tickets_per_email) return refusal(c, "email_limit");
+  if (party.has_types && typeId === null) return refusal(c, "type_required");
+  if (typeId !== null && !party.type_on_sale) return refusal(c, "type_unavailable");
+  if (party.type_left !== null && party.type_left < people) return refusal(c, "type_full");
+  if (party.held + people > party.capacity) return json(c, 409, { error: "full", message: REFUSAL.full.message });
   // Every files database past 70% (or unreadable): no new screenshots (fail closed; health alerts the owner).
   const target = shot ? await uploadTarget(c.env, now) : null;
   if (target && target.state !== "ok") {
@@ -188,12 +243,11 @@ guestRoutes.post("/parties/:party/signup", async (c) => {
   }
   const r = await gdb.signup({
     id: ticketId, partyId, people, name, email, answers: Object.keys(answers).length ? JSON.stringify(answers) : null,
-    screenshotKey, now, op: crypto.randomUUID(),
+    screenshotKey, typeId, now, op: crypto.randomUUID(),
   });
-  // A screenshot stored for a sign-up that then found the party full stays as an
-  // orphan row (no ticket points to it); it is never served (reads need the ticket).
-  if (r === "full") return json(c, 409, { error: "full" });
-  if (r === "refused") return json(c, 409, { error: "not_allowed" });
+  // A screenshot stored for a sign-up that was then refused stays as an orphan row
+  // (no ticket points to it); it is never served (reads need the ticket).
+  if (r !== "created" && r !== "already") return refusal(c, r);
   return done(r === "created" ? 201 : 200);
 });
 
@@ -257,6 +311,7 @@ guestRoutes.get("/ticket", async (c) => {
       status: released ? "released" : t.status,
       guest_name: t.guest_name,
       people: t.people,
+      type: t.type_name,
       group_note: groupNote(t.people),
       reject_reason: t.status === "rejected" ? t.reject_reason : null,
       on_hold: t.hold_at != null,

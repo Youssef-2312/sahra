@@ -50,8 +50,37 @@
     if (!r.ok) return show(info, j);
     document.getElementById("title").textContent = "Ticket request: " + j.party.name;
     siteKey = j.turnstile_site_key;
-    show(info, j.full ? "This party is full. Requests are closed." : "Places left: " + j.places_left +
+    var closedWhy = j.full ? "This party is full. Requests are closed."
+      : j.registration.state === "not_open_yet" ? "Requests open at " + new Date(j.registration.opens_at).toLocaleString() + "."
+        : j.registration.state === "closed" ? "Requests are closed." : null;
+    show(info, (closedWhy || "Places left: " + j.places_left +
+      (j.registration.closes_at ? "\nRequests close at " + new Date(j.registration.closes_at).toLocaleString() + "." : "") +
+      (j.max_tickets_per_email ? "\nAt most " + j.max_tickets_per_email + " ticket(s) per email address." : "")) +
       (siteKey ? "" : "\nThe bot check is not configured: requests are closed."));
+    // Ticket types: a request must name one when the party has any. Prices are EGP per person.
+    var sel = document.querySelector("#signup [name=type_id]");
+    var typeInfo = document.getElementById("type-info");
+    var byId = {};
+    j.types.forEach(function (t) {
+      byId[t.id] = t;
+      var o = document.createElement("option");
+      o.value = t.id;
+      o.disabled = !t.on_sale;
+      o.textContent = t.name + " - " + (t.price ? "EGP " + t.price + " per person" : "free") +
+        (t.sold_out ? " (sold out)" : !t.on_sale ? " (not on sale now)" : " (" + t.places_left + " left)");
+      sel.appendChild(o);
+    });
+    function describe() {
+      var t = byId[sel.value];
+      typeInfo.textContent = t ? [t.description, t.payment_instructions ? "How to pay: " + t.payment_instructions : null]
+        .filter(Boolean).join("\n") : (j.payment_instructions ? "How to pay: " + j.payment_instructions : "");
+    }
+    sel.addEventListener("change", describe);
+    document.getElementById("type-row").hidden = j.types.length === 0;
+    sel.required = j.types.length > 0;
+    var firstOnSale = j.types.filter(function (t) { return t.on_sale; })[0];
+    if (firstOnSale) sel.value = firstOnSale.id;
+    describe();
     var f = document.getElementById("signup");
     f.people.max = j.max_people_per_ticket;
     if (j.form.screenshot === "none") document.getElementById("shot-row").hidden = true;
@@ -78,7 +107,7 @@
       p.appendChild(l);
       qs.appendChild(p);
     });
-    f.hidden = j.full || !siteKey;
+    f.hidden = !!closedWhy || !siteKey;
     document.getElementById("resend").hidden = !siteKey;
     if (window.turnstile) window.sahraTurnstileReady();
   }
@@ -95,6 +124,7 @@
     fd.set("name", f.name.value);
     fd.set("email", f.email.value);
     fd.set("people", f.people.value);
+    if (f.type_id.value) fd.set("type_id", f.type_id.value);
     fd.set("answers", JSON.stringify(answers));
     fd.set("cf-turnstile-response", turnstile.getResponse(widgets.signup) || "");
     var sizeNote = "";
@@ -110,7 +140,7 @@
     turnstile.reset(widgets.signup);
     if (r.ok) {
       Sahra.store.del(tokenKey);
-      result.textContent = sizeNote + "Request received. Keep this link private and open it to see your ticket: ";
+      result.textContent = sizeNote + (j.notice ? j.notice + "\n" : "") + "Request received. Keep this link private and open it to see your ticket: ";
       var a = document.createElement("a");
       a.href = j.link;
       a.textContent = location.origin + j.link;

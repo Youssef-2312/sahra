@@ -21,7 +21,7 @@ import { api, FlakyLedger, guestParty, harness, openParty, scan, seedDoor, seedO
 
 const TABLES = ["platform_admins", "organisers", "organiser_invites", "platform_sessions",
   "parties", "staff", "invites", "sessions", "audit", "tickets", "scans", "outbox"];
-const DELETE_ORDER = ["sessions", "platform_sessions", "scans", "outbox", "audit", "tickets", "invites", "staff", "parties",
+const DELETE_ORDER = ["sessions", "platform_sessions", "scans", "outbox", "audit", "tickets", "ticket_types", "invites", "staff", "parties",
   "organiser_invites", "organisers", "platform_admins"];
 
 async function snapshot() {
