@@ -103,6 +103,65 @@ function turnstileAnswer(c: Ctx, r: "failed" | "not_configured" | "unavailable")
   return json(c, 403, { error: "bot_check_failed" });
 }
 
+/**
+ * The home page's party list (public; no place, no guest data). Kept in this
+ * isolate for a minute and cacheable by the browser for a minute, so a busy home
+ * page does not re-read the parties on every view.
+ */
+let listCache: { at: number; body: unknown } | null = null;
+const LIST_TTL_MS = 60_000;
+guestRoutes.get("/parties", async (c) => {
+  const now = c.var.deps.now();
+  if (!listCache || now - listCache.at >= LIST_TTL_MS || now < listCache.at) {
+    const rows = await new GuestDb(c.var.db.driver).listedParties(now);
+    listCache = { at: now, body: { parties: rows.map((p) => {
+      const notYet = p.registration_opens_at !== null && p.registration_opens_at > now;
+      const over = p.registration_closes_at !== null && p.registration_closes_at <= now;
+      const left = Math.max(0, p.capacity - p.held);
+      return {
+        id: p.id, name: p.name, starts_at: p.starts_at, ends_at: p.ends_at, time_zone: p.time_zone,
+        from_price: p.from_price, places_left: left,
+        state: left === 0 ? "full" : notYet ? "not_open_yet" : over ? "closed" : "open",
+        opens_at: notYet ? p.registration_opens_at : null,
+      };
+    }) } };
+  }
+  const res = json(c, 200, listCache.body);
+  res.headers.set("cache-control", "public, max-age=60");
+  return res;
+});
+
+/** Test hook: forget the cached list (tests run many parties in one isolate). */
+export function clearPartyListCache() {
+  listCache = null;
+}
+
+/**
+ * Status of the tickets this browser remembers (the home page cards). Body:
+ * { links: [signed link, ...] } (at most 20). Each link is checked before any
+ * database access; one read for all. A link that does not verify, or whose
+ * version was replaced, answers "invalid".
+ */
+guestRoutes.post("/tickets/status", async (c) => {
+  if (!sameOrigin(c, c.env.PUBLIC_ORIGIN)) return json(c, 403, { error: "bad_origin" });
+  if (await rateLimited(c.env.RL_AUTH, `status:${clientIp(c)}`)) return json(c, 429, { error: "rate_limited" });
+  const b = await readJson(c);
+  const links = Array.isArray(b?.links) ? b.links.filter((x: unknown) => typeof x === "string").slice(0, 20) as string[] : null;
+  if (!links) return json(c, 400, { error: "invalid_request" });
+  const env = envRecord(c);
+  const verified = await Promise.all(links.map((l) => verifyLink(env, l)));
+  const ids = [...new Set(verified.filter((v) => v !== null).map((v) => v!.ticketId))];
+  const rows = new Map((await new GuestDb(c.var.db.driver).ticketsForLinks(ids)).map((r) => [r.id, r]));
+  return json(c, 200, { tickets: links.map((link, i) => {
+    const v = verified[i];
+    const t = v ? rows.get(v.ticketId) : undefined;
+    if (!v || !t || t.party_id !== v.partyId || t.link_version !== v.version) return { link, status: "invalid" };
+    const status = t.used_at != null ? "used" : t.hold_at != null ? "on_hold"
+      : t.status === "approved" && t.released_at != null ? "released" : t.status;
+    return { link, status, party_id: t.party_id, party_name: t.party_name, starts_at: t.starts_at, time_zone: t.time_zone };
+  }) });
+});
+
 /** The public sign-up form: party name, questions, people per ticket, whether it is full. Read-only. */
 guestRoutes.get("/parties/:party", async (c) => {
   const partyId = c.req.param("party");

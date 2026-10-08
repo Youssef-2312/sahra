@@ -26,7 +26,7 @@ const junkPlatform = { "__Host-sahra_p": newToken() };
 const id = newId();
 
 // Read-only public pages that answer 200 without a session (still zero writes).
-const PUBLIC_READS = new Set(["public party page, existing party", "guest form"]);
+const PUBLIC_READS = new Set(["public party page, existing party", "guest form", "home party list", "remembered ticket statuses"]);
 const tid = "0123456789ABCDEF";
 // A party guests can sign up for (default form: screenshot required).
 const GP = "unauth-guests";
@@ -122,6 +122,8 @@ const cases: Case[] = [
   ["announce, junk session", "POST", "/api/party/announce", (h) => h.req("/api/party/announce", { method: "POST", headers: JSON_H, cookies: junkCookie, body: JSON.stringify({ op: newId(), subject: "Hi", body: "Hello" }) })],
   ["announce, no session", "POST", "/api/party/announce", (h) => h.req("/api/party/announce", { method: "POST", headers: JSON_H, body: JSON.stringify({ op: newId(), subject: "Hi", body: "Hello" }) })],
   ["party stats, junk session", "GET", "/api/party/stats", (h) => h.req("/api/party/stats", { cookies: junkCookie })],
+  ["home party list", "GET", "/api/guest/parties", (h) => h.req("/api/guest/parties")],
+  ["remembered ticket statuses", "POST", "/api/guest/tickets/status", (h) => h.req("/api/guest/tickets/status", { method: "POST", headers: JSON_H, body: JSON.stringify({ links: ["junk"] }) })],
   ["approve, no session", "POST", "/api/tickets/approve", (h) => h.req("/api/tickets/approve", { method: "POST", headers: JSON_H, body: JSON.stringify({ ids: [tid] }) })],
   ["platform sign-in start, wrong origin", "POST", "/api/auth/platform/start", (h) => h.req("/api/auth/platform/start", { method: "POST", headers: { origin: "https://evil.example" } })],
   ["platform sign-in start", "POST", "/api/auth/platform/start", (h) => h.req("/api/auth/platform/start", { method: "POST", headers: { origin: ORIGIN } })],

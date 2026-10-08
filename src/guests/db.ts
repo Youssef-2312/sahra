@@ -162,6 +162,33 @@ export class GuestDb {
     return row.why;
   }
 
+  /**
+   * The home page's list: parties with a start time, not switched off, and not
+   * over (their end, or 12 hours after the start). Public data only (name, times,
+   * places left, the lowest public price); never the place.
+   */
+  async listedParties(now: number) {
+    const r = await this.driver.all<{ id: string; name: string; starts_at: number; ends_at: number | null; time_zone: string | null;
+      capacity: number; held: number; registration_opens_at: number | null; registration_closes_at: number | null; from_price: number | null }>(
+      sql`SELECT p.id, p.name, p.starts_at, p.ends_at, p.time_zone, p.capacity, ${held(sql`p.id`)} AS held,
+          p.registration_opens_at, p.registration_closes_at,
+          (SELECT MIN(tt.price) FROM ticket_types tt WHERE tt.party_id = p.id AND tt.archived_at IS NULL AND tt.staff_only = 0) AS from_price
+        FROM parties p
+        WHERE p.disabled_at IS NULL AND p.starts_at IS NOT NULL AND COALESCE(p.ends_at, p.starts_at + 43200000) > ${now}
+        ORDER BY p.starts_at, p.id LIMIT 50`);
+    return r.results;
+  }
+
+  /** Several tickets named by verified links (the home page's remembered tickets), with their party's name. */
+  async ticketsForLinks(ids: string[]) {
+    if (!ids.length) return [];
+    const r = await this.driver.all<{ id: string; party_id: string; status: string; released_at: number | null; hold_at: number | null;
+      used_at: number | null; link_version: number; party_name: string; starts_at: number | null; time_zone: string | null }>(
+      sql`SELECT t.id, t.party_id, t.status, t.released_at, t.hold_at, t.used_at, t.link_version, p.name AS party_name, p.starts_at, p.time_zone
+        FROM tickets t JOIN parties p ON p.id = t.party_id WHERE t.id IN (${inList(ids)})`);
+    return r.results;
+  }
+
   /** The ticket named by a verified link, with its party's name. */
   async guestTicket(partyId: string, ticketId: string): Promise<GuestTicket | null> {
     const r = await this.driver.all<GuestTicket>(sql`SELECT t.id, t.party_id, p.name AS party_name, t.status, t.people, t.guest_name,
