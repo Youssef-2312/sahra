@@ -323,7 +323,8 @@ coordinator's session. Status: agreed, rejected or open.
 - Status: agreed
 - Owner's words: "also please make sure that this website isnt themed in certain halloween colors since I want it to be open all year long"
 - The site must look right in every season: no orange and black, no pumpkins, ghosts, blood red or spooky wording as the base style. Use a neutral, party-neutral palette (for example a dark charcoal base with one calm accent colour) that organisers' own flyers can sit on without clashing.
-- Applies to the hero photos (idea 20): choose and crop them so they do not read as a costume or Halloween event. The shared photos include a costume-party image and a venue with red hand-painted signs that look like blood; these should not be used as the hero, or at least not those parts. Prefer the dancing crowd photo, or a crop that avoids the signs.
+- Hero photos (idea 20): the brainstorm session suggested avoiding the costume-party image and the venue photo with the red signs. Owner decision: "using the hero photos is okay you can keep". All three photos stay as the owner supplied them. The site's own colours, text and icons still stay non-seasonal.
+- Colours: owner agreed to a dark charcoal base with one calm accent colour ("yea I agree with the dark charocal base with a calm accent colour that would be nice"). The exact accent colour is left to the coordinator to propose; keep text contrast high for phones in sunlight and in the dark.
 - Organisers can still theme their own party through their flyer and text (idea 21). That is their party, not the site.
 - Also keep the separate Halloween-26 project untouched; this is only about Sahra's look.
 - Needs: a colour and tone rule for the frontend build and the photo choice. Effort: none extra. Free-tier cost: none. Rule conflicts: none.
