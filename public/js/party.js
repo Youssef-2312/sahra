@@ -31,6 +31,12 @@
     form.elements.ends_at_local.value = local(party.ends_at, tz);
     form.elements.reveal_at_local.value = local(party.reveal_at, tz);
     form.elements.address_locked_at_local.value = local(party.address_locked_at, tz);
+    var em = party.emails || {};
+    var ef = document.getElementById("emails").elements;
+    ef.email_ticket_subject.value = em.ticket_subject || "";
+    ef.email_ticket_body.value = em.ticket_body || "";
+    ef.email_link_subject.value = em.link_subject || "";
+    ef.email_link_body.value = em.link_body || "";
   }
 
   // Retries an action that came back "pending" (change not yet recorded) with the same body.
@@ -42,6 +48,16 @@
     }
     return r;
   }
+
+  document.getElementById("emails").addEventListener("submit", async function (e) {
+    e.preventDefault();
+    var f = new FormData(e.target);
+    var body = {};
+    ["email_ticket_subject", "email_ticket_body", "email_link_subject", "email_link_body"]
+      .forEach(function (k) { body[k] = String(f.get(k) || "").trim() || null; });
+    show(await act("/api/party/details", body));
+    load();
+  });
 
   form.addEventListener("submit", async function (e) {
     e.preventDefault();

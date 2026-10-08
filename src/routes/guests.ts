@@ -20,7 +20,7 @@ import { flushChangeLog } from "../changelog";
 import { json, readJson, type AppEnv, type Ctx } from "../context";
 import { D1Driver } from "../db/driver";
 import { GuestDb } from "../guests/db";
-import { groupNote, linkEmail } from "../guests/emails";
+import { emailTemplates, groupNote, linkEmail } from "../guests/emails";
 import { checkAnswers, storedForm } from "../guests/form";
 import { linkPath, signLink, verifyLink } from "../guests/link";
 import { turnstileConfigured, verifyTurnstile } from "../guests/turnstile";
@@ -228,6 +228,7 @@ guestRoutes.post("/parties/:party/resend", async (c) => {
     await gdb.addLinkEmail(linkEmail({
       id, origin: c.env.PUBLIC_ORIGIN, partyId, partyName: tickets[0]!.party_name, to: email, links,
       ticketId: tickets.length === 1 ? tickets[0]!.id : null, now, createdBy: null,
+      templates: await emailTemplates(c.var.db.driver, partyId),
     }), tickets);
   }
   return json(c, 200, { status: "ok", message: "If this address has a ticket for this party, its link is on the way." });

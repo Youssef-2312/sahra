@@ -32,6 +32,15 @@
 <p><label><input name="notify_guests" type="checkbox"> Queue a notice to ticket holders (time or place change; sent only after approval)</label></p>
 <button>Save</button>
 </form>
+<h3>Guest emails</h3>
+<p>Leave a box empty to use Sahra's default text. Ticket email placeholders: {guest_name} {party_name} {link} {people_note} ({link} is required). Link email: {party_name} {links} ({links} is required). Plain text, no emojis.</p>
+<form id="emails">
+<p><label>Ticket email subject<br><input name="email_ticket_subject" size="60" maxlength="150"></label></p>
+<p><label>Ticket email text<br><textarea name="email_ticket_body" rows="8" cols="60" maxlength="2000"></textarea></label></p>
+<p><label>Ticket link email subject<br><input name="email_link_subject" size="60" maxlength="150"></label></p>
+<p><label>Ticket link email text<br><textarea name="email_link_body" rows="6" cols="60" maxlength="2000"></textarea></label></p>
+<button>Save emails</button>
+</form>
 <p><button id="reveal" type="button">Reveal now (manual mode)</button></p>
 
 <h2>Preview</h2>

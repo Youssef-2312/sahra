@@ -10,6 +10,7 @@ import { isTimeZone, zonedToUtc } from "./time";
 export const EDITABLE = [
   "name", "description", "starts_at", "ends_at", "time_zone", "venue_name", "address", "map_url", "rules",
   "payment_instructions", "capacity", "max_people_per_ticket", "address_mode", "reveal_at", "address_locked_at",
+  "email_ticket_subject", "email_ticket_body", "email_link_subject", "email_link_body",
 ] as const;
 export type EditableField = (typeof EDITABLE)[number];
 export type EditValues = Partial<Record<EditableField, string | number | null>>;
@@ -56,6 +57,14 @@ export function cleanMapUrl(v: unknown): string | null | undefined {
   if (u.protocol !== "https:" || u.username || u.password || !u.hostname.includes(".")) return undefined;
   return u.href.length <= 500 ? u.href : undefined;
 }
+
+/** [field, max length, multi-line, allowed placeholders, required placeholder] */
+export const EMAIL_FIELDS: readonly (readonly [EditableField, number, boolean, readonly string[], string | null])[] = [
+  ["email_ticket_subject", 150, false, ["party_name", "guest_name"], null],
+  ["email_ticket_body", 2000, true, ["guest_name", "party_name", "link", "people_note"], "link"],
+  ["email_link_subject", 150, false, ["party_name"], null],
+  ["email_link_body", 2000, true, ["party_name", "links"], "links"],
+];
 
 export type ParsedEdit = { ok: true; values: EditValues; notify: boolean } | { ok: false; error: string };
 
@@ -120,6 +129,19 @@ export function parseEdit(b: Record<string, unknown>): ParsedEdit {
     const v = b.max_people_per_ticket;
     if (typeof v !== "number" || !Number.isInteger(v) || v < 1 || v > MAX_PEOPLE_PER_TICKET) return bad("max_people_per_ticket");
     values.max_people_per_ticket = v;
+  }
+  // Owner-editable guest emails (src/guests/emails.ts). Only the listed
+  // placeholders; the body must contain the guest's link, so a custom text can
+  // never leave a guest without their ticket.
+  for (const [f, max, multiline, allowed, required] of EMAIL_FIELDS) {
+    if (!(f in b)) continue;
+    const s = text(b[f], max, multiline);
+    if (s === undefined) return bad(f);
+    if (s !== null) {
+      const names = [...s.matchAll(/\{([^{}]*)\}/g)].map((m) => m[1]!);
+      if (names.some((n) => !allowed.includes(n)) || (required && !names.includes(required))) return bad(f);
+    }
+    values[f] = s;
   }
   if ("notify_guests" in b && typeof b.notify_guests !== "boolean") return bad("notify_guests");
   if (Object.keys(values).length === 0) return { ok: false, error: "nothing_to_change" };

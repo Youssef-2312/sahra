@@ -316,3 +316,12 @@ describe("requests racing the loss of authority: completed before (and logged) o
     for (const i of ids) expect((await h.req("/api/platform/organisers", papi(b.s, i))).status).toBe(401);
   });
 });
+
+describe("a new party's time zone (owner decision)", () => {
+  it("is the creator's zone when Cloudflare reports one, else Cairo", async () => {
+    const h = await harness();
+    const { party } = await organiserWithParty(h, { s: undefined as unknown as Sess });
+    // Test requests carry no request.cf, so the default applies.
+    expect(await env.DB.prepare("SELECT time_zone FROM parties WHERE id = ?").bind(party).first("time_zone")).toBe("Africa/Cairo");
+  });
+});
