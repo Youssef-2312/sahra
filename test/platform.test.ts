@@ -394,7 +394,7 @@ describe("disabling", () => {
     const second = await seedPlatformSession(o.sub, h.clock);
     expect((await createParty(h, o.s)).status).toBe(200);
     const r = await h.req(`/api/platform/organisers/${o.id}/disable`, papi(a.s));
-    expect(await r.json()).toEqual({ status: "disabled" });
+    expect(await r.json()).toEqual({ status: "disabled", staff_disabled: 1 });
     expect(await env.LEDGER.prepare("SELECT COUNT(*) AS n FROM intents WHERE entity = 'organiser' AND entity_id = ?").bind(o.id).first("n")).toBe(1);
     expect((await logEntry("organiser", o.id, 2))!.state).toMatchObject({ last_action: "organiser_disabled" });
     for (const s of [o.s, second]) {
@@ -404,7 +404,7 @@ describe("disabling", () => {
     expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM platform_sessions WHERE google_sub = ? AND revoked_at IS NULL").bind(o.sub).first("n")).toBe(0);
     h.google.identity = { sub: o.sub, email: `${o.sub}@gmail.com` };
     expect((await platformLogin(h)).res.status).toBe(403);
-    expect(await (await h.req(`/api/platform/organisers/${o.id}/disable`, papi(a.s))).json()).toEqual({ status: "already" });
+    expect(await (await h.req(`/api/platform/organisers/${o.id}/disable`, papi(a.s))).json()).toMatchObject({ status: "already" });
     // A session of a removed site owner does nothing either.
     await env.DB.prepare("UPDATE platform_admins SET disabled_at = 1 WHERE id = ?").bind(a.id).run();
     expect((await h.req(`/api/platform/organisers/${o.id}/disable`, papi(a.s))).status).toBe(401);
@@ -546,7 +546,9 @@ describe("rows per request (measured locally)", () => {
       const other = await seedSiteOwner();
       await seedPlatformSession(other.sub, h.clock);
       await h.req(`/api/platform/site-owners/${other.id}/remove`, papi(a.s)); note("POST /api/platform/site-owners/:id/remove (1 session)");
-      await h.req(`/api/platform/organisers/${body.organiser_id}/disable`, papi(a.s)); note("POST /api/platform/organisers/:id/disable");
+      await h.req(`/api/platform/organisers/${body.organiser_id}/disable`, papi(a.s)); note("POST /api/platform/organisers/:id/disable (1 staff row)");
+      await h.req(`/api/platform/parties/${id}/owner-invite`, papi(a.s, { staff_id: newId(), invite_id: newId(), name: "New", email: "measure-new@gmail.com" }));
+      note("POST /api/platform/parties/:id/owner-invite");
     } finally {
       spy.mockRestore();
     }

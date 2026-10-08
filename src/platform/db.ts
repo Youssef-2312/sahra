@@ -162,18 +162,47 @@ export class PlatformDb {
       paudit(a.now, ownerId, "organiser_invited", "organiser", sql`SELECT id, rev FROM organisers WHERE id = ${a.organiserId} AND last_op = ${a.op}`),
       paudit(a.now, ownerId, "organiser_invite_created", "organiser_invite",
         sql`SELECT id, rev FROM organiser_invites WHERE id = ${a.inviteId} AND last_op = ${a.op}`),
-      sql`SELECT o.email, i.id AS invite_id FROM organisers o LEFT JOIN organiser_invites i ON i.id = ${a.inviteId} AND i.organiser_id = o.id
+      sql`SELECT o.email, i.id AS invite_id, ${ok} AS ok FROM organisers o LEFT JOIN organiser_invites i ON i.id = ${a.inviteId} AND i.organiser_id = o.id
         WHERE o.id = ${a.organiserId}`,
     ]);
     if (rs[0]!.meta.changes === 1) return "created" as const;
-    const row = rs[4]!.results[0] as undefined | { email: string; invite_id: string | null };
-    if (row && row.email === a.email && row.invite_id) return "already" as const;
+    const row = rs[4]!.results[0] as undefined | { email: string; invite_id: string | null; ok: number };
+    if (row && Number(row.ok) === 1 && row.email === a.email && row.invite_id) return "already" as const;
     return "rejected" as const;
   }
 
-  /** Disables an organiser: revokes their platform sessions and unused invitations. Their parties are not changed. */
+  /**
+   * Party staff rows of an organiser's Google account: every active staff row
+   * linked to that account (any party), plus, in the parties they created, any
+   * active row invited with their email but not yet linked.
+   */
+  private organiserStaff(organiserId: string): Sql {
+    return sql`SELECT st.id FROM staff st JOIN organisers o ON o.id = ${organiserId}
+      WHERE st.disabled_at IS NULL
+        AND ((o.google_sub IS NOT NULL AND st.google_sub = o.google_sub)
+          OR (st.party_id IN (SELECT id FROM parties WHERE organiser_id = o.id) AND st.invited_email = o.email))`;
+  }
+
+  /** Read-only: the staff rows switching off this organiser would disable (for the intents written first). */
+  async staffOfOrganiser(organiserId: string) {
+    const r = await this.driver.all<{ id: string; party_id: string }>(
+      sql`SELECT id, party_id FROM staff WHERE id IN (${this.organiserStaff(organiserId)})`,
+    );
+    return r.results;
+  }
+
+  /**
+   * Switches off an organiser, in one batch: the organiser row, every platform
+   * session of their Google account, their unused organiser invitations, and
+   * their management of parties: every party staff row of that account is
+   * disabled (sessions revoked, unused invitations revoked), audit rows. Their
+   * parties keep running for guests and other staff; a party left without an
+   * active owner gets one through ownerInvite (site owner).
+   */
   async disableOrganiser(hash: string, ownerId: string, organiserId: string, now: number, op: string) {
     const ok = siteOwnerValid(hash, ownerId, now);
+    const justDisabled = sql`EXISTS (SELECT 1 FROM organisers WHERE id = ${organiserId} AND last_op = ${op} AND disabled_at IS NOT NULL)`;
+    const disabledStaff = sql`SELECT id FROM staff WHERE last_op = ${op} AND last_action = 'staff_disabled'`;
     const rs = await this.driver.batch([
       sql`UPDATE organisers SET disabled_at = ${now}, disabled_by = ${ownerId}, rev = rev + 1, last_op = ${op}, last_action = 'organiser_disabled'
         WHERE id = ${organiserId} AND disabled_at IS NULL AND ${ok}`,
@@ -183,15 +212,74 @@ export class PlatformDb {
       sql`UPDATE organiser_invites SET revoked_at = ${now}, revoked_by = ${ownerId}, rev = rev + 1, last_op = ${op}, last_action = 'organiser_invite_revoked'
         WHERE organiser_id = ${organiserId} AND used_at IS NULL AND revoked_at IS NULL
           AND EXISTS (SELECT 1 FROM organisers WHERE id = ${organiserId} AND disabled_at IS NOT NULL)`,
+      // Their management of parties ends with the switch-off (same transaction).
+      sql`UPDATE staff SET disabled_at = ${now}, rev = rev + 1, last_op = ${op}, last_action = 'staff_disabled'
+        WHERE id IN (${this.organiserStaff(organiserId)}) AND ${justDisabled}`,
+      sql`UPDATE sessions SET revoked_at = ${now} WHERE revoked_at IS NULL AND staff_id IN (${disabledStaff})`,
+      sql`UPDATE invites SET revoked_at = ${now}, revoked_by = ${ownerId}, rev = rev + 1, last_op = ${op}, last_action = 'invite_revoked'
+        WHERE staff_id IN (${disabledStaff}) AND used_at IS NULL AND revoked_at IS NULL`,
       paudit(now, ownerId, "organiser_disabled", "organiser", sql`SELECT id, rev FROM organisers WHERE id = ${organiserId} AND last_op = ${op}`),
       paudit(now, ownerId, "organiser_invite_revoked", "organiser_invite",
         sql`SELECT id, rev FROM organiser_invites WHERE organiser_id = ${organiserId} AND last_op = ${op}`),
+      audit(now, ownerId, "staff_disabled", "staff", sql`SELECT party_id, id, rev FROM staff WHERE last_op = ${op} AND last_action = 'staff_disabled'`,
+        "organiser switched off"),
+      audit(now, ownerId, "invite_revoked", "invite", sql`SELECT party_id, id, rev FROM invites WHERE last_op = ${op} AND last_action = 'invite_revoked'`,
+        "organiser switched off"),
       sql`SELECT disabled_at, ${ok} AS ok FROM organisers WHERE id = ${organiserId}`,
+      sql`SELECT id, party_id FROM staff WHERE last_op = ${op} AND last_action = 'staff_disabled'`,
     ]);
-    const row = rs[5]!.results[0] as undefined | { disabled_at: number | null; ok: number };
-    if (!row || Number(row.ok) !== 1) return "rejected" as const;
-    if (rs[0]!.meta.changes === 1) return "disabled" as const;
-    return row.disabled_at != null ? ("already" as const) : ("rejected" as const);
+    const row = rs[10]!.results[0] as undefined | { disabled_at: number | null; ok: number };
+    const staff = rs[11]!.results as { id: string; party_id: string }[];
+    if (!row || Number(row.ok) !== 1) return { status: "rejected" as const, staff };
+    if (rs[0]!.meta.changes === 1) return { status: "disabled" as const, staff };
+    return { status: row.disabled_at != null ? ("already" as const) : ("rejected" as const), staff };
+  }
+
+  /**
+   * Appoints an owner for a party that has no active (linked) owner, e.g. after
+   * its organiser was switched off: a staff row (role owner, invited_email) and
+   * a Google invitation, as Db.createGoogleInvite does for party owners, in one
+   * batch with audit rows. The site owner check and the "no active owner" rule
+   * are inside the INSERT.
+   */
+  async ownerInvite(hash: string, ownerId: string, partyId: string, a: {
+    staffId: string; inviteId: string; name: string; email: string; now: number; expiresAt: number; op: string;
+  }) {
+    const ok = siteOwnerValid(hash, ownerId, a.now);
+    const noOwner = sql`NOT EXISTS (SELECT 1 FROM staff o WHERE o.party_id = ${partyId} AND o.role = 'owner'
+      AND o.disabled_at IS NULL AND o.google_sub IS NOT NULL)`;
+    const rs = await this.driver.batch([
+      sql`INSERT INTO staff (id, party_id, name, role, invited_email, created_at, created_by, last_op, last_action)
+        SELECT ${a.staffId}, ${partyId}, ${a.name}, 'owner', ${a.email}, ${a.now}, ${ownerId}, ${a.op}, 'staff_added'
+        WHERE ${ok} AND ${noOwner}
+          AND EXISTS (SELECT 1 FROM parties WHERE id = ${partyId} AND disabled_at IS NULL)
+          AND NOT EXISTS (SELECT 1 FROM staff x WHERE x.id = ${a.staffId})
+          AND NOT EXISTS (SELECT 1 FROM staff x WHERE x.party_id = ${partyId} AND x.invited_email = ${a.email} AND x.disabled_at IS NULL)`,
+      sql`INSERT INTO invites (id, kind, party_id, staff_id, role, created_by, created_at, expires_at, last_op, last_action)
+        SELECT ${a.inviteId}, 'google', ${partyId}, ${a.staffId}, 'owner', ${ownerId}, ${a.now}, ${a.expiresAt}, ${a.op}, 'invite_created'
+        WHERE EXISTS (SELECT 1 FROM staff WHERE id = ${a.staffId} AND last_op = ${a.op})
+          AND NOT EXISTS (SELECT 1 FROM invites WHERE id = ${a.inviteId})`,
+      audit(a.now, ownerId, "staff_added", "staff", sql`SELECT party_id, id, rev FROM staff WHERE id = ${a.staffId} AND last_op = ${a.op}`,
+        "owner appointed by site owner"),
+      audit(a.now, ownerId, "invite_created", "invite", sql`SELECT party_id, id, rev FROM invites WHERE id = ${a.inviteId} AND last_op = ${a.op}`,
+        "owner appointed by site owner"),
+      sql`SELECT ${ok} AS ok, p.id AS party, p.disabled_at, ${noOwner} AS no_owner,
+          st.party_id AS staff_party, st.invited_email, st.role, i.id AS invite_id
+        FROM (SELECT 1) LEFT JOIN parties p ON p.id = ${partyId}
+          LEFT JOIN staff st ON st.id = ${a.staffId}
+          LEFT JOIN invites i ON i.id = ${a.inviteId} AND i.staff_id = st.id`,
+    ]);
+    const row = rs[4]!.results[0] as {
+      ok: number; party: string | null; disabled_at: number | null; no_owner: number;
+      staff_party: string | null; invited_email: string | null; role: string | null; invite_id: string | null;
+    };
+    if (Number(row.ok) !== 1) return "rejected" as const;
+    if (rs[0]!.meta.changes === 1) return "created" as const;
+    if (row.staff_party === partyId && row.invited_email === a.email && row.role === "owner" && row.invite_id) return "already" as const;
+    if (!row.party) return "not_found" as const;
+    if (row.disabled_at != null) return "party_disabled" as const;
+    if (!Number(row.no_owner)) return "has_owner" as const;
+    return "rejected" as const;
   }
 
   async listOrganisers(hash: string, ownerId: string, now: number) {
@@ -216,7 +304,11 @@ o.party_limit, ${activeParties(sql`o.id`)} AS active_parties,
     const rs = await this.driver.batch([
       sql`SELECT p.id, p.name, p.capacity, p.created_at, p.disabled_at, p.admission_state, p.organiser_id, o.name AS organiser_name,
           (SELECT COUNT(*) FROM staff st WHERE st.party_id = p.id AND st.disabled_at IS NULL) AS staff,
-          (SELECT COUNT(*) FROM sessions s WHERE s.party_id = p.id AND s.revoked_at IS NULL AND s.expires_at > ${now}) AS active_sessions
+          (SELECT COUNT(*) FROM sessions s WHERE s.party_id = p.id AND s.revoked_at IS NULL AND s.expires_at > ${now}) AS active_sessions,
+          (SELECT COUNT(*) FROM staff ow WHERE ow.party_id = p.id AND ow.role = 'owner' AND ow.disabled_at IS NULL
+            AND ow.google_sub IS NOT NULL) AS active_owners,
+          (SELECT COUNT(*) FROM staff ow WHERE ow.party_id = p.id AND ow.role = 'owner' AND ow.disabled_at IS NULL
+            AND ow.google_sub IS NULL) AS pending_owner_invites
         FROM parties p LEFT JOIN organisers o ON o.id = p.organiser_id WHERE p.id != ${PLATFORM} AND ${ok} ORDER BY p.created_at`,
       sql`SELECT party_id, status, COUNT(*) AS n FROM tickets WHERE ${ok} GROUP BY party_id, status`,
       sql`SELECT party_id, status, COUNT(*) AS n FROM outbox WHERE ${ok} GROUP BY party_id, status`,
@@ -231,7 +323,9 @@ o.party_limit, ${activeParties(sql`o.id`)} AS active_parties,
       }
     }
     return {
-      parties: (rs[0]!.results as { id: string }[]).map((p) => ({ ...p, tickets: tickets.get(p.id) ?? {}, outbox: outbox.get(p.id) ?? {} })),
+      parties: (rs[0]!.results as { id: string; active_owners: number }[]).map((p) => ({
+        ...p, no_active_owner: Number(p.active_owners) === 0, tickets: tickets.get(p.id) ?? {}, outbox: outbox.get(p.id) ?? {},
+      })),
     };
   }
 

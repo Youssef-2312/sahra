@@ -89,12 +89,52 @@ platformRoutes.post("/organisers/:id/disable", requirePlatform(["site_owner"]), 
   const p = c.var.platform;
   const now = c.var.deps.now();
   const op = newId();
-  // Losing this in a recovery would give the organiser access back: intent first.
+  // Losing this in a recovery would give the organiser (and their party
+  // management) back: intents first, for the organiser and each staff row.
   await recordIntent(c.var.ledger, op, PLATFORM, "organiser_disabled", [{ entity: "organiser", id }], now);
+  const intended = await c.var.pdb.staffOfOrganiser(id);
+  await recordStaffIntents(c, op, intended, now);
   const r = await c.var.pdb.disableOrganiser(p.hash, p.info.site_owner_id!, id, now, op);
-  if (r === "rejected") return j(c, 409, { error: "not_allowed" });
+  if (r.status === "rejected") return j(c, 409, { error: "not_allowed" });
+  // A staff row created between the read and the batch (e.g. a party created at
+  // that moment) was disabled too; its intent is written now, before confirming.
+  const known = new Set(intended.map((x) => x.id));
+  await recordStaffIntents(c, op, r.staff.filter((x) => !known.has(x.id)), now);
   await flushChangeLog(c.var.db, c.var.ledger, now);
-  return j(c, 200, { status: r });
+  return j(c, 200, { status: r.status, staff_disabled: r.staff.length });
+});
+
+async function recordStaffIntents(c: PCtx, op: string, rows: { id: string; party_id: string }[], now: number) {
+  const byParty = new Map<string, { entity: string; id: string }[]>();
+  for (const x of rows) byParty.set(x.party_id, [...(byParty.get(x.party_id) ?? []), { entity: "staff", id: x.id }]);
+  for (const [partyId, targets] of byParty) await recordIntent(c.var.ledger, op, partyId, "staff_disabled", targets, now);
+}
+
+/**
+ * Appoint an owner for a party with no active owner (for example after its
+ * organiser was switched off): a Google owner invitation, 14 days, logged and
+ * audited. The browser supplies the ids, so a retry is recognized.
+ */
+platformRoutes.post("/parties/:id/owner-invite", requirePlatform(["site_owner"]), async (c) => {
+  const partyId = c.req.param("id");
+  const b = await readJson(c as never);
+  const name = cleanName(b?.name);
+  const email = typeof b?.email === "string" ? normalizeEmail(b.email) : null;
+  if (!PARTY_ID.test(partyId) || !b || !isUuid(b.staff_id) || !isUuid(b.invite_id) || !name || !email) {
+    return j(c, 400, { error: "invalid_request" });
+  }
+  const p = c.var.platform;
+  const now = c.var.deps.now();
+  const expiresAt = now + CONFIG.inviteMaxHours * 3600_000;
+  const r = await c.var.pdb.ownerInvite(p.hash, p.info.site_owner_id!, partyId, {
+    staffId: b.staff_id, inviteId: b.invite_id, name, email, now, expiresAt, op: newId(),
+  });
+  if (r === "not_found") return j(c, 404, { error: "not_found" });
+  if (r === "has_owner") return j(c, 409, { error: "party_has_an_active_owner" });
+  if (r === "party_disabled") return j(c, 409, { error: "party_disabled" });
+  if (r === "rejected") return j(c, 409, { error: "not_allowed_or_already_invited" });
+  await flushChangeLog(c.var.db, c.var.ledger, now);
+  return j(c, 200, { status: r, email, expires_at: expiresAt });
 });
 
 platformRoutes.get("/parties", requirePlatform(["site_owner"]), async (c) => {
