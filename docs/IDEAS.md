@@ -342,3 +342,4 @@ coordinator's session. Status: agreed, rejected or open.
 - Needs: a visual style guide for the coordinator's frontend build. Effort: no extra screens.
 - Free-tier cost: none (static pages; no chart library)
 - Rule conflicts: none; colour kept for meaning only (green good, red bad, amber uncertain).
+- Which one: owner says "its dashboard 2" (the efferd block numbered dashboard 2 on efferd.com/blocks/dashboard; dashboards 1 to 5 are listed as free, but the licence terms were not visible, so the coordinator must check them before using anything beyond the look; inspiration only).
