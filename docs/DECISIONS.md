@@ -307,3 +307,94 @@ Chosen extras (numbers from the brainstorm):
 - After a restore, audit rows and outbox rows newer than the restore point are
   lost (the change log keeps the history); emails may be sent twice, which is
   harmless (every email links to the same ticket page).
+## Workstream A: party details, address modes and reveal
+
+**Built** (branch `claude/p4-a-party-details`):
+
+- `migrations/0005_party_details.sql`: additive columns on `parties` (description,
+  starts_at, ends_at, time_zone, venue_name, address, map_url, rules,
+  payment_instructions, address_mode, reveal_at, revealed_at, address_locked_at). No
+  new index. Existing parties default to `address_mode = 'manual'` with nothing
+  revealed (the most closed mode). `parties` was already a logged entity, so the
+  change log entry (`SELECT *`) now carries the new columns with no change to
+  `Db.unlogged()`.
+- `src/party/details.ts`: `visiblePartyDetails(party, viewer, now)`, pure, with
+  `viewer = { kind: "public" } | { kind: "ticket", status, released, onHold }`.
+  "The place" is venue name + address + map link, hidden together (venue name is
+  hidden too, because it can give the place away). Shown only in `public` mode, or
+  to an approved, released, not-on-hold ticket in `with_ticket`, `at_time` from
+  `reveal_at` on (UTC instants; the zone never matters), or `manual` once
+  "Reveal now" was pressed. Otherwise the three are null and
+  `reveal = { mode, at? (at_time only), waiting_for: "ticket" | "time" | "owner" }`
+  for the countdown. Every view is built from an allow-list. Signature is stable
+  for workstream C.
+- `src/party/time.ts`: IANA zone check (offsets like "+02:00" refused), local wall
+  time to UTC (`*_local` fields, "YYYY-MM-DDTHH:MM" in the given zone; a time
+  skipped by a DST change is refused, a repeated one takes the earlier instant),
+  formatting for emails.
+- `src/routes/party.ts` (`/api/party`):
+  - `GET /` owner/admin: all details and settings; door: name, times, place
+    (always, whatever the mode).
+  - `POST /details` owner/admin + CSRF: only the fields sent change; `null` clears.
+    Unknown fields, emojis, control characters, non-https map links (or with
+    user:password) are refused. Inside the UPDATE statement: session valid; end
+    after start; `at_time` needs a reveal time; once `address_locked_at` has passed,
+    venue/address/map link and the lock itself cannot change (other fields can);
+    a new capacity must be >= places held (people on pending + approved tickets).
+    A request that changes nothing writes nothing (so a retry after "pending" only
+    completes the change log write). rev + last_op + audit + `flushChangeLog`.
+  - `POST /reveal` owner/admin, manual mode only, idempotent.
+  - `GET /preview` owner/admin, read-only: what a public or ticket viewer would see.
+  - `GET /public/:id` no session, one primary-key read, zero writes.
+- "Notify guests" (`notify_guests: true` with a time or place change): one outbox
+  row per approved, released ticket with an email (kind `party_notice`,
+  `awaiting_approval`, plain text) in the same batch, via one `INSERT ... SELECT`
+  (a statement per guest would hit D1's 50 queries per request). Ids are
+  `notice:<op>:<ticket>`, so an edit can never queue a guest twice. Capped at 1,000
+  rows per edit; the answer reports `notices_queued` and `notices_not_queued`.
+  The text never contains the place (guests may not be allowed to see it; it points
+  to the ticket page), and shows new times in the party's zone.
+- Test page `public/party.html`: edit, Reveal now, preview public and ticket views.
+- Tests `test/party.test.ts` (23) + 8 cases in `test/unauth.test.ts`.
+
+**Measured locally** (workerd, from the request log line; rows read include the
+shared test database's other rows, see below):
+
+| Request | D1 queries | rows read | rows written (main) | ledger rows |
+|---|---|---|---|---|
+| public party page | 1 | 1 | 0 | 0 |
+| GET details (door) | 2 | 4 | 0 | 0 |
+| edit, any fields (no capacity) | 5 | 20 | 3 (party, audit, logged_rev) | 1 |
+| edit repeated / retry with nothing new | 4 | 18 | 0 | 0 |
+| edit capacity, accepted | 5 | 32 | 3 | 1 |
+| edit capacity, refused (below held) | 2 | 18 | 0 | 0 |
+| edit with notice, 2 guests | 6 | 71 | 5 (3 + 1 per guest) | 1 |
+| reveal now, repeat | 3 | 32 | 0 | 0 |
+
+Rows read grow with table sizes: `flushChangeLog` scans parties/staff/invites for
+`rev > logged_rev` (existing behaviour), and a capacity edit or a notice reads
+every ticket row, because `tickets` has no index on `party_id` (0002). Only edits
+pay this, never the public page or the scan path. If workstream C adds an index on
+`tickets(party_id, ...)`, these reads drop to the party's own tickets.
+
+**What local tests cannot prove:** D1's real limits on a single `INSERT ... SELECT`
+of 1,000 rows (time, statement size) and real CPU time of the routes (Intl time zone
+formatting runs only on edits with local times or a notice, not on the public
+page); that workerd's ICU time zone data matches the browser's; the test page by
+hand in a browser.
+
+**Owner / coordinator to decide:**
+
+- Disabled parties (workstream B): the public page should answer 404 for them;
+  `GET /api/party/public/:id` does not know about disabling yet.
+- Notices link to "your ticket page"; the signed link per guest belongs to
+  workstream C and could be added to each row's text then.
+- Approving and sending `party_notice` rows (outbox sender, approval screen) is
+  not built here.
+- Edit history page: the audit rows (`party_edited`, detail = changed field names)
+  and the change log hold it, but neither has an index by party; a history view
+  needs one (a few rows written per change) or reads the whole table.
+- Whether a manual reveal should be undone when the mode changes away and back
+  (today `revealed_at` stays set once pressed).
+- Address edits and reveals do not write a change intent (src/changes.ts): losing
+  one in a recovery hides or reverts the place, it never opens access to a ticket.
