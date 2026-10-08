@@ -109,3 +109,16 @@ coordinator's session. Status: agreed, rejected or open.
 - Effort: medium
 - Free-tier cost: none beyond scans already counted
 - Rule conflicts: none; consistent with fail-closed. No emojis: colours, words, sound and vibration only.
+
+## 8. Scanner: "Find guest" and manual admit
+
+- Status: agreed
+- Owner's words: "yes"
+- For guests whose QR will not scan (cracked screen, dead phone): a "Find guest" button on the scanner. Staff type a name, see matches and status.
+  - not yet used: staff can admit by hand through the same single-redemption path as a scan, so a ticket still can never be admitted twice;
+  - already used: shows when and where, like a scan.
+- Manual admits are marked "manual" with the staff member who did it, so the organiser can review them afterwards (list or filter in the dashboard).
+- Needs: a manual-admit action on the server that reuses the scan redemption rules (not a separate shortcut); a "manual" flag on the scan record; a review list. Builds on the staff search already being built.
+- Effort: medium
+- Free-tier cost: same as a scan (2 rows main + 1 ledger row); searches are reads
+- Rule conflicts: the worst-failure rule applies. It must use the same atomic redemption, check the party is open and not paused, and fail closed (amber) if the ledger write cannot be confirmed. If it cannot meet that, do not build it.
