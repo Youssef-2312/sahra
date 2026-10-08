@@ -254,8 +254,8 @@ describe("approval queue, release, screenshots", () => {
       [ids[0]!]: "already", [ids[1]!]: "done", [ids[2]!]: "done", [ids[3]!]: "done", [ids[4]!]: "refused",
     });
     const rlBulk = lastReq();
-    // Session check + per-party counter (src/limits/) + read for the emails + the release batch + change log (2).
-    expect(rlBulk.d1_queries).toBe(apOne.d1_queries + 2);
+    // Session check + per-party counter (src/limits/) + the party's email texts + read for the emails + the release batch + change log (2).
+    expect(rlBulk.d1_queries).toBe(apOne.d1_queries + 3);
     for (const [i, id] of ids.entries()) {
       const rows = await outbox(id);
       expect(rows, `ticket ${i}`).toHaveLength(i < 4 ? 1 : 0);
@@ -562,5 +562,39 @@ describe("static page headers", () => {
     // Two rules of two mentions each, plus the comment above them.
     expect(h.match(/challenges\.cloudflare\.com/g)).toHaveLength(5);
     expect(h).toMatch(/^\/\*\n  Content-Security-Policy: default-src 'none'; script-src 'self'; /m);
+  });
+});
+
+describe("owner-editable guest emails", () => {
+  it("an owner rewrites the ticket email with placeholders; the link is required; defaults come back when cleared", async () => {
+    const h = await harness();
+    const { party, os } = await guestParty(h);
+    const edit = (b: Record<string, unknown>) => h.req("/api/party/details", api(os, b));
+    // The link placeholder is required; unknown placeholders and emojis are refused.
+    expect((await edit({ email_ticket_body: "Hi {guest_name}, see you there" })).status).toBe(400);
+    expect((await edit({ email_ticket_body: "Hi {guest_name}: {link} {secret}" })).status).toBe(400);
+    expect((await edit({ email_ticket_body: "Hi {guest_name} \u{1F389} {link}" })).status).toBe(400);
+    const body = "Ahlan {guest_name}!\n\nYou're in for {party_name}. Your QR:\n{link}\n\n{people_note}\n\nSee you at the door.";
+    expect((await edit({ email_ticket_subject: "{party_name}: you're in", email_ticket_body: body })).status).toBe(200);
+
+    const s = await signup(h, party, { name: "Sara M", email: "sara@example.com", people: 2 });
+    const id = s.body.ticket_id!;
+    await h.req("/api/tickets/approve", api(os, { ids: [id] }));
+    await h.req("/api/tickets/release", api(os, { ids: [id] }));
+    const row = (await env.DB.prepare("SELECT subject, body_text FROM outbox WHERE kind = 'ticket_released' AND ticket_id = ?").bind(id).first<{ subject: string; body_text: string }>())!;
+    expect(row.subject).toBe(`Party ${party}: you're in`);
+    expect(row.body_text).toContain("Ahlan Sara M!");
+    expect(row.body_text).toMatch(/\/ticket\.html#t=T1\./);
+    expect(row.body_text).toContain("This QR admits 2 people together; arrive together.");
+    // Cleared: back to the default text.
+    expect((await edit({ email_ticket_subject: null, email_ticket_body: null })).status).toBe(200);
+    const s2 = await signup(h, party, { email: "omar@example.com" });
+    await h.req("/api/tickets/approve", api(os, { ids: [s2.body.ticket_id] }));
+    await h.req("/api/tickets/release", api(os, { ids: [s2.body.ticket_id] }));
+    const def = await env.DB.prepare("SELECT subject FROM outbox WHERE kind = 'ticket_released' AND ticket_id = ?").bind(s2.body.ticket_id).first<string>("subject");
+    expect(def).toBe(`Your ticket for Party ${party}`);
+    // The change log holds the edit (a party entity), so a recovery keeps it.
+    const logged = await env.LEDGER.prepare("SELECT COUNT(*) AS n FROM change_log WHERE entity = 'party' AND entity_id = ? AND state LIKE '%Ahlan%'").bind(party).first("n");
+    expect(Number(logged)).toBeGreaterThan(0);
   });
 });

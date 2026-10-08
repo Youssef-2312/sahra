@@ -18,7 +18,7 @@ import { json, readJson, requireAuth, type AppEnv, type Ctx } from "../context";
 import { D1Driver } from "../db/driver";
 import { TicketDb } from "../db/tickets";
 import { GuestDb, MAX_BULK } from "../guests/db";
-import { linkEmail, releasedEmail } from "../guests/emails";
+import { emailTemplates, linkEmail, releasedEmail } from "../guests/emails";
 import { parseForm, storedForm } from "../guests/form";
 import { linkPath, signLink } from "../guests/link";
 import { isBase32, isUuid, newId } from "../lib/crypto";
@@ -170,12 +170,13 @@ ticketRoutes.post("/release", requireAuth(MANAGERS), async (c) => {
   const gdb = new GuestDb(c.var.db.driver);
   const env = envRecord(c);
   const emails: OutboxRow[] = [];
+  const templates = await emailTemplates(c.var.db.driver, sess.partyId);
   for (const t of await gdb.releasable(sess, ids, now)) {
     if (!t.guest_email) continue;
     const link = await signLink(env, { partyId: sess.partyId, ticketId: t.id, version: t.link_version });
     emails.push(releasedEmail({
       origin: c.env.PUBLIC_ORIGIN, partyId: sess.partyId, partyName: t.party_name, ticketId: t.id, to: t.guest_email,
-      guestName: t.guest_name, people: t.people, link, now, actor,
+      guestName: t.guest_name, people: t.people, link, now, actor, templates,
     }));
   }
   const results = await gdb.release(sess, ids, emails, now, actor, newId());
@@ -239,7 +240,7 @@ ticketRoutes.post("/:id/transfer", requireAuth(MANAGERS), async (c) => {
     const link = await signLink(env, { partyId: sess.partyId, ticketId: id, version });
     const to = email ?? t.guest_email;
     const mail = to ? linkEmail({ id: newId(), origin: c.env.PUBLIC_ORIGIN, partyId: sess.partyId, partyName: t.party_name, to,
-      links: [link], ticketId: id, now, createdBy: actor }) : null;
+      links: [link], ticketId: id, now, createdBy: actor, templates: await emailTemplates(c.var.db.driver, sess.partyId) }) : null;
     await recordIntent(c.var.ledger, op, sess.partyId, "name_transferred", [{ entity: "ticket", id }], now);
     if (!(await gdb.transfer(sess, { id, name, email, fromLinkVersion: t.link_version, linkEmail: mail }, now, actor, op))) {
       return json(c, 409, { error: "not_allowed" });

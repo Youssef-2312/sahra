@@ -29,6 +29,11 @@ export interface PartyDetailsRow {
   reveal_at: number | null;
   revealed_at: number | null;
   address_locked_at: number | null;
+  /** Owner-editable guest emails (NULL = default text); staff view only, never public. */
+  email_ticket_subject?: string | null;
+  email_ticket_body?: string | null;
+  email_link_subject?: string | null;
+  email_link_body?: string | null;
 }
 
 /**
@@ -128,5 +133,10 @@ export function staffView(p: PartyDetailsRow, now: number) {
     address_mode: mode(p.address_mode), reveal_at: p.reveal_at, revealed_at: p.revealed_at,
     address_locked_at: p.address_locked_at,
     address_locked: p.address_locked_at !== null && p.address_locked_at <= now,
+    emails: {
+      ticket_subject: p.email_ticket_subject ?? null, ticket_body: p.email_ticket_body ?? null,
+      link_subject: p.email_link_subject ?? null, link_body: p.email_link_body ?? null,
+      placeholders: { ticket: ["{guest_name}", "{party_name}", "{link}", "{people_note}"], link: ["{party_name}", "{links}"] },
+    },
   };
 }

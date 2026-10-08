@@ -13,6 +13,7 @@
 // the control object changes.
 
 import { Hono } from "hono/tiny";
+import { DEFAULT_TIME_ZONE, isTimeZone } from "../party/time";
 import { normalizeEmail } from "../auth/google";
 import { flushChangeLog } from "../changelog";
 import { recordIntent } from "../changes";
@@ -287,8 +288,12 @@ platformRoutes.post("/parties", requirePlatform(["organiser"]), async (c) => {
   }
   const p = c.var.platform;
   const now = c.var.deps.now();
+  // Default time zone: the creator's, from their connection (Cloudflare's request.cf),
+  // else Cairo. The owner can change it on the party page.
+  const cfZone = (c.req.raw as Request & { cf?: { timezone?: unknown } }).cf?.timezone;
+  const timeZone = isTimeZone(cfZone) ? (cfZone as string) : DEFAULT_TIME_ZONE;
   const r = await c.var.pdb.createParty(p.hash, p.info.organiser_id!, {
-    partyId: b.id, name, capacity, staffId: b.staff_id, now, op: newId(),
+    partyId: b.id, name, capacity, staffId: b.staff_id, now, op: newId(), timeZone,
   });
   if (r === "forbidden") return j(c, 403, { error: "forbidden" });
   if (r === "limit") return j(c, 409, { error: "party_limit_reached" });

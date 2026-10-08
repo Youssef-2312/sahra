@@ -70,3 +70,6 @@ export function zonedToUtc(local: unknown, tz: string): number | null {
     .sort((a, b) => a - b);
   return candidates[0] ?? null;
 }
+
+/** A new party's zone when the creator's connection does not say (owner decision: Egypt). */
+export const DEFAULT_TIME_ZONE = "Africa/Cairo";

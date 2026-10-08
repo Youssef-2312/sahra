@@ -7,7 +7,7 @@
 
 import type { SqlDriver } from "../db/driver";
 import { sql, join } from "../db/sql";
-import { releasedEmail } from "../guests/emails";
+import { emailTemplates, releasedEmail } from "../guests/emails";
 import { signLink } from "../guests/link";
 import { outboxInsert } from "../outbox";
 
@@ -28,12 +28,14 @@ export async function resyncReleaseEmails(env: Record<string, unknown> & { PUBLI
         WHERE kind = 'ticket_released' AND ticket_id IN (${join(tickets.map((t) => sql`${t.id}`), ", ")})`)).results.map((r) => r.ticket_id))
     : new Set<string>();
   const writes = [];
+  const templates = new Map<string, Awaited<ReturnType<typeof emailTemplates>>>();
   for (const t of tickets) {
     if (have.has(t.id)) continue;
+    if (!templates.has(t.party_id)) templates.set(t.party_id, await emailTemplates(main, t.party_id));
     const link = await signLink(env, { partyId: t.party_id, ticketId: t.id, version: t.link_version });
     writes.push(outboxInsert(releasedEmail({
       origin: env.PUBLIC_ORIGIN, partyId: t.party_id, partyName: t.party_name, ticketId: t.id, to: t.guest_email,
-      guestName: t.guest_name, people: t.people, link, now, actor: "recovery",
+      guestName: t.guest_name, people: t.people, link, now, actor: "recovery", templates: templates.get(t.party_id),
     }), sql`1`));
   }
   const done = tickets.length < BATCH;

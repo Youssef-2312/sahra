@@ -525,11 +525,11 @@ o.party_limit, ${activeParties(sql`o.id`)} AS active_parties,
    * Google account) in ONE batch, with audit rows. The organiser check and the
    * per-organiser limit are inside the INSERT.
    */
-  async createParty(hash: string, organiserId: string, a: { partyId: string; name: string; capacity: number; staffId: string; now: number; op: string }) {
+  async createParty(hash: string, organiserId: string, a: { partyId: string; name: string; capacity: number; staffId: string; now: number; op: string; timeZone?: string }) {
     const ok = organiserValid(hash, organiserId, a.now);
     const rs = await this.driver.batch([
-      sql`INSERT INTO parties (id, name, capacity, created_at, organiser_id, last_op, last_action)
-        SELECT ${a.partyId}, ${a.name}, ${a.capacity}, ${a.now}, ${organiserId}, ${a.op}, 'party_created'
+      sql`INSERT INTO parties (id, name, capacity, created_at, organiser_id, time_zone, last_op, last_action)
+        SELECT ${a.partyId}, ${a.name}, ${a.capacity}, ${a.now}, ${organiserId}, ${a.timeZone ?? null}, ${a.op}, 'party_created'
         WHERE ${ok} AND NOT EXISTS (SELECT 1 FROM parties WHERE id = ${a.partyId})
           AND ${activeParties(organiserId)} < (SELECT party_limit FROM organisers WHERE id = ${organiserId})`,
       sql`INSERT INTO staff (id, party_id, name, role, google_sub, invited_email, created_at, created_by, last_op, last_action)
