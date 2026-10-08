@@ -31,9 +31,9 @@
     s.by_type.forEach(function (t) {
       lines.push("  " + t.name + ": held " + (t.pending + t.approved) + (t.quantity !== null ? " of " + t.quantity : "") + ", inside " + t.admitted);
     });
-    if (s.check_ins_per_10_min.length) {
-      lines.push("Check-ins per 10 minutes:");
-      s.check_ins_per_10_min.forEach(function (x) { lines.push("  " + hhmm(x.at) + "  " + x.people + " people"); });
+    if (s.check_ins_per_15_min.length) {
+      lines.push("Check-ins per 15 minutes:");
+      s.check_ins_per_15_min.forEach(function (x) { lines.push("  " + hhmm(x.at) + "  " + x.people + " people"); });
     }
     if (s.by_scanner.length) {
       lines.push("Per scanner:");

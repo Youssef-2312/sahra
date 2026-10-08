@@ -370,18 +370,20 @@ describe("search, resend, announcements, stats", () => {
     const { party, os } = await openParty(h);
     await env.DB.prepare("UPDATE parties SET max_people_per_ticket = 4 WHERE id = ?").bind(party).run();
     const door = await seedDoor(party, h.clock);
-    const vip = (await newType(h, os, { name: "VIP", quantity: 5 })).body.type!.id;
+    const vip = (await newType(h, os, { name: "VIP", quantity: 5, price: 300 })).body.type!.id;
     const a = await typedSignup(h, party, vip, { people: 2 });
     await typedSignup(h, party, vip);
     await release(h, os, a.body.ticket_id!);
     expect((await scan(h, door, (await viewTicket(h, a.body.link!)).body.ticket!.qr!)).verdict).toBe("admit");
     const r = await h.req("/api/party/stats", { ...api(door), method: "GET" });
     expect(r.status).toBe(200);
-    const s = (await r.json()) as Record<string, unknown> & { by_type: unknown[]; check_ins_per_10_min: unknown[]; by_scanner: unknown[] };
+    const s = (await r.json()) as Record<string, unknown> & { by_type: unknown[]; check_ins_per_15_min: unknown[]; by_scanner: unknown[]; requests_per_hour: unknown[] };
     const cap = Number(await env.DB.prepare("SELECT capacity FROM parties WHERE id = ?").bind(party).first("capacity"));
-    expect(s).toMatchObject({ capacity: cap, held: 3, places_left: cap - 3, pending: 1, approved: 2, released: 2, inside: 2, admitted_tickets: 1 });
+    expect(s).toMatchObject({ capacity: cap, held: 3, places_left: cap - 3, pending: 1, approved: 2, released: 2, inside: 2, admitted_tickets: 1,
+      money_expected: 600, money_pending: 300 });
     expect(s.by_type).toEqual([{ type_id: vip, name: "VIP", quantity: 5, pending: 1, approved: 2, released: 2, admitted: 2, places_left: 2 }]);
-    expect(s.check_ins_per_10_min).toEqual([{ at: Math.floor(h.clock.now() / 600_000) * 600_000, tickets: 1, people: 2 }]);
+    expect(s.check_ins_per_15_min).toEqual([{ at: Math.floor(h.clock.now() / 900_000) * 900_000, tickets: 1, people: 2 }]);
+    expect(s.requests_per_hour).toEqual([{ at: Math.floor(h.clock.now() / 3_600_000) * 3_600_000, requests: 2, people: 3 }]);
     expect(s.by_scanner).toMatchObject([{ staff_id: door.id, tickets: 1, people: 2 }]);
   });
 });

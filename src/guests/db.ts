@@ -452,21 +452,29 @@ export class GuestDb {
           COALESCE(SUM(CASE WHEN t.status = 'approved' THEN t.people END), 0) AS approved,
           COALESCE(SUM(CASE WHEN t.status = 'approved' AND t.released_at IS NOT NULL THEN t.people END), 0) AS released,
           COALESCE(SUM(CASE WHEN t.used_at IS NOT NULL THEN t.people END), 0) AS admitted,
-          COALESCE(SUM(CASE WHEN t.used_at IS NOT NULL THEN 1 END), 0) AS admitted_tickets
+          COALESCE(SUM(CASE WHEN t.used_at IS NOT NULL THEN 1 END), 0) AS admitted_tickets,
+          COALESCE(SUM(CASE WHEN t.status = 'approved' THEN COALESCE(t.price, 0) * t.people END), 0) AS money_approved,
+          COALESCE(SUM(CASE WHEN t.status = 'pending' THEN COALESCE(t.price, 0) * t.people END), 0) AS money_pending
         FROM parties p LEFT JOIN tickets t ON t.party_id = p.id LEFT JOIN ticket_types ty ON ty.id = t.type_id
         WHERE p.id = ${sess.partyId} AND ${ok}
         GROUP BY t.type_id`,
-      sql`SELECT t.used_at / 600000 AS slot, t.used_by, st.name AS scanner, COUNT(*) AS tickets, SUM(t.people) AS people
+      sql`SELECT t.used_at / 900000 AS slot, t.used_by, st.name AS scanner, COUNT(*) AS tickets, SUM(t.people) AS people
         FROM tickets t LEFT JOIN staff st ON st.id = t.used_by
         WHERE t.party_id = ${sess.partyId} AND t.used_at IS NOT NULL AND ${ok}
         GROUP BY slot, t.used_by ORDER BY slot`,
       sql`SELECT id, name, quantity, archived_at, staff_only FROM ticket_types WHERE party_id = ${sess.partyId} AND ${ok}`,
+      // Requests per hour over the last 30 days (the page groups them into the party's own days).
+      sql`SELECT t.created_at / 3600000 AS hour, COUNT(*) AS requests, SUM(t.people) AS people
+        FROM tickets t WHERE t.party_id = ${sess.partyId} AND t.created_at > ${now - 30 * 86_400_000} AND ${ok}
+        GROUP BY hour ORDER BY hour`,
     ]);
     return {
       byType: rs[0]!.results as { capacity: number; type_id: string | null; type_name: string | null; quantity: number | null;
-        tickets: number; pending: number; approved: number; released: number; admitted: number; admitted_tickets: number }[],
+        tickets: number; pending: number; approved: number; released: number; admitted: number; admitted_tickets: number;
+        money_approved: number; money_pending: number }[],
       slots: rs[1]!.results as { slot: number; used_by: string | null; scanner: string | null; tickets: number; people: number }[],
       types: rs[2]!.results as { id: string; name: string; quantity: number | null; archived_at: number | null; staff_only: number }[],
+      hours: rs[3]!.results as { hour: number; requests: number; people: number }[],
     };
   }
 }

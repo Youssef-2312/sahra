@@ -134,8 +134,9 @@ partyRoutes.post("/announce", requireAuth(["owner", "admin"]), async (c) => {
 
 /**
  * The capacity indicator and check-in figures (owner, admin and door): places
- * held and left, per ticket type, admissions per 10 minutes and per scanner.
- * Reads the party's tickets twice; poll it once a minute at most.
+ * held and left, per ticket type, money expected, admissions per 15 minutes and
+ * per scanner, requests per hour over 30 days. Reads the party's tickets three
+ * times; poll it once a minute at most.
  */
 partyRoutes.get("/stats", requireAuth(["owner", "admin", "door"]), async (c) => {
   const a = c.var.auth;
@@ -143,7 +144,7 @@ partyRoutes.get("/stats", requireAuth(["owner", "admin", "door"]), async (c) => 
   const s = await new GuestDb(c.var.db.driver).stats({ hash: a.hash, partyId: a.info.party_id }, now, ["owner", "admin", "door"]);
   if (s.byType.length === 0) return json(c, 401, { error: "not_signed_in" });
   const capacity = s.byType[0]!.capacity;
-  const sum = (k: "tickets" | "pending" | "approved" | "released" | "admitted" | "admitted_tickets") =>
+  const sum = (k: "tickets" | "pending" | "approved" | "released" | "admitted" | "admitted_tickets" | "money_approved" | "money_pending") =>
     s.byType.reduce((n, r) => n + Number(r[k] ?? 0), 0);
   const held = sum("pending") + sum("approved");
   const names = new Map(s.types.map((t) => [t.id, t]));
@@ -164,7 +165,7 @@ partyRoutes.get("/stats", requireAuth(["owner", "admin", "door"]), async (c) => 
   const slots = new Map<number, { at: number; tickets: number; people: number }>();
   const scanners = new Map<string, { staff_id: string | null; name: string | null; tickets: number; people: number }>();
   for (const r of s.slots) {
-    const slot = slots.get(r.slot) ?? { at: r.slot * 600_000, tickets: 0, people: 0 };
+    const slot = slots.get(r.slot) ?? { at: r.slot * 900_000, tickets: 0, people: 0 };
     slot.tickets += Number(r.tickets);
     slot.people += Number(r.people);
     slots.set(r.slot, slot);
@@ -184,8 +185,12 @@ partyRoutes.get("/stats", requireAuth(["owner", "admin", "door"]), async (c) => 
     released: sum("released"),
     inside: sum("admitted"),
     admitted_tickets: sum("admitted_tickets"),
+    // Whole EGP: price per person shown at request time x people (staff-issued complimentary = 0).
+    money_expected: sum("money_approved"),
+    money_pending: sum("money_pending"),
     by_type: byType,
-    check_ins_per_10_min: [...slots.values()],
+    check_ins_per_15_min: [...slots.values()],
+    requests_per_hour: s.hours.map((h) => ({ at: h.hour * 3_600_000, requests: Number(h.requests), people: Number(h.people) })),
     by_scanner: [...scanners.values()].sort((x, y) => y.people - x.people),
   });
 });
