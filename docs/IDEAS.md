@@ -150,3 +150,19 @@ coordinator's session. Status: agreed, rejected or open.
 - Effort: medium
 - Free-tier cost: a few counts per page view; cache them for a short time and avoid refreshing in a tight loop
 - Rule conflicts: none
+
+## 11. Approval queue: one card per request, one-tap approve and send
+
+- Status: agreed
+- Owner's words: "I agree with ur option but also include a one tap"
+  (read as: keep plain "Approve" and add "Approve and send QR" as a one-tap action; the one-tap is the main button)
+- One card per waiting request, phone first:
+  - guest name, email, ticket type, people, and answers to the organiser's extra questions;
+  - payment screenshot, large, tap to zoom;
+  - the amount expected for that ticket type shown beside the screenshot;
+  - buttons: "Approve and send QR" (primary, one tap), "Approve" (QR sent later), "Reject" (asks for a reason the guest sees).
+- Bulk: select several cards and approve (with or without sending QR) or reject in one go.
+- Needs: queue screen; a combined approve-and-release action that does approval and release in one server change (approval and release stay two separate recorded steps, as already decided, but one tap triggers both in order; if release fails, the ticket stays approved and the card says "approved, QR not sent yet" with a retry).
+- Effort: medium
+- Free-tier cost: screenshots are the heavy part; load them one card at a time or on tap, small previews first, to protect the daily read budget and mobile data. Emails go through the outbox (daily Gmail cap applies).
+- Rule conflicts: none. Capacity is still enforced inside the approval statement; if full, the card says so and nothing is approved.
