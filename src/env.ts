@@ -15,6 +15,12 @@ export interface Env {
   LINK_MASTER_K1?: string;
   COOKIE_MASTER_K1?: string;
   COOKIE_KEY_ID?: string;
+  /** Email (src/email/): the platform's own Gmail account (var) and its app password (secret). */
+  GMAIL_ADDRESS?: string;
+  GMAIL_APP_PASSWORD?: string;
+  /** Email fallback: Brevo API key (secret) and its verified sender address (var). */
+  BREVO_API_KEY?: string;
+  BREVO_SENDER?: string;
 }
 
 export const CONFIG = {

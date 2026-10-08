@@ -54,6 +54,13 @@ const cases: Case[] = [
   ["test door invite, junk session", "POST", "/api/test/door-invite", (h) => h.req("/api/test/door-invite", { method: "POST", headers: JSON_H, cookies: junkCookie, body: "{}" })],
   ["test revoke door access, junk session", "POST", "/api/test/revoke-door-access", (h) => h.req("/api/test/revoke-door-access", { method: "POST", headers: JSON_H, cookies: junkCookie, body: "{}" })],
   ["test ledger check, junk session", "GET", "/api/test/ledger-check", (h) => h.req("/api/test/ledger-check", { cookies: junkCookie })],
+  ["outbox list, no session", "GET", "/api/outbox", (h) => h.req("/api/outbox")],
+  ["outbox list, junk session", "GET", "/api/outbox", (h) => h.req("/api/outbox", { cookies: junkCookie })],
+  ["outbox approve, no session", "POST", "/api/outbox/approve", (h) => h.req("/api/outbox/approve", { method: "POST", headers: JSON_H, body: JSON.stringify({ all_awaiting: true }) })],
+  ["outbox approve, junk session", "POST", "/api/outbox/approve", (h) => h.req("/api/outbox/approve", { method: "POST", headers: JSON_H, cookies: junkCookie, body: JSON.stringify({ all_awaiting: true }) })],
+  ["outbox cancel, junk session", "POST", "/api/outbox/cancel", (h) => h.req("/api/outbox/cancel", { method: "POST", headers: JSON_H, cookies: junkCookie, body: JSON.stringify({ all_awaiting: true }) })],
+  ["outbox approve one, junk session", "POST", "/api/outbox/:id/approve", (h) => h.req(`/api/outbox/${id}/approve`, { method: "POST", headers: JSON_H, cookies: junkCookie })],
+  ["outbox cancel one, junk session", "POST", "/api/outbox/:id/cancel", (h) => h.req(`/api/outbox/${id}/cancel`, { method: "POST", headers: JSON_H, cookies: junkCookie })],
   ["unknown API path", "GET", "/api/*", (h) => h.req("/api/nothing-here")],
 ];
 
@@ -68,7 +75,10 @@ describe("endpoints without a session write nothing", () => {
   for (const [label, , , run] of cases) {
     it(label, async () => {
       const h = await harness();
-      await seedParty();
+      const p = await seedParty();
+      // A row awaiting approval, so the outbox cases have something they must not change.
+      await env.DB.prepare("INSERT INTO outbox (id, party_id, kind, to_email, subject, body_text, status, created_at) VALUES (?, ?, 'party_notice', 'g@example.com', 's', 'b', 'awaiting_approval', 1)")
+        .bind(newId(), p).run();
       const before = await counts();
       const res = await run(h);
       if (res.status === 200) {
@@ -85,9 +95,10 @@ describe("endpoints without a session write nothing", () => {
 });
 
 async function counts() {
-  const tables = ["parties", "staff", "invites", "sessions", "audit", "tickets", "scans"];
+  const tables = ["parties", "staff", "invites", "sessions", "audit", "tickets", "scans", "outbox", "email_quota"];
   const out: Record<string, unknown> = {};
   for (const t of tables) out[t] = await env.DB.prepare(`SELECT COUNT(*) AS n, COALESCE(SUM(rev), 0) AS r FROM ${t}`).first().catch(async () => env.DB.prepare(`SELECT COUNT(*) AS n FROM ${t}`).first());
+  out.outbox_status = await env.DB.prepare("SELECT status, COUNT(*) AS n FROM outbox GROUP BY status ORDER BY status").all().then((r) => r.results);
   for (const t of ["change_log", "party_control"]) out[t] = await env.LEDGER.prepare(`SELECT COUNT(*) AS n FROM ${t}`).first("n");
   return out;
 }

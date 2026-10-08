@@ -13,6 +13,7 @@ import { staffRoutes } from "./routes/staff";
 import { scanRoutes } from "./routes/scan";
 import { admissionRoutes } from "./routes/admission";
 import { testingRoutes } from "./routes/testing";
+import { outboxRoutes } from "./routes/outbox";
 
 export type { Deps } from "./context";
 
@@ -110,6 +111,7 @@ export function createApp(deps: Deps) {
   app.route("/api/scan", scanRoutes);
   app.route("/api/admission", admissionRoutes);
   app.route("/api/test", testingRoutes);
+  app.route("/api/outbox", outboxRoutes);
 
   app.get("/api/me", requireAuth(["owner", "admin", "door"]), async (c) => {
     const a = c.var.auth;
