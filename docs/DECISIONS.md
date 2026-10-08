@@ -268,3 +268,42 @@ Chosen extras (numbers from the brainstorm):
 - **14 Save QR to photos + brightness hint** (already a frontend requirement).
 - **15 Big result screens, distinct sounds and vibration** for admit, used and
   stop (frontend).
+
+## Owner decisions, 2026-10-08
+
+- **Halloween-26 stays on Vercel as it is.** No import, no compatibility
+  endpoints; nothing in Sahra reads or touches it.
+- **Email:** the platform's own Gmail over SMTP (app password, Cloudflare secret),
+  Brevo free as fallback. No real email until the owner approves a staging send test.
+- **"Site owner"** is the name for the top level (the code's "platform admin"):
+  the owner of the website, optionally one trusted backup person. Invites
+  organisers, sets how many parties each may create, can switch off an organiser
+  or a party and turn a party back on, can remove another site owner (never the
+  last one).
+- **One party per organiser by default**; only a site owner can raise it per person.
+- **Switching off an organiser leaves their party running.**
+- **A secret address hides the venue label too** (venue name, address and map link
+  together); the party name is always visible.
+
+## Controlled recovery (Phase 3)
+
+- `scripts/recover.mjs` (setup.bat step "Recovery") runs the procedure of brief
+  section 8.3 with the owner's own Cloudflare login: maintenance on (secret
+  `MAINTENANCE`: every API request answers 503, scanners say can't verify), pause
+  every party, complete and verify the ledger, Time Travel restore to a moment
+  the owner types, replay (newest rev per entity wins), hold anything
+  unconfirmed, end every session, revoke every unused invitation, sync
+  pause_number, final check, maintenance off. Parties stay paused until reopened.
+  The same engine (`src/recovery/`) runs in the tests.
+- **Holds:** when the main database cannot be checked, every ticket or staff
+  member with an unconfirmed intent (`src/changes.ts`) is held; a held ticket
+  cannot be admitted ("on hold, ask the owner"), held staff are disabled. The
+  party owner releases each hold with a reason (`/api/recovery/...`, audited).
+- **Not covered by intents (deliberate):** scans. A scan whose ledger record never
+  arrived never showed green, so by the green-screen rule that guest was not
+  admitted. When the main database is reachable (the normal case), such
+  admissions are copied into the ledger before the restore and the ticket stays
+  used. Option for later: an intent per scan (+1 ledger row per scan).
+- After a restore, audit rows and outbox rows newer than the restore point are
+  lost (the change log keeps the history); emails may be sent twice, which is
+  harmless (every email links to the same ticket page).

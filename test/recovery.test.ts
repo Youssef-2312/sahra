@@ -74,7 +74,7 @@ async function reopen(h: Harness, party: string) {
 }
 
 /** Tests in one file share the databases: look only at this test's party. */
-const mine = (holds: { party_id: string }[], party: string) => holds.filter((x) => x.party_id === party);
+const mine = <T extends { party_id: string }>(holds: T[], party: string): T[] => holds.filter((x) => x.party_id === party);
 
 function run(snap: Awaited<ReturnType<typeof snapshot>>, h: Harness, main: SqlDriver = mainDriver()) {
   return recover({ main, ledger: ledgerDriver(), now: h.clock.now, restore: () => restore(snap) });

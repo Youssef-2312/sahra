@@ -304,9 +304,11 @@ export async function applyHolds(main: SqlDriver, holds: Hold[], now: number, op
   }
   if (!writes.length) return 0;
   writes.push(sql`INSERT INTO audit (party_id, at, actor_staff_id, action, entity_type, entity_id, entity_rev, detail)
-    SELECT party_id, ${now}, NULL, 'recovery_hold', 'ticket', id, rev, hold_reason FROM tickets WHERE last_op = ${op}`);
+    SELECT party_id, ${now}, NULL, 'recovery_hold', 'ticket', id, rev, hold_reason FROM tickets WHERE last_op = ${op}
+      AND NOT EXISTS (SELECT 1 FROM audit a WHERE a.entity_type = 'ticket' AND a.entity_id = tickets.id AND a.entity_rev = tickets.rev)`);
   writes.push(sql`INSERT INTO audit (party_id, at, actor_staff_id, action, entity_type, entity_id, entity_rev, detail)
-    SELECT party_id, ${now}, NULL, 'recovery_hold', 'staff', id, rev, hold_reason FROM staff WHERE last_op = ${op}`);
+    SELECT party_id, ${now}, NULL, 'recovery_hold', 'staff', id, rev, hold_reason FROM staff WHERE last_op = ${op}
+      AND NOT EXISTS (SELECT 1 FROM audit a WHERE a.entity_type = 'staff' AND a.entity_id = staff.id AND a.entity_rev = staff.rev)`);
   for (let i = 0; i < writes.length; i += 50) await main.batch(writes.slice(i, i + 50));
   const n = await main.all<{ n: number }>(sql`SELECT (SELECT COUNT(*) FROM tickets WHERE last_op = ${op}) + (SELECT COUNT(*) FROM staff WHERE last_op = ${op}) AS n`);
   return Number(n.results[0]?.n ?? 0);
@@ -314,14 +316,18 @@ export async function applyHolds(main: SqlDriver, holds: Hold[], now: number, op
 
 /** Every session ends and every unused invitation is revoked: everyone signs in again. */
 export async function revokeAccess(main: SqlDriver, now: number, op: string): Promise<{ sessions: number; invites: number }> {
-  const rs = await main.batch([
+  // Counted with reads: the script's driver does not report per-statement changes.
+  const active = Number((await main.all<{ n: number }>(sql`SELECT COUNT(*) AS n FROM sessions WHERE revoked_at IS NULL`)).results[0]?.n ?? 0);
+  await main.batch([
     sql`UPDATE sessions SET revoked_at = ${now} WHERE revoked_at IS NULL`,
     sql`UPDATE invites SET revoked_at = ${now}, revoked_by = NULL, rev = rev + 1, last_op = ${op}, last_action = 'invite_revoked'
       WHERE used_at IS NULL AND revoked_at IS NULL`,
     sql`INSERT INTO audit (party_id, at, actor_staff_id, action, entity_type, entity_id, entity_rev, detail)
-      SELECT party_id, ${now}, NULL, 'invite_revoked', 'invite', id, rev, 'controlled recovery' FROM invites WHERE last_op = ${op}`,
+      SELECT party_id, ${now}, NULL, 'invite_revoked', 'invite', id, rev, 'controlled recovery' FROM invites WHERE last_op = ${op}
+        AND NOT EXISTS (SELECT 1 FROM audit a WHERE a.entity_type = 'invite' AND a.entity_id = invites.id AND a.entity_rev = invites.rev)`,
   ]);
-  return { sessions: rs[0]!.meta.changes, invites: rs[1]!.meta.changes };
+  const invites = Number((await main.all<{ n: number }>(sql`SELECT COUNT(*) AS n FROM invites WHERE last_op = ${op} AND revoked_at = ${now}`)).results[0]?.n ?? 0);
+  return { sessions: active, invites };
 }
 
 // ------------------------------------------------------------------ step 6
@@ -331,13 +337,21 @@ export async function syncPause(main: SqlDriver, ledger: SqlDriver, now: number,
   const controls = (await ledger.all<{ party_id: string; state: string; pause_number: number }>(
     sql`SELECT party_id, state, pause_number FROM party_control`)).results;
   if (!controls.length) return 0;
-  const writes = controls.map((c) => sql`UPDATE parties SET admission_state = 'paused', pause_number = ${c.pause_number},
+  const parties = new Map((await main.all<{ id: string; admission_state: string; pause_number: number }>(
+    sql`SELECT id, admission_state, pause_number FROM parties`)).results.map((p) => [p.id, p]));
+  const due = controls.filter((c) => {
+    const p = parties.get(c.party_id);
+    return p && (p.admission_state !== "paused" || p.pause_number !== c.pause_number);
+  });
+  if (!due.length) return 0;
+  const writes = due.map((c) => sql`UPDATE parties SET admission_state = 'paused', pause_number = ${c.pause_number},
       rev = rev + 1, last_op = ${op}, last_action = 'recovery_paused'
     WHERE id = ${c.party_id} AND (admission_state != 'paused' OR pause_number != ${c.pause_number})`);
   writes.push(sql`INSERT INTO audit (party_id, at, actor_staff_id, action, entity_type, entity_id, entity_rev, detail)
-    SELECT id, ${now}, NULL, 'admission_paused', 'party', id, rev, 'controlled recovery' FROM parties WHERE last_op = ${op}`);
-  const rs = await main.batch(writes);
-  return rs.slice(0, controls.length).reduce((a, r) => a + r.meta.changes, 0);
+    SELECT id, ${now}, NULL, 'admission_paused', 'party', id, rev, 'controlled recovery' FROM parties WHERE last_op = ${op}
+      AND NOT EXISTS (SELECT 1 FROM audit a WHERE a.entity_type = 'party' AND a.entity_id = parties.id AND a.entity_rev = parties.rev)`);
+  await main.batch(writes);
+  return due.length;
 }
 
 // ------------------------------------------------------------------ owner checks
