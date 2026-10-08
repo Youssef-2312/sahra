@@ -197,3 +197,17 @@ coordinator's session. Status: agreed, rejected or open.
 - Effort: small to medium
 - Free-tier cost: a few reads per page view; the health status is read from the stored state, not recomputed
 - Rule conflicts: none; follows ideas 6 and 12 (phone first, uncluttered)
+
+## 14. Clear payment, refund policy and refund tracking (from the outside review)
+
+- Status: agreed
+- Owner's words: "yes" (to the refund proposal); earlier, about the review: "all the party owners to include refunds or not"
+- Source: outside review by another AI, passed on by the owner.
+- Before payment, the sign-up page shows: who receives the money, the organiser's refund policy, and the organiser's contact.
+- Refund policy is the organiser's own short text per party (for example "No refunds", "Refund up to 48 hours before", "Refund only if the party is cancelled"). Each organiser decides whether refunds are offered at all.
+- Refund tracking is separate from ticket status: "Refund due" and "Refund completed". Sahra only records refunds; it never sends money and never claims to.
+- Cancelling a party: stops registration and admission, emails the guests, and gives the organiser a refund checklist (paid tickets marked "Refund due" when the policy allows). The organiser ticks "Refund completed" after paying back outside Sahra.
+- Needs: new party fields (refund policy text, payee name, contact); a refund status on tickets; a party-cancel action (build on the existing pause and disable-party actions, which already stop admission); one email template; a checklist screen. A change to ticket or party state must follow the existing change-log and intent rules.
+- Effort: medium
+- Free-tier cost: a cancel notifies every guest through the outbox, so a big party uses a lot of the Gmail daily cap and takes a while to finish; show "x of y emails sent"
+- Rule conflicts: none; no payments are handled by Sahra. Wording: "Sahra records refunds, it does not send them".
