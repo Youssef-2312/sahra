@@ -41,7 +41,7 @@ coordinator's session. Status: agreed, rejected or open.
 - Organiser-added questions (the backend already stores per-party questions in `parties.guest_form`, answers in `tickets.answers`):
   - field types: short text, long text, dropdown, yes/no tick box;
   - required or optional per question;
-  - recommended cap of 5 questions per party (open: owner has not confirmed the cap);
+  - cap of 5 questions per party (owner decision: "orgainsers are capped at 5 extra questions");
   - answers shown in the approval queue and in the guest list export.
 - Needs: a form-builder screen in the organiser dashboard; the sign-up page draws the questions. Backend may need the long-text and dropdown types added, and a length limit on answers (check what `POST /api/tickets/form` accepts today).
 - Effort: medium
