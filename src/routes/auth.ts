@@ -5,6 +5,7 @@ import { flushChangeLog } from "../changelog";
 import { CONFIG } from "../env";
 import { platformCallback, platformSession } from "../platform/auth";
 import { PlatformDb } from "../platform/db";
+import { noticeResponse } from "../auth/notices";
 import { newId, newToken, parseToken, seal, sha256hex, timingSafeEqualStr, unseal } from "../lib/crypto";
 import {
   COOKIE_LOGIN,
@@ -14,7 +15,6 @@ import {
   clientIp,
   cookie,
   escapeHtml,
-  page,
   rateLimited,
   readCookie,
   sameOrigin,
@@ -30,14 +30,6 @@ function envRecord(c: Ctx): Record<string, unknown> {
   return c.env as unknown as Record<string, unknown>;
 }
 
-function htmlPage(c: Ctx, status: number, title: string, body: string, refreshTo?: string, cookies: string[] = []) {
-  const res = c.html(page(title, body, refreshTo), status as 200);
-  for (const ck of cookies) res.headers.append("set-cookie", ck);
-  return res;
-}
-
-const tryAgain = `<p><a href="/signin.html">Back to sign in</a></p>`;
-
 const LOGIN_PURPOSE = "login-attempt";
 const PICK_PURPOSE = "party-pick";
 
@@ -45,8 +37,11 @@ const PICK_PURPOSE = "party-pick";
 // state, nonce and the PKCE verifier travel in a sealed (AES-GCM, key id, expiry),
 // short-lived Lax cookie, and the browser goes to Google.
 async function startSignIn(c: Ctx, platform: boolean) {
-  if (!sameOrigin(c, c.env.PUBLIC_ORIGIN)) return json(c, 403, { error: "bad_origin" });
-  if (await rateLimited(c.env.RL_AUTH, `login:${clientIp(c)}`)) return json(c, 429, { error: "rate_limited" });
+  // A form post from the sign-in page, so the answers are pages, not JSON.
+  const back = platform ? "/platform" : "/signin";
+  const backLabel = platform ? "Back to platform sign in" : undefined;
+  if (!sameOrigin(c, c.env.PUBLIC_ORIGIN)) return noticeResponse(c, 403, "bad_origin", { back, backLabel });
+  if (await rateLimited(c.env.RL_AUTH, `login:${clientIp(c)}`)) return noticeResponse(c, 429, "too_many", { back, backLabel });
   const now = c.var.deps.now();
   const state = newToken();
   const nonce = newToken();
@@ -82,10 +77,10 @@ authRoutes.post("/platform/start", (c) => startSignIn(c, true));
 authRoutes.get("/google/callback", async (c) => {
   const clear = [clearCookie(COOKIE_LOGIN, "Lax")];
   if (await rateLimited(c.env.RL_AUTH, `callback:${clientIp(c)}`)) {
-    return htmlPage(c, 429, "Too many attempts", `<p>Too many sign-in attempts. Wait a minute and try again.</p>${tryAgain}`, undefined, clear);
+    return noticeResponse(c, 429, "too_many", { cookies: clear });
   }
   if (c.req.query("error")) {
-    return htmlPage(c, 400, "Sign-in cancelled", `<p>Sign-in was cancelled.</p>${tryAgain}`, undefined, clear);
+    return noticeResponse(c, 400, "cancelled", { cookies: clear });
   }
   const now = c.var.deps.now();
   const sealed = readCookie(c, COOKIE_LOGIN);
@@ -96,7 +91,7 @@ authRoutes.get("/google/callback", async (c) => {
     !attempt || typeof attempt.s !== "string" || typeof attempt.n !== "string" || typeof attempt.v !== "string" ||
     !parseToken(state) || !timingSafeEqualStr(state, attempt.s) || !code || code.length > 2048
   ) {
-    return htmlPage(c, 400, "Sign-in failed", `<p>This sign-in did not start in this browser, or it expired. Start again.</p>${tryAgain}`, undefined, clear);
+    return noticeResponse(c, 400, "expired", { cookies: clear });
   }
   if (!c.env.GOOGLE_CLIENT_SECRET) throw new Error("GOOGLE_CLIENT_SECRET not set");
 
@@ -118,7 +113,7 @@ authRoutes.get("/google/callback", async (c) => {
   } catch (e) {
     const codeName = e instanceof AuthError ? e.code : "error";
     console.log(JSON.stringify({ evt: "login_rejected", reason: codeName }));
-    return htmlPage(c, 401, "Sign-in failed", `<p>Google sign-in could not be verified (${escapeHtml(codeName)}).</p>${tryAgain}`, undefined, clear);
+    return noticeResponse(c, 401, "not_verified", { detail: codeName, cookies: clear });
   }
 
   // From here on the request carries a verified Google identity. Writes happen
@@ -134,59 +129,58 @@ authRoutes.get("/google/callback", async (c) => {
   const platform = await pdb.hasAccess(claims.sub);
   if (staff.length === 0 && !platform) {
     if (email && !autoLink && ((await db.hasPendingGoogleInvite(email, now)) || (await pdb.hasPendingInvite(email, now)))) {
-      return htmlPage(c, 403, "Confirmation needed",
-        `<p>You were invited with an address that is not Gmail or Google Workspace. Such addresses must be confirmed by email, which is not available yet. Ask for an invitation to a Gmail address instead.</p>${tryAgain}`,
-        undefined, clear);
+      return noticeResponse(c, 403, "confirm_needed", { cookies: clear });
     }
-    return htmlPage(c, 403, "No access", `<p>This Google account has not been invited to Sahra.</p>${tryAgain}`, undefined, clear);
+    return noticeResponse(c, 403, "no_access", { cookies: clear });
   }
   // Confirm every staff/invite/platform change (including any link just made) in the change log first.
   if (linked > 0 || staff.length > 0 || platform) await flushChangeLog(db, c.var.ledger, now);
 
-  // Organiser or site owner: their own session (cookie) too.
+  // One sign-in for everyone who runs parties. A party owner who may create
+  // parties (or the site owner) also gets the "My parties" session (cookie): with
+  // exactly one party they go straight to it, otherwise to My parties, where each
+  // party opens without signing in again (POST /api/platform/parties/:id/open).
   const cookies = [...clear];
   if (platform) {
     const s = await platformSession(pdb, claims.sub, now);
-    if (s === "capped") return htmlPage(c, 429, "Too many sign-ins", `<p>Too many sign-ins for this account in the last hour. Try again later.</p>${tryAgain}`, undefined, clear);
-    if (s === "changed") return htmlPage(c, 403, "No access", `<p>Access changed during sign-in. Try again.</p>${tryAgain}`, undefined, clear);
+    if (s === "capped") return noticeResponse(c, 429, "capped", { cookies: clear });
+    if (s === "changed") return noticeResponse(c, 403, "changed", { cookies: clear });
     cookies.push(s.cookie);
-    if (staff.length === 0) return htmlPage(c, 200, "Signed in", `<p>Signed in. <a href="/platform">Continue</a></p>`, "/platform", cookies);
+    if (staff.length !== 1) return noticeResponse(c, 200, "signed_in", { refreshTo: "/platform", cookies });
   }
 
-  if (staff.length === 1 && !platform) {
+  if (staff.length === 1) {
     const s = staff[0]!;
     const token = newToken();
     const ok = await db.createGoogleSession({
       hash: await sha256hex(token), staffId: s.staff_id, partyId: s.party_id, sub: claims.sub, now,
       expiresAt: now + CONFIG.googleSessionMs,
     });
-    if (ok === "capped") return htmlPage(c, 429, "Too many sign-ins", `<p>Too many sign-ins for this account in the last hour. Try again later.</p>${tryAgain}`, undefined, clear);
-    if (ok !== "created") return htmlPage(c, 403, "No access", `<p>Access changed during sign-in. Try again.</p>${tryAgain}`, undefined, clear);
+    if (ok === "capped") return noticeResponse(c, 429, "capped", { cookies });
+    if (ok !== "created") return noticeResponse(c, 403, "changed", { cookies });
     // A small same-site page navigates on; a 302 straight to the dashboard could drop the Strict cookie.
-    return htmlPage(c, 200, "Signed in", `<p>Signed in. <a href="/dashboard">Continue</a></p>`, "/dashboard", [
-      ...clear,
+    return noticeResponse(c, 200, "signed_in", { refreshTo: "/dashboard", cookies: [
+      ...cookies,
       cookie(COOKIE_SESSION, token, { maxAgeS: CONFIG.googleSessionMs / 1000, sameSite: "Strict" }),
-    ]);
+    ] });
   }
 
-  // Staff at several parties: a sealed, 2-minute, Strict cookie holds the verified
+  // Team member (not a party owner who creates parties) at several parties: a sealed, 2-minute, Strict cookie holds the verified
   // Google account id until a party is picked. No database write.
   const pick = await seal(envRecord(c), PICK_PURPOSE, { sub: claims.sub }, now + CONFIG.loginGrantMs);
   const forms = staff
-    .map((s) => `<form method="post" action="/api/auth/select-party"><input type="hidden" name="party_id" value="${escapeHtml(s.party_id)}"><button type="submit">${escapeHtml(s.party_name)} (${escapeHtml(s.role)})</button></form>`)
+    .map((s) => `<form method="post" action="/api/auth/select-party" class="pick"><input type="hidden" name="party_id" value="${escapeHtml(s.party_id)}"><button type="submit" class="btn" data-name="${escapeHtml(s.party_name)}" data-role="${escapeHtml(s.role)}">${escapeHtml(s.party_name)} (${escapeHtml(s.role)})</button></form>`)
     .join("");
-  // Also an organiser or site owner (already signed in to that page above): it is one more choice.
-  const platformLink = platform ? `<p><a href="/platform">Organiser page</a></p>` : "";
-  return htmlPage(c, 200, "Choose party", `<p>Choose a party:</p>${forms}${platformLink}`, undefined, [
+  return noticeResponse(c, 200, "choose", { extraHtml: forms, cookies: [
     ...cookies,
     cookie(COOKIE_PICK, pick, { maxAgeS: CONFIG.loginGrantMs / 1000, sameSite: "Strict" }),
-  ]);
+  ] });
 });
 
 // Step 3 (only for accounts at several parties).
 authRoutes.post("/select-party", async (c) => {
   const clear = [clearCookie(COOKIE_PICK)];
-  if (!sameOrigin(c, c.env.PUBLIC_ORIGIN)) return json(c, 403, { error: "bad_origin" });
+  if (!sameOrigin(c, c.env.PUBLIC_ORIGIN)) return noticeResponse(c, 403, "bad_origin", { cookies: clear });
   const now = c.var.deps.now();
   const sealed = readCookie(c, COOKIE_PICK);
   const pick = sealed ? await unseal(envRecord(c), PICK_PURPOSE, sealed, now) : null;
@@ -194,20 +188,20 @@ authRoutes.post("/select-party", async (c) => {
   const partyId = typeof form.party_id === "string" ? form.party_id : "";
   const sub = typeof pick?.sub === "string" ? pick.sub : null;
   if (!sub || !partyId) {
-    return htmlPage(c, 400, "Sign-in failed", `<p>Party choice expired. Sign in again.</p>${tryAgain}`, undefined, clear);
+    return noticeResponse(c, 400, "pick_expired", { cookies: clear });
   }
   const s = (await c.var.db.activeStaffForSub(sub)).find((x) => x.party_id === partyId);
-  if (!s) return htmlPage(c, 400, "Sign-in failed", `<p>Party choice expired. Sign in again.</p>${tryAgain}`, undefined, clear);
+  if (!s) return noticeResponse(c, 400, "pick_expired", { cookies: clear });
   const token = newToken();
   const ok = await c.var.db.createGoogleSession({
     hash: await sha256hex(token), staffId: s.staff_id, partyId, sub, now, expiresAt: now + CONFIG.googleSessionMs,
   });
-  if (ok === "capped") return htmlPage(c, 429, "Too many sign-ins", `<p>Too many sign-ins for this account in the last hour. Try again later.</p>${tryAgain}`, undefined, clear);
-  if (ok !== "created") return htmlPage(c, 403, "No access", `<p>Access changed during sign-in. Try again.</p>${tryAgain}`, undefined, clear);
-  return htmlPage(c, 200, "Signed in", `<p>Signed in. <a href="/dashboard">Continue</a></p>`, "/dashboard", [
+  if (ok === "capped") return noticeResponse(c, 429, "capped", { cookies: clear });
+  if (ok !== "created") return noticeResponse(c, 403, "changed", { cookies: clear });
+  return noticeResponse(c, 200, "signed_in", { refreshTo: "/dashboard", cookies: [
     ...clear,
     cookie(COOKIE_SESSION, token, { maxAgeS: CONFIG.googleSessionMs / 1000, sameSite: "Strict" }),
-  ]);
+  ] });
 });
 
 authRoutes.post("/logout", requireAuth(["owner", "admin", "door"]), async (c) => {

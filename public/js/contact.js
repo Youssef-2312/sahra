@@ -42,7 +42,7 @@
       if (via === "email") { status.hidden = true; location.href = "mailto:" + EMAIL + "?subject=" + encodeURIComponent(subject) + "&body=" + encodeURIComponent(text); return; }
 
       if (!f.consent.checked) {
-        say("no", ar ? "وافق على إرسال بياناتك عبر FormSubmit، أو تابع على واتساب أو البريد." : "Please agree to sending your details through FormSubmit, or continue in WhatsApp or by email.");
+        say("no", ar ? "وافق على إرسال بياناتك عبر FormSubmit، أو تابع على واتساب أو البريد." : "Please agree to sending your details through FormSubmit, or continue on WhatsApp or by Email.");
         f.consent.focus();
         return;
       }
@@ -68,7 +68,7 @@
         form.reset();
         say("yes", ar ? "تم إرسال رسالتك. سنرد عليك بالبريد." : "Message sent. We will reply by email.");
       } else {
-        say("no", ar ? "تعذّر الإرسال الآن. حاول مرة أخرى، أو تابع على واتساب أو البريد." : "It could not be sent just now. Try again, or continue in WhatsApp or by email.");
+        say("no", ar ? "تعذّر الإرسال الآن. حاول مرة أخرى، أو تابع على واتساب أو البريد." : "It could not be sent just now. Try again, or continue on WhatsApp or by Email.");
       }
     });
   });

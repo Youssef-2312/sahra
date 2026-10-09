@@ -57,6 +57,11 @@ function liveSession(hash: string, now: number): Sql {
   return sql`s.id_hash = ${hash} AND s.revoked_at IS NULL AND s.expires_at > ${now}`;
 }
 
+/** True only if the platform session `hash` is valid right now and belongs to the Google account `sub`. */
+export function platformSessionFor(hash: string, sub: string, now: number): Sql {
+  return sql`EXISTS (SELECT 1 FROM platform_sessions s WHERE ${liveSession(hash, now)} AND s.google_sub = ${sub})`;
+}
+
 /** True only if the platform session is valid right now and its Google account is an active site owner `ownerId`. */
 export function siteOwnerValid(hash: string, ownerId: string, now: number): Sql {
   return sql`EXISTS (SELECT 1 FROM platform_sessions s JOIN platform_admins pa ON pa.google_sub = s.google_sub

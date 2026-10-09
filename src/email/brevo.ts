@@ -16,6 +16,7 @@ export interface BrevoConfig {
 
 export class BrevoProvider implements Provider {
   readonly name = "brevo" as const;
+  get fromEmail(): string { return this.cfg.sender; }
   private dead: string | null = null;
 
   constructor(private readonly cfg: BrevoConfig) {}

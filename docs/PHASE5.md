@@ -693,3 +693,81 @@ Test: `test/idphoto.test.ts` (friends case).
 
 Favicon: the same ticket mark, scaled up (0.2 to 0.25) so it fills a browser
 tab; favicon.ico (16/32/48) and apple-touch-icon.png (180) regenerated from it.
+
+### Sign-in results, page not found and broken links in the site's look (9 October 2026)
+
+Before, the server's own pages were bare HTML (sign-in failed, no access, choose a
+party) and a mistyped address answered `{"error":"not_found"}`. Now:
+
+- `src/auth/notices.ts` + `page()` in `src/lib/http.ts`: every page the Worker
+  answers itself uses the shared stylesheet and `public/js/notice.js`, which shows
+  it in English or Arabic with the top bar and footer: a photo panel with the
+  message, the ways forward beside it (back to sign in, the parties, Find my
+  tickets), Google's reason code small when there is one. Status codes and cookies
+  are unchanged; the English text stays in the HTML (shown before the script runs).
+- The sign-in buttons' form posts (wrong origin, too many attempts) and the party
+  choice answer pages, not JSON. The party choice shows each party with its role.
+- A page address that is not a file answers an HTML 404 ("Page not found");
+  `/api/...` and non-GET requests keep JSON.
+- The Worker's security policy gains `font-src 'self'` (the same as the static
+  pages), so these pages use the site's own fonts. Nothing else is allowed.
+- Broken links on the static pages use the same layout (`Sahra.problem` in
+  ui.js): a ticket link that is not valid, a party that does not exist, and staff
+  pages opened while signed out. The door scanner keeps its minimal screen.
+- Test: `test/notice.test.ts`.
+
+### One sign-in: organiser and party owner are one role (9 October 2026)
+
+Owner: party owners are single people, so there is no separate "organiser". On
+the site everyone who runs parties is a party owner; guests read "the host".
+
+- One sign-in page for everyone (`Sahra.signinView` in ui.js, used by /signin and
+  by /platform when signed out); it always uses `/api/auth/google/start`.
+- After sign-in, an account that may create parties (or the site owner) also gets
+  the My parties session. With exactly one party it goes straight to that party's
+  dashboard; otherwise to My parties (/platform).
+- My parties lists every party the account runs (`GET /api/platform/teams`) with an
+  Open button (`POST /api/platform/parties/:id/open`): a party session for the same
+  Google account's own owner/admin row, created only while the My parties session
+  is live (checked inside the insert), the same rule as choosing a party after
+  sign-in. No second Google sign-in.
+- Party pages show a "My parties" link when the account has that session, and
+  Sign out ends both sessions.
+- Under the hood the permission to create parties (and its party limit, set by the
+  site owner) is unchanged, so not every Google account can create parties. The
+  site-owner panel calls it "Party owners".
+- Wording: "organiser" is gone from the site, emails' wording unchanged (they never
+  used it); About, Privacy and Terms say "host" (same meaning, same version date).
+- Contact page: "Date of party", "continue on WhatsApp or by Email"; the Settings
+  example phone number is a made-up one (+20 100 000 0000).
+
+### Spelling pass, and the last feature without a page (9 October 2026)
+
+- Spelling: every English string (wording files, pages, server pages) checked with a
+  dictionary and for repeated words, double spaces, dashes and stray punctuation;
+  nothing wrong was found (British spelling throughout). The organiser page's tab
+  title now reads "My parties".
+- Every API route was matched against the pages. Without a page by design: the
+  sign-in steps (server pages), the Drive backup (Apps Script) and test-only routes
+  (off in production). The one real gap: releasing holds after a controlled
+  recovery (`/api/recovery/holds`, `.../release-hold`). Guests now shows owners an
+  "On hold after a recovery" card, only when something is on hold: each ticket or
+  team member with why it was held, a reason field and Release.
+
+### Up to three Gmail accounts (9 October 2026)
+
+Owner: about 1500 tickets, so three platform Gmail accounts. Settings (secrets, set by
+the owner): `GMAIL_ADDRESS` / `GMAIL_APP_PASSWORD`, optional `GMAIL_ADDRESS_2` /
+`GMAIL_APP_PASSWORD_2` and `GMAIL_ADDRESS_3` / `GMAIL_APP_PASSWORD_3`, then Brevo as
+before. They are used in that order; each account (`gmail`, `gmail2`, `gmail3`) has
+its own rolling 24-hour cap of 450 (below Gmail's 500) and per-minute cap, and sends
+from its own address. Three accounts plus Brevo: up to 1630 emails per 24 hours.
+Speed is unchanged: 3 emails per one-minute run (the Workers Free CPU limit), so
+about 180 per hour; 1500 emails take about 8 hours. No migration (provider names
+are free text). Test: `test/email-sender.test.ts` (three accounts).
+- Owner's helper: `email-accounts.bat` (project folder; runs `scripts/email-accounts.mjs`).
+  The owner lists up to three accounts in `email-accounts.txt` (never committed, in
+  .gitignore; see `email-accounts.example.txt`), double-clicks the .bat, picks staging
+  or production and confirms. One `wrangler secret bulk` call sets all six secrets;
+  slots not in the list are deleted. Passwords are never printed; the temporary JSON
+  file is mode 600 and removed right after. Checked with a stand-in for Wrangler.

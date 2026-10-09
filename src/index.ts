@@ -1,7 +1,7 @@
 import { createApp, resetRequestCounters } from "./app";
 import { JwksCache } from "./auth/google";
 import { D1Driver } from "./db/driver";
-import { scheduledSend } from "./email/sender";
+import { anyEmailProvider, scheduledSend } from "./email/sender";
 import { cfConnect } from "./email/socket";
 import type { Env } from "./env";
 import { dbSizes, isHealthMinute, runHealth } from "./health";
@@ -26,7 +26,7 @@ export default {
     if (isHealthMinute(ctrl.scheduledTime)) {
       ctx.waitUntil(runHealth({
         main: new D1Driver(env.DB), ledger: new D1Driver(env.LEDGER), now: () => Date.now(), sizes: () => dbSizes(env),
-        maintenance: env.MAINTENANCE === "1", emailConfigured: !!((env.GMAIL_ADDRESS && env.GMAIL_APP_PASSWORD) || (env.BREVO_API_KEY && env.BREVO_SENDER)),
+        maintenance: env.MAINTENANCE === "1", emailConfigured: anyEmailProvider(env),
         origin: env.PUBLIC_ORIGIN, discordUrl: env.DISCORD_WEBHOOK_URL, fetch: fetcher,
         purgeScreenshots: (now) => purgeOldScreenshots(env, new D1Driver(env.DB), now),
         eraseGuests: (now) => eraseGuestDetails(new D1Driver(env.DB), new D1Driver(env.LEDGER), now),

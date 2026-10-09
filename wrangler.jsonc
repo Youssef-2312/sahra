@@ -33,7 +33,8 @@
   },
   // Secrets (set by the owner, never committed):
   //   GOOGLE_CLIENT_SECRET, COOKIE_MASTER_K1, QR_MASTER_K1, LINK_MASTER_K1,
-  //   TURNSTILE_SECRET, BACKUP_KEY, GMAIL_APP_PASSWORD (+ GMAIL_ADDRESS var),
+  //   TURNSTILE_SECRET, BACKUP_KEY, GMAIL_ADDRESS + GMAIL_APP_PASSWORD (optional second and
+  //   third account: GMAIL_ADDRESS_2 / GMAIL_APP_PASSWORD_2, GMAIL_ADDRESS_3 / GMAIL_APP_PASSWORD_3),
   //   BREVO_API_KEY (+ BREVO_SENDER var), DISCORD_WEBHOOK_URL (all optional except the first four)
   "d1_databases": [
     { "binding": "DB", "database_name": "sahra-prod", "database_id": "637368a6-14fe-4034-b945-d28918ae29f0", "migrations_dir": "migrations" },

@@ -75,6 +75,12 @@
 
   function render() {
     Sahra.clear(app);
+    if (failed === "invalid") {
+      Sahra.title(t("nt_link_t"));
+      app.appendChild(Sahra.problem({ kicker: t("nt_kicker_ticket"), title: t("nt_link_t"), text: t("link_invalid"),
+        actions: [[t("nt_find"), "/find", true], [t("nt_home"), "/"]], hint: t("nt_link_hint") }));
+      return;
+    }
     if (failed) { app.appendChild(el("p", { class: "notice no", text: failed })); return; }
     if (!data) { app.appendChild(el("p", { class: "muted", text: t("loading") })); return; }
     var k = data.ticket, p = data.party;
@@ -126,9 +132,9 @@
   }
 
   async function load() {
-    if (!link) { failed = t("link_invalid"); render(); return; }
+    if (!link) { failed = "invalid"; render(); return; }
     var r = await Sahra.api.get("/api/guest/ticket", { "x-sahra-ticket": link });
-    if (r.status === 404) { failed = t("link_invalid"); data = null; }
+    if (r.status === 404) { failed = "invalid"; data = null; }
     else if (!r.ok) { failed = Sahra.errorText(r); }
     else { failed = null; data = r.body; remember(); }
     render();

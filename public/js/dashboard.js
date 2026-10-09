@@ -94,7 +94,8 @@
 
   function render() {
     Sahra.clear(app);
-    if (!me) { app.appendChild(el("p", { class: "notice maybe", text: t("d_sign_in") })); return; }
+    if (!me) { app.appendChild(Sahra.problem({ kicker: t("nt_kicker_signin"), title: t("nt_staff_t"), text: t("d_sign_in"),
+      actions: [[t("sign_in"), "/signin", true], [t("nt_home"), "/"]], hint: t("nt_guest_hint") })); return; }
     if (!stats) { app.appendChild(el("p", { class: "muted", text: t("loading") })); return; }
     app.classList.add("dash");
     if (window.SahraStaff) app.appendChild(SahraStaff.nav("dashboard", me.staff.role));

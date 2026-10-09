@@ -16,6 +16,8 @@ export interface SmtpSocket {
 export type Connect = (host: string, port: number) => SmtpSocket;
 
 export interface SmtpConfig {
+  /** Which Gmail account (gmail, gmail2, gmail3): its own caps and counts. Default gmail. */
+  name?: "gmail" | "gmail2" | "gmail3";
   connect: Connect;
   host: string;
   port: number;
@@ -110,11 +112,15 @@ const isQuota = (r: Reply) => /\b5\.4\.5\b|daily .*limit|sending limit/i.test(r.
 const cls = (c: number) => Math.floor(c / 100);
 
 export class SmtpProvider implements Provider {
-  readonly name = "gmail" as const;
+  readonly name: "gmail" | "gmail2" | "gmail3";
+  readonly fromEmail: string;
   private conn: Conn | null = null;
   private dead: string | null = null;
 
-  constructor(private readonly cfg: SmtpConfig) {}
+  constructor(private readonly cfg: SmtpConfig) {
+    this.name = cfg.name ?? "gmail";
+    this.fromEmail = cfg.fromEmail;
+  }
 
   private err(e: unknown) {
     return cleanError(e, [this.cfg.pass, b64utf8(`\u0000${this.cfg.user}\u0000${this.cfg.pass}`), b64utf8(this.cfg.pass)]);

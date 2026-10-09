@@ -6,3 +6,6 @@ node_modules/
 coverage/
 cpu-report-*.json
 load-test-report-*.json
+
+# The owner's email account list (app passwords): scripts/email-accounts.mjs
+email-accounts.txt

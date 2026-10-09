@@ -13,7 +13,8 @@ import { flushChangeLog } from "../changelog";
 import { json, type AppEnv } from "../context";
 import { CONFIG } from "../env";
 import { csrfFor, newId, newToken, parseToken, sha256hex, timingSafeEqualStr } from "../lib/crypto";
-import { cookie, page, readCookie, sameOrigin } from "../lib/http";
+import { cookie, readCookie, sameOrigin } from "../lib/http";
+import { noticeResponse, type NoticeKey } from "../auth/notices";
 import { PlatformDb, type PlatformRole, type PlatformSession } from "./db";
 
 export const COOKIE_PLATFORM = "__Host-sahra_p";
@@ -53,19 +54,14 @@ export function requirePlatform(roles: readonly PlatformRole[]): MiddlewareHandl
   };
 }
 
-const tryAgain = `<p><a href="/platform">Back to platform sign in</a></p>`;
-
 /**
  * Callback half of a platform sign-in, after the Google ID token has been fully
  * verified (src/routes/auth.ts). Writes only if the verified account matches a
  * pending site owner row or organiser invitation, or is already active.
  */
 export async function platformCallback(c: Context<AppEnv>, claims: GoogleClaims, clear: string[]) {
-  const html = (status: number, title: string, body: string, refreshTo?: string, cookies: string[] = []) => {
-    const res = c.html(page(title, body, refreshTo), status as 200);
-    for (const ck of [...clear, ...cookies]) res.headers.append("set-cookie", ck);
-    return res;
-  };
+  const html = (status: number, key: NoticeKey, refreshTo?: string, cookies: string[] = []) =>
+    noticeResponse(c, status, key, { back: "/platform", backLabel: "Back to platform sign in", refreshTo, cookies: [...clear, ...cookies] });
   const now = c.var.deps.now();
   const pdb = new PlatformDb(c.var.db.driver);
   const email = claims.email ? normalizeEmail(claims.email) : null;
@@ -73,18 +69,17 @@ export async function platformCallback(c: Context<AppEnv>, claims: GoogleClaims,
   if (autoLink) await pdb.link(claims.sub, email!, now, newId());
   if (!(await pdb.hasAccess(claims.sub))) {
     if (email && !autoLink && (await pdb.hasPendingInvite(email, now))) {
-      return html(403, "Confirmation needed",
-        `<p>You were invited with an address that is not Gmail or Google Workspace. Such addresses must be confirmed by email, which is not available yet. Ask the site owner to invite a Gmail address instead.</p>${tryAgain}`);
+      return html(403, "p_confirm_needed");
     }
-    return html(403, "No access", `<p>This Google account is not a site owner or organiser.</p>${tryAgain}`);
+    return html(403, "p_no_access");
   }
   // Confirm every link (including one made by an earlier attempt whose log write
   // failed) in the change log before handing out a session.
   await flushChangeLog(c.var.db, c.var.ledger, now);
   const s = await platformSession(pdb, claims.sub, now);
-  if (s === "capped") return html(429, "Too many sign-ins", `<p>Too many sign-ins for this account in the last hour. Try again later.</p>${tryAgain}`);
-  if (s === "changed") return html(403, "No access", `<p>Access changed during sign-in. Try again.</p>${tryAgain}`);
-  return html(200, "Signed in", `<p>Signed in. <a href="/platform">Continue</a></p>`, "/platform", [s.cookie]);
+  if (s === "capped") return html(429, "capped");
+  if (s === "changed") return html(403, "changed");
+  return html(200, "signed_in", "/platform", [s.cookie]);
 }
 
 /**
