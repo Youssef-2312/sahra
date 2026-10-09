@@ -28,7 +28,7 @@
   --line: rgba(255, 255, 255, 0.08);
   --line-strong: rgba(255, 255, 255, 0.16);
   --accent: #6d8bff;          /* Nova blue, calmer for a dark page: the one brand colour */
-  --accent-2: #2f6bff;
+  --accent-2: #2f68ff;        /* button blue: white text on it is 4.6:1 (WCAG AA 4.5); test/contrast.test.ts */
   --accent-soft: rgba(109, 139, 255, 0.14);
   --accent-text: #ffffff;
   --yes: #4cc77a; --yes-bg: rgba(76, 199, 122, 0.13);
