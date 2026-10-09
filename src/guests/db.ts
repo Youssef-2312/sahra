@@ -46,6 +46,7 @@ export interface SignupParty {
   payment_instructions: string | null;
   /** The party's entry rules now (what a guest accepts; src/guests/policy.ts). */
   rules: string | null;
+  cancellation_policy: string | null;
   /** For the chosen type (if any): 1 when on sale to guests now, and its places left (NULL = no limit of its own). */
   type_on_sale: number | null;
   type_left: number | null;
@@ -114,7 +115,7 @@ export class GuestDb {
     const tt = sql`FROM ticket_types tt WHERE tt.id = ${typeId} AND tt.party_id = p.id`;
     const r = await this.driver.all<SignupParty>(sql`SELECT p.id, p.name, p.capacity, p.max_people_per_ticket, p.guest_form,
         ${held(sql`p.id`)} AS held, (SELECT party_id FROM tickets WHERE id = ${ticketId}) AS existing_party,
-        p.registration_opens_at, p.registration_closes_at, p.max_tickets_per_email, p.payment_instructions, p.rules,
+        p.registration_opens_at, p.registration_closes_at, p.max_tickets_per_email, p.payment_instructions, p.rules, p.cancellation_policy,
         ${email === null ? sql`0` : sql`(SELECT COUNT(*) FROM tickets e WHERE e.party_id = p.id AND e.guest_email = ${email} AND e.status IN ('pending', 'approved'))`} AS email_tickets,
         ${hasPublicTypes(sql`p.id`)} AS has_types,
         ${typeId === null ? sql`NULL` : sql`EXISTS (SELECT 1 ${tt} AND ${onSale(now)})`} AS type_on_sale,
@@ -128,17 +129,17 @@ export class GuestDb {
    * its people (same statement), audit it, and read back. A retry with the same
    * ticket id inserts nothing and is recognized by the read-back. The accepted
    * versions are stored in the same row, and only while the party's rules are
-   * still the text the guest accepted (`rules`; NULL = none).
+   * still the texts the guest accepted (entry rules and cancellation policy; NULL = none).
    */
   async signup(a: {
     id: string; partyId: string; people: number; name: string; email: string; answers: string | null;
     screenshotKey: string | null; typeId: string | null; now: number; op: string;
-    rules: string | null; accepted: { terms: string; rules: string | null; privacy: string };
+    rules: string | null; cancellation: string | null; accepted: { terms: string; rules: string | null; privacy: string };
   }): Promise<"created" | "already" | SignupRefusal> {
     const reg = registrationRules(a.now, a.email);
     const ty = typeRules(a.typeId, a.people, a.now);
     const roomOk = sql`${held(sql`p.id`)} + ${a.people} <= p.capacity`;
-    const rulesOk = sql`p.rules IS ${a.rules}`;
+    const rulesOk = sql`(p.rules IS ${a.rules} AND p.cancellation_policy IS ${a.cancellation})`;
     const rs = await this.driver.batch([
       sql`INSERT INTO tickets (id, party_id, status, people, guest_name, guest_email, answers, screenshot_key, type_id, price,
           terms_version, rules_version, privacy_version, terms_accepted_at, created_at, last_op, last_action)

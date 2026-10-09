@@ -22,6 +22,8 @@ export interface PartyDetailsRow {
   address: string | null;
   map_url: string | null;
   rules: string | null;
+  /** The organiser's cancellation and refund policy (migrations/0018); NULL = none written. */
+  cancellation_policy?: string | null;
   payment_instructions: string | null;
   capacity: number;
   max_people_per_ticket: number;
@@ -61,6 +63,7 @@ export interface VisibleParty {
   ends_at: number | null;
   time_zone: string | null;
   rules: string | null;
+  cancellation_policy: string | null;
   payment_instructions: string | null;
   max_people_per_ticket: number;
   address_mode: AddressMode;
@@ -110,6 +113,7 @@ export function visiblePartyDetails(party: PartyDetailsRow, viewer: Viewer, now:
     ends_at: party.ends_at,
     time_zone: party.time_zone,
     rules: party.rules,
+    cancellation_policy: party.cancellation_policy ?? null,
     payment_instructions: party.payment_instructions,
     max_people_per_ticket: party.max_people_per_ticket,
     address_mode: m,
@@ -133,6 +137,7 @@ export function staffView(p: PartyDetailsRow, now: number) {
   return {
     id: p.id, name: p.name, description: p.description, starts_at: p.starts_at, ends_at: p.ends_at, time_zone: p.time_zone,
     venue_name: p.venue_name, address: p.address, map_url: p.map_url, rules: p.rules,
+    cancellation_policy: p.cancellation_policy ?? null,
     payment_instructions: p.payment_instructions, capacity: p.capacity, max_people_per_ticket: p.max_people_per_ticket,
     address_mode: mode(p.address_mode), reveal_at: p.reveal_at, revealed_at: p.revealed_at,
     address_locked_at: p.address_locked_at,

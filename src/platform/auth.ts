@@ -81,11 +81,21 @@ export async function platformCallback(c: Context<AppEnv>, claims: GoogleClaims,
   // Confirm every link (including one made by an earlier attempt whose log write
   // failed) in the change log before handing out a session.
   await flushChangeLog(c.var.db, c.var.ledger, now);
+  const s = await platformSession(pdb, claims.sub, now);
+  if (s === "capped") return html(429, "Too many sign-ins", `<p>Too many sign-ins for this account in the last hour. Try again later.</p>${tryAgain}`);
+  if (s === "changed") return html(403, "No access", `<p>Access changed during sign-in. Try again.</p>${tryAgain}`);
+  return html(200, "Signed in", `<p>Signed in. <a href="/platform">Continue</a></p>`, "/platform", [s.cookie]);
+}
+
+/**
+ * A new platform session for a verified Google account that has platform access
+ * (the caller linked invitations and flushed the change log): its cookie, or why not.
+ * Also used by the single "Continue with Google" sign-in (src/routes/auth.ts).
+ */
+export async function platformSession(pdb: PlatformDb, sub: string, now: number): Promise<{ cookie: string } | "capped" | "changed"> {
   const token = newToken();
-  const ok = await pdb.createSession({ hash: await sha256hex(token), sub: claims.sub, now, expiresAt: now + CONFIG.googleSessionMs });
-  if (ok === "capped") return html(429, "Too many sign-ins", `<p>Too many sign-ins for this account in the last hour. Try again later.</p>${tryAgain}`);
-  if (ok !== "created") return html(403, "No access", `<p>Access changed during sign-in. Try again.</p>${tryAgain}`);
-  return html(200, "Signed in", `<p>Signed in. <a href="/platform">Continue</a></p>`, "/platform", [
-    cookie(COOKIE_PLATFORM, token, { maxAgeS: CONFIG.googleSessionMs / 1000, sameSite: "Strict" }),
-  ]);
+  const ok = await pdb.createSession({ hash: await sha256hex(token), sub, now, expiresAt: now + CONFIG.googleSessionMs });
+  if (ok === "capped") return "capped";
+  if (ok !== "created") return "changed";
+  return { cookie: cookie(COOKIE_PLATFORM, token, { maxAgeS: CONFIG.googleSessionMs / 1000, sameSite: "Strict" }) };
 }

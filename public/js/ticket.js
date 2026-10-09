@@ -109,6 +109,7 @@
 
     body.appendChild(addressCard(p));
     if (p.rules) body.appendChild(el("section", { class: "card" }, el("p", { class: "small muted", text: t("rules") }), el("p", { class: "pre", text: p.rules, attrs: { dir: "auto" } })));
+    if (p.cancellation_policy) body.appendChild(el("section", { class: "card" }, el("p", { class: "small muted", text: t("cancel_title") }), el("p", { class: "pre", text: p.cancellation_policy, attrs: { dir: "auto" } })));
 
     if (usable) side.appendChild(el("a", { class: "btn wide-btn", text: t("save_qr"), attrs: { href: side.querySelector(".qr-box img").src, download: "sahra-ticket.png" } }));
     body.appendChild(el("button", { class: "btn", text: t("refresh"), attrs: { type: "button" }, on: { click: load } }));

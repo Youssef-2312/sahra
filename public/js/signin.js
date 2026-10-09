@@ -1,6 +1,8 @@
-// Sign-in for organisers and party staff (brainstorm idea 27): a short panel and
-// one "Continue with Google" button per kind of account. No passwords and no
-// email sign-in exist; door staff use their invitation link instead.
+// Sign-in for organisers and party teams (brainstorm idea 27; owner: one button):
+// a short panel and one "Continue with Google". The server finds what the account
+// may open (its parties, the organiser page, the site-owner panel) and goes there,
+// or asks where when there is more than one. No passwords and no email sign-in;
+// door staff use their invitation link instead.
 "use strict";
 (function () {
   var t = Sahra.t, el = Sahra.el;
@@ -27,8 +29,7 @@
     app.appendChild(el("div", { class: "signin-wrap" },
       el("div", { class: "signin-panel" }, photo(), el("p", { class: "label-line", text: t("si_title") }), el("h1", { text: t("si_head") }), el("p", { text: t("si_text") })),
       el("div", null,
-        option(t("si_staff"), t("si_staff_hint"), "/api/auth/google/start"),
-        option(t("si_org"), t("si_org_hint"), "/api/auth/platform/start"),
+        option(t("si_one"), t("si_one_hint"), "/api/auth/google/start"),
         el("p", { class: "small muted", text: t("si_invite_only") }),
         el("p", { class: "small muted", text: t("si_door") }))));
   }

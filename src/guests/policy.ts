@@ -9,10 +9,11 @@
 // - Privacy notice: PRIVACY_VERSION, the date of public/privacy.html, plus
 //   "+email" when the notice includes the sentence about emails (shown only when
 //   an email provider is configured, since only then is it true).
-// - Party rules: "r-" and the first 16 hex digits of the SHA-256 of the rules
-//   text; null when the party has no rules. The sign-up INSERT also compares the
-//   rules text itself, so rules edited between this check and the insert refuse
-//   the request instead of recording an acceptance of text the guest never saw.
+// - Party rules: "r-" and the first 16 hex digits of the SHA-256 of the entry
+//   rules and the cancellation policy together; null when the party has
+//   neither. The sign-up INSERT also compares both texts, so an edit between
+//   this check and the insert refuses the request instead of recording an
+//   acceptance of text the guest never saw.
 //
 // Accepting is not a promotional opt-in and does not cover any other use of the
 // guest's details; nothing here is a legal basis for processing.
@@ -28,16 +29,17 @@ export function emailConfigured(env: Pick<Env, "GMAIL_ADDRESS" | "GMAIL_APP_PASS
   return !!((env.GMAIL_ADDRESS && env.GMAIL_APP_PASSWORD) || (env.BREVO_API_KEY && env.BREVO_SENDER));
 }
 
-export async function rulesVersion(rules: string | null): Promise<string | null> {
-  if (rules === null || rules.trim() === "") return null;
-  return "r-" + (await sha256hex(`sahra-rules-v1|${rules}`)).slice(0, 16);
+export async function rulesVersion(rules: string | null, cancellation: string | null = null): Promise<string | null> {
+  const r = rules && rules.trim() ? rules : null, c = cancellation && cancellation.trim() ? cancellation : null;
+  if (r === null && c === null) return null;
+  return "r-" + (await sha256hex(`sahra-rules-v2|${JSON.stringify([r, c])}`)).slice(0, 16);
 }
 
 export type Policy = { terms_version: string; privacy_version: string; rules_version: string | null; email: boolean };
 
-export async function currentPolicy(env: Parameters<typeof emailConfigured>[0], rules: string | null): Promise<Policy> {
+export async function currentPolicy(env: Parameters<typeof emailConfigured>[0], rules: string | null, cancellation: string | null): Promise<Policy> {
   const email = emailConfigured(env);
-  return { terms_version: TERMS_VERSION, privacy_version: PRIVACY_VERSION + (email ? "+email" : ""), rules_version: await rulesVersion(rules), email };
+  return { terms_version: TERMS_VERSION, privacy_version: PRIVACY_VERSION + (email ? "+email" : ""), rules_version: await rulesVersion(rules, cancellation), email };
 }
 
 /** The versions a sign-up form says it displayed ("" for "no party rules"). */

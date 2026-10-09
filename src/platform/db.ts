@@ -5,7 +5,7 @@
 
 import { CONFIG } from "../env";
 import type { SqlDriver } from "../db/driver";
-import { sql, type Sql } from "../db/sql";
+import { raw, sql, type Sql } from "../db/sql";
 
 /** Party id used for platform-level audit rows, change-log entries and intents. Party ids cannot start with "_". */
 export const PLATFORM = "_platform";
@@ -42,6 +42,17 @@ function audit(now: number, actor: string | null, action: string, entityType: st
     SELECT party_id, ${now}, ${actor}, ${action}, ${entityType}, id, rev, ${detail} FROM (${from})`;
 }
 
+/**
+ * The one site owner (owner decision, 2026-10-09): only this Google account
+ * (by its normalized email, as stored on its platform_admins row) gets the
+ * site-owner panel, whatever other rows the table holds. Checked inside every
+ * statement that grants site-owner rights: sessions, sign-in links and actions.
+ */
+export const SITE_OWNER_EMAIL = "youssefwaelkabbeel@gmail.com";
+function theSiteOwner(alias: string): Sql {
+  return sql`${raw(alias)}.email = ${SITE_OWNER_EMAIL}`;
+}
+
 function liveSession(hash: string, now: number): Sql {
   return sql`s.id_hash = ${hash} AND s.revoked_at IS NULL AND s.expires_at > ${now}`;
 }
@@ -49,7 +60,7 @@ function liveSession(hash: string, now: number): Sql {
 /** True only if the platform session is valid right now and its Google account is an active site owner `ownerId`. */
 export function siteOwnerValid(hash: string, ownerId: string, now: number): Sql {
   return sql`EXISTS (SELECT 1 FROM platform_sessions s JOIN platform_admins pa ON pa.google_sub = s.google_sub
-    WHERE ${liveSession(hash, now)} AND pa.id = ${ownerId} AND pa.disabled_at IS NULL)`;
+    WHERE ${liveSession(hash, now)} AND pa.id = ${ownerId} AND pa.disabled_at IS NULL AND ${theSiteOwner("pa")})`;
 }
 
 /** True only if the platform session is valid right now and its Google account is the active organiser `organiserId`. */
@@ -64,7 +75,7 @@ function underPlatformCap(sub: string, now: number): Sql {
 }
 
 function activePrincipal(sub: string): Sql {
-  return sql`(EXISTS (SELECT 1 FROM platform_admins WHERE google_sub = ${sub} AND disabled_at IS NULL)
+  return sql`(EXISTS (SELECT 1 FROM platform_admins pa WHERE pa.google_sub = ${sub} AND pa.disabled_at IS NULL AND ${theSiteOwner("pa")})
     OR EXISTS (SELECT 1 FROM organisers WHERE google_sub = ${sub} AND disabled_at IS NULL))`;
 }
 
@@ -77,7 +88,7 @@ export class PlatformDb {
     const r = await this.driver.all<PlatformSession>(sql`SELECT s.google_sub, s.expires_at,
         pa.id AS site_owner_id, pa.name AS site_owner_name, o.id AS organiser_id, o.name AS organiser_name
       FROM platform_sessions s
-      LEFT JOIN platform_admins pa ON pa.google_sub = s.google_sub AND pa.disabled_at IS NULL
+      LEFT JOIN platform_admins pa ON pa.google_sub = s.google_sub AND pa.disabled_at IS NULL AND ${theSiteOwner("pa")}
       LEFT JOIN organisers o ON o.google_sub = s.google_sub AND o.disabled_at IS NULL
       WHERE ${liveSession(hash, now)}`);
     const row = r.results[0];
@@ -98,7 +109,7 @@ export class PlatformDb {
     const linkedOrg = sql`SELECT id, rev FROM organisers WHERE google_sub = ${sub} AND last_op = ${op}`;
     const rs = await this.driver.batch([
       sql`UPDATE platform_admins SET google_sub = ${sub}, rev = rev + 1, last_op = ${op}, last_action = 'site_owner_linked'
-        WHERE email = ${email} AND google_sub IS NULL AND disabled_at IS NULL AND invite_expires_at > ${now}
+        WHERE email = ${email} AND email = ${SITE_OWNER_EMAIL} AND google_sub IS NULL AND disabled_at IS NULL AND invite_expires_at > ${now}
           AND NOT EXISTS (SELECT 1 FROM platform_admins x WHERE x.google_sub = ${sub} AND x.disabled_at IS NULL)`,
       sql`UPDATE organisers SET google_sub = ${sub}, rev = rev + 1, last_op = ${op}, last_action = 'organiser_linked'
         WHERE email = ${email} AND google_sub IS NULL AND disabled_at IS NULL
@@ -119,7 +130,7 @@ export class PlatformDb {
   async hasPendingInvite(email: string, now: number): Promise<boolean> {
     const r = await this.driver.all(sql`SELECT 1 AS x FROM organisers o WHERE o.email = ${email} AND o.google_sub IS NULL AND o.disabled_at IS NULL
         AND EXISTS (SELECT 1 FROM organiser_invites i WHERE i.organiser_id = o.id AND i.used_at IS NULL AND i.revoked_at IS NULL AND i.expires_at > ${now})
-      UNION ALL SELECT 1 FROM platform_admins pa WHERE pa.email = ${email} AND pa.google_sub IS NULL AND pa.disabled_at IS NULL
+      UNION ALL SELECT 1 FROM platform_admins pa WHERE pa.email = ${email} AND ${theSiteOwner("pa")} AND pa.google_sub IS NULL AND pa.disabled_at IS NULL
         AND pa.invite_expires_at > ${now}
       LIMIT 1`);
     return r.results.length > 0;

@@ -1,4 +1,5 @@
 import { PRIVACY_VERSION, TERMS_VERSION } from "../src/guests/policy";
+import { SITE_OWNER_EMAIL } from "../src/platform/db";
 import { env } from "cloudflare:test";
 import { createApp, type Deps } from "../src/app";
 import { GOOGLE_JWKS_URL, GOOGLE_TOKEN_URL, JwksCache } from "../src/auth/google";
@@ -454,12 +455,12 @@ export async function platformLogin(h: Harness, mutateBeforeCallback?: (ctx: { s
   return { res, cookies: setCookies(res), html: await res.clone().text() };
 }
 
-/** A linked, active site owner. */
-export async function seedSiteOwner(sub = `pa-${newId()}`) {
+/** A linked, active site owner (the one allowed address, SITE_OWNER_EMAIL, unless `email` says otherwise). */
+export async function seedSiteOwner(sub = `pa-${newId()}`, email = SITE_OWNER_EMAIL) {
   const id = newId();
   await env.DB.prepare(
     "INSERT INTO platform_admins (id, name, email, google_sub, invite_expires_at, created_at, logged_rev) VALUES (?, ?, ?, ?, 0, 0, 1)",
-  ).bind(id, `Admin ${id.slice(0, 4)}`, `${sub}@gmail.com`, sub).run();
+  ).bind(id, `Admin ${id.slice(0, 4)}`, email, sub).run();
   return { id, sub };
 }
 

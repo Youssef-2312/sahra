@@ -102,8 +102,8 @@ function refusal(c: Ctx, why: SignupRefusal) {
 }
 
 /** The form showed older terms, rules or notice: nothing stored; the current ones, to show and accept again. */
-function termsChanged(c: Ctx, rules: string | null, policy: Policy) {
-  return json(c, 409, { error: "terms_changed", message: REFUSAL.terms_changed.message, policy, rules });
+function termsChanged(c: Ctx, p: { rules: string | null; cancellation_policy: string | null }, policy: Policy) {
+  return json(c, 409, { error: "terms_changed", message: REFUSAL.terms_changed.message, policy, rules: p.rules, cancellation_policy: p.cancellation_policy });
 }
 
 function turnstileAnswer(c: Ctx, r: "failed" | "not_configured" | "unavailable") {
@@ -255,7 +255,7 @@ guestRoutes.get("/parties/:party", async (c) => {
     }),
     uploads: shotsOk(await uploadTarget(c.env, c.var.deps.now())),
     // What the form shows and the guest accepts; a request echoes these versions (src/guests/policy.ts).
-    policy: await currentPolicy(c.env, p.rules),
+    policy: await currentPolicy(c.env, p.rules, p.cancellation_policy),
     turnstile_site_key: turnstileConfigured(c.env) ? c.env.TURNSTILE_SITE_KEY : null,
   });
 });
@@ -338,8 +338,8 @@ guestRoutes.post("/parties/:party/signup", async (c) => {
   if (party.existing_party === partyId) return done(200);
   if (party.existing_party !== null) return json(c, 409, { error: "invalid_request" });
   // The guest accepted what the form showed; it must still be what applies now.
-  const policy = await currentPolicy(c.env, party.rules);
-  if (!samePolicy(shown, policy)) return termsChanged(c, party.rules, policy);
+  const policy = await currentPolicy(c.env, party.rules, party.cancellation_policy);
+  if (!samePolicy(shown, policy)) return termsChanged(c, party, policy);
 
   const pf = storedForm(party.guest_form);
   const answers = checkAnswers(pf, answersRaw);
@@ -376,13 +376,12 @@ guestRoutes.post("/parties/:party/signup", async (c) => {
   const r = await gdb.signup({
     id: ticketId, partyId, people, name, email, answers: Object.keys(answers).length ? JSON.stringify(answers) : null,
     screenshotKey, typeId, now, op: crypto.randomUUID(),
-    rules: party.rules, accepted: { terms: policy.terms_version, rules: policy.rules_version, privacy: policy.privacy_version },
+    rules: party.rules, cancellation: party.cancellation_policy, accepted: { terms: policy.terms_version, rules: policy.rules_version, privacy: policy.privacy_version },
   });
   // The rules were edited between the read above and the insert: show the new ones.
   if (r === "terms_changed") {
-    const fresh = await gdb.signupParty(partyId, ticketId);
-    const rules = fresh ? fresh.rules : null;
-    return termsChanged(c, rules, await currentPolicy(c.env, rules));
+    const fresh = (await gdb.signupParty(partyId, ticketId)) ?? { rules: null, cancellation_policy: null };
+    return termsChanged(c, fresh, await currentPolicy(c.env, fresh.rules, fresh.cancellation_policy));
   }
   // A screenshot stored for a sign-up that was then refused stays as an orphan row
   // (no ticket points to it); it is never served (reads need the ticket).

@@ -8,7 +8,7 @@ import { ADDRESS_MODES, type AddressMode } from "./details";
 import { isTimeZone, zonedToUtc } from "./time";
 
 export const EDITABLE = [
-  "name", "description", "starts_at", "ends_at", "time_zone", "venue_name", "address", "map_url", "rules",
+  "name", "description", "starts_at", "ends_at", "time_zone", "venue_name", "address", "map_url", "rules", "cancellation_policy",
   "payment_instructions", "capacity", "max_people_per_ticket", "address_mode", "reveal_at", "address_locked_at",
   "email_ticket_subject", "email_ticket_body", "email_link_subject", "email_link_body",
   "registration_opens_at", "registration_closes_at", "max_tickets_per_email",
@@ -23,9 +23,9 @@ export const LOCKED: readonly EditableField[] = ["venue_name", "address", "map_u
 
 const TIME_FIELDS = ["starts_at", "ends_at", "reveal_at", "address_locked_at", "registration_opens_at", "registration_closes_at"] as const;
 const TEXT_LIMITS: Partial<Record<EditableField, number>> = {
-  description: 2000, venue_name: 120, address: 300, rules: 2000, payment_instructions: 1000,
+  description: 2000, venue_name: 120, address: 300, rules: 2000, cancellation_policy: 2000, payment_instructions: 1000,
 };
-const MULTILINE = new Set<EditableField>(["description", "rules", "payment_instructions", "address"]);
+const MULTILINE = new Set<EditableField>(["description", "rules", "cancellation_policy", "payment_instructions", "address"]);
 // 2020-01-01 .. 2100-01-01 UTC: anything else is a unit mistake (seconds, not ms).
 export const MIN_T = 1577836800000;
 export const MAX_T = 4102444800000;
@@ -85,7 +85,7 @@ export function parseEdit(b: Record<string, unknown>): ParsedEdit {
     if (!s) return bad("name");
     values.name = s;
   }
-  for (const f of ["description", "venue_name", "address", "rules", "payment_instructions"] as const) {
+  for (const f of ["description", "venue_name", "address", "rules", "cancellation_policy", "payment_instructions"] as const) {
     if (!(f in b)) continue;
     const s = text(b[f], TEXT_LIMITS[f]!, MULTILINE.has(f));
     if (s === undefined) return bad(f);

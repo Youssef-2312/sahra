@@ -8,8 +8,10 @@
 //
 // The invitation is any door-staff invitation link of an existing staging party
 // (it is used once, to get a session that may create test parties). Pictures are
-// the owner's photos in public/img/hero (demo data only). Needs migration 0016
-// on staging. Prints the parties it made; their owner sessions expire in 3 hours.
+// the owner's photos in public/img/hero (demo data only). Needs migrations
+// 0016, 0017 and 0018 on staging. Some parties get entry rules and a cancellation
+// policy (the request form's Terms box covers them). Prints the parties it made;
+// their owner sessions expire in 3 hours.
 
 import { randomBytes, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -51,6 +53,12 @@ function local(daysAhead, hour) {
 }
 
 // [name, days ahead, start hour, [type, price]..., capacity, pictures (hero-N)]
+const RULES = "Over 21. Bring your ID. No outside drinks.";
+const CANCEL = "Full refund until 7 days before the party. Half refund until 2 days before. No refunds after that.";
+// Which parties get entry rules / a cancellation policy (by index in PARTIES).
+const WITH_RULES = new Set([0, 2, 3, 5, 8]);
+const WITH_CANCEL = new Set([0, 3, 6, 8, 9]);
+
 const PARTIES = [
   ["Rooftop Sessions", 3, 22, [["Entry", 350]], 120, [2, 9, 4]],
   ["Garden Disco", 5, 21, [["Early", 300], ["Regular", 450]], 0, [4]],            // capacity 0: sold out
@@ -71,13 +79,14 @@ if (join.status !== 200) { console.error(`Invitation not accepted: HTTP ${join.s
 const doorSess = await withCsrf(doorToken);
 
 const made = [];
-for (const [name, days, hour, types, capacity, pics] of PARTIES) {
+for (const [i, [name, days, hour, types, capacity, pics]] of PARTIES.entries()) {
   const ownerToken = token();
   const p = must(await call("POST", "/api/test/party", { session: ownerToken, name: name.slice(0, 60) }, doorSess), `test party ${name}`);
   const os = await withCsrf(ownerToken);
   must(await call("POST", "/api/party/details", {
     name, time_zone: "Africa/Cairo", starts_at_local: local(days, hour), ends_at_local: local(days + 1, 4), capacity,
     description: "Demo party on staging (test data).",
+    rules: WITH_RULES.has(i) ? RULES : null, cancellation_policy: WITH_CANCEL.has(i) ? CANCEL : null,
   }, os), `details ${name}`);
   for (const [tname, price] of types) must(await call("POST", "/api/tickets/types", { op: randomUUID(), name: tname, price }, os), `type ${tname}`);
   for (const n of pics) {

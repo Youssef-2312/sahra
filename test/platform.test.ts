@@ -3,7 +3,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import { newId, newToken } from "../src/lib/crypto";
 import { DEFAULT_PARTY_LIMIT, PlatformDb } from "../src/platform/db";
 import { D1Driver } from "../src/db/driver";
-import { siteOwnerSql } from "../scripts/site-owner-sql.mjs";
+import { SITE_OWNER_EMAIL as SCRIPT_OWNER, siteOwnerSql } from "../scripts/site-owner-sql.mjs";
+import { SITE_OWNER_EMAIL } from "../src/platform/db";
 import {
   api, googleLogin, harness, logEntry, OutageDriver, openParty, ORIGIN, papi, platformLogin, scan, seedOrganiser, seedOwner,
   seedParty, seedSiteOwner, seedPlatformSession, seedSession, setCookies, testTickets, type Harness,
@@ -39,19 +40,22 @@ describe("site owner bootstrap and sign-in", () => {
     const h = await harness();
     const now = h.clock.now();
     const run = async () => {
-      const { statements, email } = siteOwnerSql({ name: "Owner", email: "Boot.Strap+x@gmail.com", id: newId(), op: newId(), now });
+      const { statements, email } = siteOwnerSql({ name: "Owner", email: "Youssef.Wael.Kabbeel+x@gmail.com", id: newId(), op: newId(), now });
       await env.DB.batch(statements.map((s) => env.DB.prepare(s)));
       return email;
     };
     const email = await run();
-    expect(email).toBe("bootstrap@gmail.com");
+    expect(email).toBe(SITE_OWNER_EMAIL);
+    expect(SCRIPT_OWNER).toBe(SITE_OWNER_EMAIL);
     await run(); // again: not duplicated (renews the sign-in window only)
     const rows = await env.DB.prepare("SELECT id, rev, google_sub FROM platform_admins WHERE email = ?").bind(email).all<{ id: string; rev: number }>();
     expect(rows.results).toHaveLength(1);
     expect(rows.results[0]!.rev).toBe(2);
     expect(() => siteOwnerSql({ name: "x", email: "not-an-email", id: newId(), op: newId(), now })).toThrow();
+    // Only the one site owner's address.
+    expect(() => siteOwnerSql({ name: "x", email: "someone.else@gmail.com", id: newId(), op: newId(), now })).toThrow(/only/);
 
-    h.google.identity = { sub: "boot-sub", email: "bootstrap@gmail.com", email_verified: true };
+    h.google.identity = { sub: "boot-sub", email: SITE_OWNER_EMAIL, email_verified: true };
     const { res, cookies, html } = await platformLogin(h);
     expect(res.status).toBe(200);
     expect(html).toContain("/platform");
@@ -73,9 +77,10 @@ describe("site owner bootstrap and sign-in", () => {
 
   it("an expired bootstrap row does not link", async () => {
     const h = await harness();
-    const { statements } = siteOwnerSql({ name: "Late", email: "late-admin@gmail.com", id: newId(), op: newId(), now: h.clock.now() - 15 * 86400_000 });
+    await env.DB.prepare("UPDATE platform_admins SET disabled_at = 1 WHERE email = ? AND disabled_at IS NULL").bind(SITE_OWNER_EMAIL).run();
+    const { statements } = siteOwnerSql({ name: "Late", email: SITE_OWNER_EMAIL, id: newId(), op: newId(), now: h.clock.now() - 15 * 86400_000 });
     await env.DB.batch(statements.map((s) => env.DB.prepare(s)));
-    h.google.identity = { sub: "late-sub", email: "late-admin@gmail.com" };
+    h.google.identity = { sub: "late-sub", email: SITE_OWNER_EMAIL };
     const { res } = await platformLogin(h);
     expect(res.status).toBe(403);
   });
@@ -92,15 +97,24 @@ describe("site owner bootstrap and sign-in", () => {
     expect((await platformLogin(h)).res.status).toBe(200);
   });
 
-  it("a staff sign-in attempt cannot be turned into a platform sign-in (sealed attempt), and the other way round", async () => {
+  it("the one sign-in button gives a site owner who is not party staff the platform session only", async () => {
     const h = await harness();
     const a = await seedSiteOwner("only-admin");
     h.google.identity = { sub: a.sub, email: `${a.sub}@gmail.com` };
-    // Staff flow for a site owner who is not party staff: no access, no platform cookie.
-    const staff = await googleLogin(h);
-    expect(staff.res.status).toBe(403);
-    expect(staff.cookies["__Host-sahra_p"]).toBeUndefined();
-    expect(staff.cookies["__Host-sahra_s"]).toBeUndefined();
+    const one = await googleLogin(h);
+    expect(one.res.status).toBe(200);
+    expect(one.html).toContain("/platform");
+    expect(one.cookies["__Host-sahra_p"]!.attrs).toMatch(/SameSite=Strict/);
+    expect(one.cookies["__Host-sahra_s"]).toBeUndefined();
+    // A row with another address is not a site owner: no access through either button.
+    const other = await seedSiteOwner("other-admin", "someone.else@gmail.com");
+    h.google.identity = { sub: other.sub, email: "someone.else@gmail.com" };
+    for (const login of [googleLogin, platformLogin]) {
+      const r = await login(h);
+      expect(r.res.status).toBe(403);
+      expect(r.cookies["__Host-sahra_p"]).toBeUndefined();
+      expect(r.cookies["__Host-sahra_s"]).toBeUndefined();
+    }
   });
 });
 
@@ -217,10 +231,22 @@ describe("party creation by organisers", () => {
 
     // Staff sign-in with the same Google account lands in the new party as owner.
     h.google.identity = { sub: o.sub, email: `${o.sub}@gmail.com` };
+    // One button: both kinds of access, so the organiser page is signed in and the party is one choice away.
     const login = await googleLogin(h);
     expect(login.res.status).toBe(200);
-    const me = await (await h.req("/api/me", { cookies: { "__Host-sahra_s": login.cookies["__Host-sahra_s"]!.value } })).json();
+    expect(login.html).toContain("Organiser page");
+    expect(login.html).toContain(id);
+    expect(login.cookies["__Host-sahra_p"]).toBeDefined();
+    const form = new FormData();
+    form.set("party_id", id);
+    const sel = await h.req("/api/auth/select-party", {
+      method: "POST", body: form, headers: { origin: ORIGIN }, cookies: { "__Host-sahra_pick": login.cookies["__Host-sahra_pick"]!.value },
+    });
+    expect(sel.status).toBe(200);
+    const me = await (await h.req("/api/me", { cookies: { "__Host-sahra_s": setCookies(sel)["__Host-sahra_s"]!.value } })).json();
     expect(me).toMatchObject({ party: { id }, staff: { id: staffId, role: "owner" } });
+    const pme = await h.req("/api/platform/me", { cookies: { "__Host-sahra_p": login.cookies["__Host-sahra_p"]!.value } });
+    expect(pme.status).toBe(200);
 
     const mine = (await (await h.req("/api/platform/my-parties", { cookies: { "__Host-sahra_p": o.s.token } })).json()) as { parties: { id: string }[] };
     expect(mine.parties.map((x) => x.id)).toEqual([id]);

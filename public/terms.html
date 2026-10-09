@@ -12,9 +12,10 @@
 </head>
 <body>
 <!-- Terms, in the same reading layout as privacy.html. Content is the owner's text,
-     checked against the ticket rules: party pages have no refund policy field, so
-     guests are told to ask the organiser rather than to "check" a policy that is
-     not shown. The date is fixed: change it only with the content. -->
+     checked against the ticket rules. A party's cancellation policy (if its
+     organiser wrote one) is on its page and in the request form's Terms box.
+     The date is fixed: change it only with the content, together with
+     TERMS_VERSION in src/guests/policy.ts (a test checks they match). -->
 <main class="legal">
 <article data-lang="en" data-tab="Terms">
   <header class="legal-head">
@@ -29,7 +30,7 @@
   </section>
   <section>
     <h2>Payment and refunds</h2>
-    <p>You pay the organiser directly using the instructions on the party page. Sahra does not collect ticket payments or issue refunds. Ask the organiser about their refund and cancellation policy before paying. Contact the organiser about payment problems, refunds, or a cancelled or rescheduled party.</p>
+    <p>You pay the organiser directly using the instructions on the party page. Sahra does not collect ticket payments or issue refunds. Read the party's cancellation policy on its page before paying. If the page does not show one, ask the organiser. Contact the organiser about payment problems, refunds, or a cancelled or rescheduled party.</p>
   </section>
   <section>
     <h2>Approval and ticket release</h2>
@@ -76,7 +77,7 @@
   </section>
   <section>
     <h2>الدفع والاسترداد</h2>
-    <p>تدفع للمنظم مباشرة باتباع التعليمات في صفحة الحفلة. سهرة لا تستلم مدفوعات التذاكر ولا تقوم بالاسترداد. اسأل المنظم عن سياسة الاسترداد والإلغاء قبل الدفع. تواصل مع المنظم بخصوص مشاكل الدفع أو الاسترداد أو إلغاء الحفلة أو تغيير موعدها.</p>
+    <p>تدفع للمنظم مباشرة باتباع التعليمات في صفحة الحفلة. سهرة لا تستلم مدفوعات التذاكر ولا تقوم بالاسترداد. اقرأ سياسة الإلغاء في صفحة الحفلة قبل الدفع. وإذا لم تظهر الصفحة سياسة، اسأل المنظم. تواصل مع المنظم بخصوص مشاكل الدفع أو الاسترداد أو إلغاء الحفلة أو تغيير موعدها.</p>
   </section>
   <section>
     <h2>الموافقة وإصدار التذكرة</h2>

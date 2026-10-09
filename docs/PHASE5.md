@@ -342,6 +342,26 @@ the `staging` branch; a finished piece the owner should try is pushed there too.
   stay NULL (unknown). No IP address is stored for it; it is not a marketing
   opt-in. Tests: test/terms.test.ts.
 
+- One sign-in button (owner: "merge them together"): "Continue with Google"
+  checks the account's party-team access and its organiser / site-owner access
+  in the same callback. Platform access only: the platform page. Party access
+  only: the dashboard (or the party choice). Both: a platform session plus the
+  party choice with an "Organiser page" link. The platform page keeps its own
+  button. Roles: the site owner invites organisers; an organiser creates
+  parties and becomes each one's owner; a party's owner invites admins and
+  door staff.
+- One site owner (owner decision): only youssefwaelkabbeel@gmail.com
+  (SITE_OWNER_EMAIL, src/platform/db.ts) gets site-owner rights, checked inside
+  every statement that grants them (sessions, sign-in links, actions, health
+  alert recipients); scripts/site-owner-sql.mjs refuses other addresses.
+- Cancellation policy (migration 0018, owner: "make them agree to the
+  cancellation rules as well"): parties.cancellation_policy, written by the
+  owner/admin next to the entry rules, shown on the party page and the ticket
+  page. The Terms box names whichever the party has ("entry rules and
+  cancellation policy"); the accepted rules_version is a hash of both texts.
+  A party without either shows "I agree to Sahra's Terms" only.
+- Instagram: @novadev.co everywhere.
+
 ## Next
 
 Piece 8: party settings (details, ticket types, sign-up questions).

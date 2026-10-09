@@ -98,6 +98,28 @@ describe("terms acceptance", () => {
     expect(await ticketsOf(party)).toBe(2);
   });
 
+  it("the cancellation policy is accepted with the rules; editing either asks for a new review", async () => {
+    const h = await harness();
+    const { party, os } = await guestParty(h);
+    expect((await h.req("/api/party/details", api(os, { cancellation_policy: "No refunds after 1 November." }))).status).toBe(200);
+    const page = (await (await h.req(`/api/guest/parties/${party}`)).json()) as { policy: Policy; details: { cancellation_policy: string } };
+    expect(page.details.cancellation_policy).toBe("No refunds after 1 November.");
+    expect(page.policy.rules_version).toBe(await rulesVersion(null, "No refunds after 1 November."));
+    const stale = await signup(h, party, { rules: "" });
+    expect(stale.body).toMatchObject({ error: "terms_changed", rules: null, cancellation_policy: "No refunds after 1 November." });
+    const ok = await signup(h, party, { rules: page.policy.rules_version });
+    expect(ok.status).toBe(201);
+    expect((await row(ok.body.ticket_id!)).rules_version).toBe(page.policy.rules_version);
+    // Adding entry rules changes the version that covers both.
+    expect((await h.req("/api/party/details", api(os, { rules: "Over 21." }))).status).toBe(200);
+    const both = await formPolicy(h, party);
+    expect(both.rules_version).toBe(await rulesVersion("Over 21.", "No refunds after 1 November."));
+    expect((await signup(h, party, { rules: page.policy.rules_version })).body.error).toBe("terms_changed");
+    expect((await signup(h, party, { rules: both.rules_version })).status).toBe(201);
+    // The same text as rules or as policy is a different version.
+    expect(await rulesVersion("x", null)).not.toBe(await rulesVersion(null, "x"));
+  });
+
   it("refuses older Terms or privacy notice versions; the notice version follows whether emails can be sent", async () => {
     const h = await harness();
     const { party } = await guestParty(h);
@@ -139,7 +161,7 @@ describe("terms acceptance", () => {
     await env.DB.prepare("UPDATE parties SET rules = 'Rules now' WHERE id = ?").bind(party).run();
     const r = await new GuestDb(new D1Driver(env.DB)).signup({
       id: "ABCDEFGHJKMNPQRS", partyId: party, people: 1, name: "G", email: "g@example.com", answers: null, screenshotKey: null,
-      typeId: null, now: h.clock.now(), op: newId(), rules: null, accepted: { terms: TERMS_VERSION, rules: null, privacy: PRIVACY_VERSION },
+      typeId: null, now: h.clock.now(), op: newId(), rules: null, cancellation: null, accepted: { terms: TERMS_VERSION, rules: null, privacy: PRIVACY_VERSION },
     });
     expect(r).toBe("terms_changed");
     expect(await ticketsOf(party)).toBe(0);

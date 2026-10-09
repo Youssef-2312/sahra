@@ -132,7 +132,7 @@ describe("visiblePartyDetails", () => {
     expectHidden(v);
     expect(v.address_mode).toBe("manual");
     expect(Object.keys(visiblePartyDetails(row({ address_mode: "public" }), good, T0)).sort()).toEqual([
-      "address", "address_mode", "description", "ends_at", "id", "max_people_per_ticket", "map_url", "name",
+      "address", "address_mode", "cancellation_policy", "description", "ends_at", "id", "max_people_per_ticket", "map_url", "name",
       "payment_instructions", "reveal", "rules", "starts_at", "time_zone", "venue_name",
     ].sort());
   });

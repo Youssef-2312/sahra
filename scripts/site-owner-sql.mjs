@@ -23,6 +23,11 @@ export function normalizeEmail(email) {
   return `${local}@${domain}`;
 }
 
+// The one site owner (owner decision): the same address as SITE_OWNER_EMAIL in
+// src/platform/db.ts (a test keeps them equal). Any other address is refused here,
+// and would get no site-owner rights anyway.
+export const SITE_OWNER_EMAIL = "youssefwaelkabbeel@gmail.com";
+
 const q = (s) => `'${String(s).replace(/'/g, "''")}'`;
 
 /** Returns { email, statements } or throws on bad input. `id` and `op` are random UUIDs from the caller. */
@@ -31,6 +36,7 @@ export function siteOwnerSql({ name, email, id, op, now, days = 14 }) {
   if (!n || n.length > 80) throw new Error("name: 1-80 characters");
   const e = normalizeEmail(email ?? "");
   if (!e) throw new Error("not a valid email address");
+  if (e !== SITE_OWNER_EMAIL) throw new Error(`only ${SITE_OWNER_EMAIL} can be the site owner`);
   if (!/^[0-9a-f-]{36}$/.test(id) || !/^[0-9a-f-]{36}$/.test(op)) throw new Error("bad id");
   const expires = now + days * 24 * 3600_000;
   return {

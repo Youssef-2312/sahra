@@ -3,7 +3,8 @@ import { json, requireAuth, type AppEnv, type Ctx } from "../context";
 import { authUrl, canAutoLink, exchangeCode, normalizeEmail, pkceChallenge, verifyIdToken, AuthError } from "../auth/google";
 import { flushChangeLog } from "../changelog";
 import { CONFIG } from "../env";
-import { platformCallback } from "../platform/auth";
+import { platformCallback, platformSession } from "../platform/auth";
+import { PlatformDb } from "../platform/db";
 import { newId, newToken, parseToken, seal, sha256hex, timingSafeEqualStr, unseal } from "../lib/crypto";
 import {
   COOKIE_LOGIN,
@@ -67,8 +68,10 @@ async function startSignIn(c: Ctx, platform: boolean) {
   return res;
 }
 
+// The sign-in page's one "Continue with Google" (owner: one button): the callback
+// finds every kind of access the account has (party team, organiser, site owner).
 authRoutes.post("/google/start", (c) => startSignIn(c, false));
-// Site owners and organisers: the same Google flow and callback, a separate session (src/platform/auth.ts).
+// The platform page's own button: platform access only, a separate session (src/platform/auth.ts).
 authRoutes.post("/platform/start", (c) => startSignIn(c, true));
 
 // Step 2: Google redirects back here. The sealed cookie must exist, be genuine and
@@ -122,21 +125,35 @@ authRoutes.get("/google/callback", async (c) => {
   // only if that identity matches a pending invitation or is active staff.
   if (attempt.p === 1) return platformCallback(c, claims, clear);
   const db = c.var.db;
+  const pdb = new PlatformDb(db.driver);
   const email = claims.email ? normalizeEmail(claims.email) : null;
-  const linked = email && canAutoLink(claims) ? await db.linkGoogleInvites(claims.sub, email, now, newId()) : 0;
+  const autoLink = !!email && canAutoLink(claims);
+  const linked = autoLink ? await db.linkGoogleInvites(claims.sub, email!, now, newId()) : 0;
+  if (autoLink) await pdb.link(claims.sub, email!, now, newId());
   const staff = await db.activeStaffForSub(claims.sub);
-  if (staff.length === 0) {
-    if (email && !canAutoLink(claims) && (await db.hasPendingGoogleInvite(email, now))) {
+  const platform = await pdb.hasAccess(claims.sub);
+  if (staff.length === 0 && !platform) {
+    if (email && !autoLink && ((await db.hasPendingGoogleInvite(email, now)) || (await pdb.hasPendingInvite(email, now)))) {
       return htmlPage(c, 403, "Confirmation needed",
-        `<p>You were invited with an address that is not Gmail or Google Workspace. Such addresses must be confirmed by email, which is not available yet. Ask the party owner to invite a Gmail address instead.</p>${tryAgain}`,
+        `<p>You were invited with an address that is not Gmail or Google Workspace. Such addresses must be confirmed by email, which is not available yet. Ask for an invitation to a Gmail address instead.</p>${tryAgain}`,
         undefined, clear);
     }
-    return htmlPage(c, 403, "No access", `<p>This Google account is not staff at any party.</p>${tryAgain}`, undefined, clear);
+    return htmlPage(c, 403, "No access", `<p>This Google account has not been invited to Sahra.</p>${tryAgain}`, undefined, clear);
   }
-  // Confirm every staff/invite change (including any link just made) in the change log first.
-  if (linked > 0 || staff.length > 0) await flushChangeLog(db, c.var.ledger, now);
+  // Confirm every staff/invite/platform change (including any link just made) in the change log first.
+  if (linked > 0 || staff.length > 0 || platform) await flushChangeLog(db, c.var.ledger, now);
 
-  if (staff.length === 1) {
+  // Organiser or site owner: their own session (cookie) too.
+  const cookies = [...clear];
+  if (platform) {
+    const s = await platformSession(pdb, claims.sub, now);
+    if (s === "capped") return htmlPage(c, 429, "Too many sign-ins", `<p>Too many sign-ins for this account in the last hour. Try again later.</p>${tryAgain}`, undefined, clear);
+    if (s === "changed") return htmlPage(c, 403, "No access", `<p>Access changed during sign-in. Try again.</p>${tryAgain}`, undefined, clear);
+    cookies.push(s.cookie);
+    if (staff.length === 0) return htmlPage(c, 200, "Signed in", `<p>Signed in. <a href="/platform">Continue</a></p>`, "/platform", cookies);
+  }
+
+  if (staff.length === 1 && !platform) {
     const s = staff[0]!;
     const token = newToken();
     const ok = await db.createGoogleSession({
@@ -158,8 +175,10 @@ authRoutes.get("/google/callback", async (c) => {
   const forms = staff
     .map((s) => `<form method="post" action="/api/auth/select-party"><input type="hidden" name="party_id" value="${escapeHtml(s.party_id)}"><button type="submit">${escapeHtml(s.party_name)} (${escapeHtml(s.role)})</button></form>`)
     .join("");
-  return htmlPage(c, 200, "Choose party", `<p>Choose a party:</p>${forms}`, undefined, [
-    ...clear,
+  // Also an organiser or site owner (already signed in to that page above): it is one more choice.
+  const platformLink = platform ? `<p><a href="/platform">Organiser page</a></p>` : "";
+  return htmlPage(c, 200, "Choose party", `<p>Choose a party:</p>${forms}${platformLink}`, undefined, [
+    ...cookies,
     cookie(COOKIE_PICK, pick, { maxAgeS: CONFIG.loginGrantMs / 1000, sameSite: "Strict" }),
   ]);
 });

@@ -1,6 +1,7 @@
 // Workstream F: unattended health checks with alerts to the site owners, and
 // per-party limits. Runs the checks directly (runHealth) with a test clock, plus
 // the Worker's scheduled handler for the cadence and MAINTENANCE.
+import { SITE_OWNER_EMAIL } from "../src/platform/db";
 import { createExecutionContext, createScheduledController, env, waitOnExecutionContext } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { D1Driver, type SqlDriver } from "../src/db/driver";
@@ -48,7 +49,7 @@ beforeEach(async () => {
   owners = [];
   for (let i = 0; i < 2; i++) {
     const o = await seedSiteOwner();
-    owners.push({ id: o.id, email: `${o.sub}@gmail.com` });
+    owners.push({ id: o.id, email: SITE_OWNER_EMAIL });
   }
 });
 
@@ -279,6 +280,8 @@ describe("health checks", () => {
     await seedOwner(party, "party-owner-sub");
     const removed = await seedSiteOwner();
     await env.DB.prepare("UPDATE platform_admins SET disabled_at = 1 WHERE id = ?").bind(removed.id).run();
+    // A row with any other address is not a site owner: no alerts.
+    await seedSiteOwner(undefined, "someone.else@gmail.com");
     sizes.files = 351e6;
     await run();
     const sent = await alerts();

@@ -22,7 +22,7 @@
     document.getElementById("current").textContent = JSON.stringify(party, null, 2);
     if (me.staff.role === "door") return;
     document.getElementById("editor").hidden = false;
-    ["name", "description", "time_zone", "venue_name", "address", "map_url", "rules", "payment_instructions",
+    ["name", "description", "time_zone", "venue_name", "address", "map_url", "rules", "cancellation_policy", "payment_instructions",
       "capacity", "max_people_per_ticket", "address_mode"].forEach(function (k) {
       form.elements[k].value = party[k] === null || party[k] === undefined ? "" : party[k];
     });
@@ -67,7 +67,7 @@
     e.preventDefault();
     var f = new FormData(form);
     var body = {};
-    ["name", "description", "time_zone", "venue_name", "address", "map_url", "rules", "payment_instructions", "address_mode"]
+    ["name", "description", "time_zone", "venue_name", "address", "map_url", "rules", "cancellation_policy", "payment_instructions", "address_mode"]
       .forEach(function (k) { body[k] = String(f.get(k) || "").trim() || null; });
     ["capacity", "max_people_per_ticket"].forEach(function (k) { if (f.get(k) !== "") body[k] = Number(f.get(k)); });
     body.max_tickets_per_email = f.get("max_tickets_per_email") === "" ? null : Number(f.get("max_tickets_per_email"));

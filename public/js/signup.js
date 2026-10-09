@@ -6,7 +6,7 @@
 // (sahra_tickets) for the home page.
 //
 // Above the button: the privacy notice and the required Terms box (and the
-// party's entry rules when it has them). The box starts unticked and is never
+// party's entry rules and cancellation policy, whichever it has). The box starts unticked and is never
 // remembered; the server checks it and records the versions the form showed
 // (data.policy). If they changed meanwhile, the form stays as typed and asks the
 // guest to review and tick again.
@@ -100,16 +100,23 @@
     return el("section", { class: "card" }, el("p", { class: "small muted", text: t("where") }), body);
   }
 
-  // Always in the page (hidden without rules), so new rules from a "terms changed" answer can be shown in place.
-  function rulesCard() {
-    var card = el("section", { class: "card", attrs: { id: "party-rules", tabindex: "-1" } });
-    rulesFill(card, data.details ? data.details.rules : null);
+  // Always in the page (hidden when empty), so new texts from a "terms changed" answer can be shown in place.
+  // texts: what this form shows and the guest agrees to; updated from that answer.
+  var texts = { rules: null, cancellation: null };
+  function textCard(id, title, value) {
+    var card = el("section", { class: "card", attrs: { id: id, tabindex: "-1" } });
+    textFill(card, title, value);
     return card;
   }
-  function rulesFill(card, rules) {
+  function textFill(card, title, value) {
     Sahra.clear(card);
-    card.hidden = !rules;
-    if (rules) card.append(el("p", { class: "small muted", text: t("rules") }), el("p", { class: "pre", text: rules, attrs: { dir: "auto" } }));
+    card.hidden = !value;
+    if (value) card.append(el("p", { class: "small muted", text: t(title) }), el("p", { class: "pre", text: value, attrs: { dir: "auto" } }));
+  }
+  function rulesCard() {
+    var d = data.details || {};
+    texts = { rules: d.rules || null, cancellation: d.cancellation_policy || null };
+    return [textCard("party-rules", "rules", texts.rules), textCard("party-cancel", "cancel_title", texts.cancellation)];
   }
 
   // The privacy notice (information, not a consent) and the Terms box, kept apart.
@@ -127,8 +134,15 @@
       notice.append(t("pn_text") + (policy.email ? " " + t("pn_email") : "") + " " + t("pn_read"), newTab(t("pn_link"), "/privacy"), t("pn_end"));
       Sahra.clear(text);
       text.append(t("acc_a"), newTab(t("acc_terms"), "/terms"));
-      // Only rules the page actually shows; there is no cancellation policy to agree to.
-      if (policy.rules_version) text.append(t("acc_b"), el("a", { text: t("acc_rules"), attrs: { href: "#party-rules" } }));
+      // Only what the page actually shows: the entry rules and/or the cancellation policy.
+      var parts = [];
+      if (texts.rules) parts.push(el("a", { text: t("acc_rules"), attrs: { href: "#party-rules" } }));
+      if (texts.cancellation) parts.push(el("a", { text: t("acc_cancel"), attrs: { href: "#party-cancel" } }));
+      if (parts.length) {
+        text.append(t("acc_b"), parts[0]);
+        if (parts[1]) text.append(t("acc_and"), parts[1]);
+        text.append(t("acc_party"));
+      }
       text.append(t("acc_end"));
       validity();
     }
@@ -400,7 +414,9 @@
     // Nothing stored; the form keeps what was typed and chosen.
     if (r.body && r.body.error === "terms_changed" && r.body.policy) {
       policy = r.body.policy;
-      rulesFill(document.getElementById("party-rules"), r.body.rules || null);
+      texts = { rules: r.body.rules || null, cancellation: r.body.cancellation_policy || null };
+      textFill(document.getElementById("party-rules"), "rules", texts.rules);
+      textFill(document.getElementById("party-cancel"), "cancel_title", texts.cancellation);
       Sahra.clear(out);
       acceptEl.refresh(t("e_terms_changed"));
       return;

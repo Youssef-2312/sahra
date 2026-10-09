@@ -41,7 +41,7 @@ import { newId } from "../lib/crypto";
 import { ACCOUNT_DAILY_WRITES, BUDGET_STOP_AT, dayOf, DAY_MS } from "../limits";
 import { schedule } from "../backup/export";
 import { outboxInsert } from "../outbox";
-import { PLATFORM } from "../platform/db";
+import { PLATFORM, SITE_OWNER_EMAIL } from "../platform/db";
 import { filesCapacity, FILES_FULL_AT, type FilesEnv, type PurgeReport } from "../storage";
 import { bothTimes, deliverDiscord, DISCORD, discordInsert, discordStatus, discordView, type DiscordReport, type DiscordStatus } from "./discord";
 
@@ -232,7 +232,7 @@ export async function runHealth(deps: HealthDeps): Promise<HealthReport> {
   // 3. One batch: check rows, alerts, state, lease released.
   const changes = results.filter((r) => wantsMessage(r, prev.get(r.id), now));
   const owners = changes.length || daily
-    ? (await main.all<{ id: string; email: string }>(sql`SELECT id, email FROM platform_admins WHERE disabled_at IS NULL`)).results
+    ? (await main.all<{ id: string; email: string }>(sql`SELECT id, email FROM platform_admins WHERE disabled_at IS NULL AND email = ${SITE_OWNER_EMAIL}`)).results
     : [];
   const discord = discordStatus(deps.discordUrl) === "configured" && !!deps.fetch;
   const writes: Sql[] = [];
