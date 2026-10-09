@@ -5,7 +5,7 @@
 
 import { sql, type Sql } from "./db/sql";
 
-export type OutboxKind = "ticket_released" | "ticket_link" | "party_notice" | (string & {});
+export type OutboxKind = "ticket_released" | "ticket_link" | "party_notice" | "email_changed" | (string & {});
 
 export interface OutboxRow {
   id: string;

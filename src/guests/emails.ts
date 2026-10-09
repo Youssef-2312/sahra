@@ -105,7 +105,8 @@ export function emailChangedNotice(a: { id: string; partyId: string; partyName: 
   createdBy: string | null; contact: string | null }): OutboxRow {
   const party = plain(a.partyName);
   return {
-    id: a.id, partyId: a.partyId, kind: "ticket_link", toEmail: a.to, ticketId: a.ticketId,
+    // Its own kind, so it is never mistaken for the new link email (both go out in the same batch).
+    id: a.id, partyId: a.partyId, kind: "email_changed", toEmail: a.to, ticketId: a.ticketId,
     subject: `Your ticket for ${party} was moved to another email`,
     bodyText: `Hello,\n\nThe organiser of ${party} changed the email address for your ticket. ` +
       `The ticket link sent to this address no longer works; the new link went to the new address.\n\n` +

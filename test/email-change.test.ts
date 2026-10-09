@@ -25,6 +25,7 @@ describe("change a guest's email", () => {
     expect(mails.map((m) => m.to_email)).toEqual(["new@example.com", "old@example.com"]);
     const old = mails.find((m) => m.to_email === "old@example.com")!;
     expect(old.subject).toContain("moved to another email");
+    expect(await env.DB.prepare("SELECT kind FROM outbox WHERE party_id = ? AND to_email = 'old@example.com' AND subject LIKE '%moved%'").bind(party).first("kind")).toBe("email_changed");
     expect(old.body_text).not.toContain("new@example.com");
     expect(old.body_text).toContain("+20 100 000 0001");
     // The old link stops working.
