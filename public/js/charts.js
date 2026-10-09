@@ -32,36 +32,61 @@ var SahraCharts = (function () {
     catch (e) { return ""; }
   }
 
-  /** Vertical bars: items [{ label, value, tip }]. */
-  function bars(items, color) {
-    var W = 340, H = 150, top = 16, bottom = 26, gap = 4, pad = 18;
+  /** Vertical bars: items [{ label, value, tip }]. `big`: the dashboard's main chart (wider and taller). */
+  function bars(items, color, big) {
+    var W = big ? 720 : 340, H = big ? 240 : 150, top = 18, bottom = 28, gap = big ? 8 : 4, pad = 18;
     var max = Math.max(1, Math.max.apply(null, items.map(function (x) { return x.value; })));
     // Bars at most 36 wide, centred: one or two bars do not stretch across the card.
-    var bw = Math.min(36, Math.max(2, (W - 2 * pad - gap * (items.length - 1)) / items.length));
+    var bw = Math.min(big ? 40 : 36, Math.max(2, (W - 2 * pad - gap * (items.length - 1)) / items.length));
+    // Faint guide lines at a half and the top, so heights read at a glance.
+    var nodes = [0.5, 1].map(function (f) {
+      var y = Math.round(H - bottom - (H - top - bottom) * f) + 0.5;
+      return svg("line", { x1: 0, x2: W, y1: y, y2: y, stroke: "#22252b", "stroke-dasharray": "3 4" });
+    });
     var left = (W - (bw * items.length + gap * (items.length - 1))) / 2;
-    var nodes = [];
     items.forEach(function (x, i) {
       var h = Math.round((H - top - bottom) * (x.value / max));
       var bx = left + i * (bw + gap);
       nodes.push(svg("rect", { x: bx, y: H - bottom - h, width: bw, height: Math.max(h, x.value ? 2 : 0), rx: 3, fill: color }, [tip(x.tip)]));
-      if (x.value) nodes.push(label(String(x.value), { x: bx + bw / 2, y: H - bottom - h - 4, "text-anchor": "middle", "font-size": 10, fill: "#a3a6ad" }));
-      if (x.label) nodes.push(label(x.label, { x: bx + bw / 2, y: H - 8, "text-anchor": "middle", "font-size": 10, fill: "#a3a6ad" }));
+      if (x.value) nodes.push(label(String(x.value), { x: bx + bw / 2, y: H - bottom - h - 5, "text-anchor": "middle", "font-size": big ? 12 : 10, fill: "#a3a6ad" }));
+      if (x.label) nodes.push(label(x.label, { x: bx + bw / 2, y: H - 8, "text-anchor": "middle", "font-size": big ? 12 : 10, fill: "#a3a6ad" }));
     });
     nodes.push(svg("line", { x1: 0, x2: W, y1: H - bottom + 0.5, y2: H - bottom + 0.5, stroke: "#2f3238" }));
     return svg("svg", { viewBox: "0 0 " + W + " " + H, role: "img" }, nodes);
   }
 
-  function requestsChart(stats, party) {
+  /** Requests per day for the last `days` days, in the party's time zone: [{ ms, value }]. */
+  function perDay(stats, party, days) {
     var tz = party && party.time_zone;
     var byDay = {};
     stats.requests_per_hour.forEach(function (h) { var k = dayKey(h.at, tz); byDay[k] = (byDay[k] || 0) + h.requests; });
-    var items = [];
-    for (var i = 13; i >= 0; i--) {
+    var out = [];
+    for (var i = days - 1; i >= 0; i--) {
       var ms = Date.now() - i * 86400000;
-      var v = byDay[dayKey(ms, tz)] || 0;
-      items.push({ value: v, label: i % 2 === 0 ? dayLabel(ms, tz) : "", tip: dayLabel(ms, tz) + ": " + v });
+      out.push({ ms: ms, value: byDay[dayKey(ms, tz)] || 0 });
     }
-    return card(t("d_chart_requests"), bars(items, PALETTE[0]));
+    return out;
+  }
+
+  function requestsChart(stats, party, big) {
+    var tz = party && party.time_zone;
+    var days = perDay(stats, party, 14);
+    var items = days.map(function (d, i) {
+      return { value: d.value, label: big || i % 2 === 1 ? dayLabel(d.ms, tz) : "", tip: dayLabel(d.ms, tz) + ": " + d.value };
+    });
+    var total = days.reduce(function (n, d) { return n + d.value; }, 0);
+    return card(t("d_chart_requests"), bars(items, PALETTE[0], big), null, big ? t("d_last14", { n: total }) : null);
+  }
+
+  /** A small bar strip for a stat card (no labels; the card says the number). */
+  function spark(values, color) {
+    var W = 120, H = 36, gap = 3;
+    var max = Math.max(1, Math.max.apply(null, values));
+    var bw = (W - gap * (values.length - 1)) / values.length;
+    return svg("svg", { viewBox: "0 0 " + W + " " + H, class: "spark", "aria-hidden": "true" }, values.map(function (v, i) {
+      var h = Math.max(2, Math.round((H - 2) * (v / max)));
+      return svg("rect", { x: i * (bw + gap), y: H - h, width: bw, height: h, rx: 2, fill: color, opacity: v ? 1 : 0.35 });
+    }));
   }
 
   function typesChart(stats) {
@@ -103,11 +128,14 @@ var SahraCharts = (function () {
     return card(t("d_chart_arrivals"), bars(items, PALETTE[1]));
   }
 
-  function card(title, chart, extra) {
-    return el("section", { class: "card chart" }, el("p", { class: "small muted", text: title }), chart, extra || null);
+  function card(title, chart, extra, note) {
+    return el("section", { class: "card chart" },
+      el("div", { class: "chart-head" }, el("h2", { text: title }), note ? el("span", { class: "muted", text: note }) : null),
+      chart, extra || null);
   }
 
   return {
+    requests: requestsChart, types: typesChart, arrivals: arrivalsChart, spark: spark, perDay: perDay, palette: PALETTE,
     draw: function (node, stats, party) {
       Sahra.clear(node);
       // Bars grow in on the first drawing only, not on every refresh.

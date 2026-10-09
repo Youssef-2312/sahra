@@ -327,6 +327,29 @@
     return uploadField(ask, { name: "id_photo", id: "id-file", label: t("id_label"), hint: t("id_hint") });
   }
 
+  // Quantity (owner request): how many people this ticket admits, with - and + buttons.
+  // One QR code admits them all together; the party sets the most per ticket.
+  function quantityField(people, maxPeople) {
+    if (maxPeople <= 1) return null;
+    var minus = el("button", { class: "qty-btn", text: "\u2212", attrs: { type: "button", "aria-label": t("qty_less") } });
+    var plus = el("button", { class: "qty-btn", text: "+", attrs: { type: "button", "aria-label": t("qty_more") } });
+    function set(n) {
+      var v = Math.max(1, Math.min(maxPeople, n || 1));
+      people.value = String(v);
+      minus.disabled = v <= 1;
+      plus.disabled = v >= maxPeople;
+      people.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+    minus.addEventListener("click", function () { set(Number(people.value) - 1); });
+    plus.addEventListener("click", function () { set(Number(people.value) + 1); });
+    people.addEventListener("change", function () { set(Number(people.value)); });
+    setTimeout(function () { set(Number(people.value)); }, 0);
+    return el("div", { class: "field qty-field" },
+      el("label", { text: t("qty_label"), attrs: { for: "qty-input" } }),
+      el("div", { class: "qty" }, minus, people, plus),
+      el("span", { class: "hint", text: t("people_hint", { n: maxPeople }) }));
+  }
+
   function step(title, children) {
     return el("section", { class: "step" }, el("h2", { class: "step-title" }, el("span", { class: "num", attrs: { "aria-hidden": "true" } }), title), children);
   }
@@ -336,18 +359,20 @@
     var maxPeople = data.max_people_per_ticket;
     var draft = {};
     try { draft = JSON.parse(sessionStorage.getItem(draftKey) || "{}"); } catch (e) { draft = {}; }
-    var people = el("input", { attrs: { type: "number", name: "people", min: 1, max: maxPeople, value: draft.people || 1, inputmode: "numeric", required: true } });
+    var people = el("input", { class: "qty-input", attrs: { type: "number", id: "qty-input", name: "people", min: 1, max: maxPeople, value: draft.people || 1, inputmode: "numeric", required: true } });
+    var qty = quantityField(people, maxPeople);
     var typesSlot = el("div");
     var form = el("form", { class: "buy-form" },
-      data.types.length ? step(t("choose_type"), typesSlot) : null,
+      data.types.length ? step(t("choose_type"), [typesSlot, qty]) : null,
       step(t("step_details"), [
       el("div", { class: "field" }, el("label", null, t("full_name"),
         el("input", { attrs: { type: "text", name: "name", maxlength: 80, required: true, autocomplete: "name", value: draft.name || "" } }))),
       el("div", { class: "field" }, el("label", null, t("email"),
         el("input", { attrs: { type: "email", name: "email", maxlength: 254, required: true, autocomplete: "email", inputmode: "email", value: draft.email || "" } }),
         el("span", { class: "hint", text: t("email_hint") }))),
-      el("div", { class: "field", hidden: maxPeople <= 1 }, el("label", null, t("people"), people,
-        el("span", { class: "hint", text: t("people_hint", { n: maxPeople }) }))),
+      // No ticket types: the quantity sits with the details; a party of one person per ticket keeps it hidden at 1.
+      data.types.length ? null : qty,
+      maxPeople <= 1 ? el("div", { hidden: true }, people) : null,
       instagramField(data.form.instagram || "none", draft),
       idPhotoField(data.form.id_photo || "none"),
       data.form.questions.map(questionField)]),

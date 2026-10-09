@@ -674,3 +674,56 @@ html[lang="ar"] .date-badge .m { text-transform: none; letter-spacing: 0; }
   .host.host-panel { padding: 40px; min-height: 280px; }
   .host-panel .host-copy h3 { font-size: 30px; }
 }
+
+/* Dashboard (owner: "looks bland"; after the analytics dashboard reference): the
+   party and its main actions, stat cards with a small visual each, the requests
+   chart large with quick actions and tickets by type beside it. Flat surfaces. */
+main.dash { padding-top: 24px; }
+.dash-head { display: grid; gap: 16px; margin-bottom: 20px; }
+.dash-head h1 { margin: 0 0 8px; font-size: 28px; line-height: 1.15; }
+.dash-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0; color: var(--muted); font-size: 15px; }
+.dash-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.dash-actions .btn { margin: 0; }
+.tiles.stats .tile.stat { display: flex; flex-direction: column; gap: 4px; padding: 18px; border-radius: 16px; }
+.tile.stat .label { font-family: var(--font-body); text-transform: none; letter-spacing: 0; font-size: 14px; font-weight: 500; color: var(--muted); }
+.tile.stat .big { margin-top: 2px; font-family: var(--font-head); }
+.tile.stat .sub { margin: 0; font-size: 13px; line-height: 1.4; }
+.tile.stat .spark { display: block; width: 100%; max-width: 140px; height: 36px; margin-top: auto; padding-top: 10px; }
+.meter { display: flex; height: 6px; margin-top: auto; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.tile.stat .meter { margin-top: 14px; }
+.meter span { display: block; height: 100%; background: var(--accent); }
+.meter span.yes { background: var(--yes); }
+.meter span.pending { background: var(--maybe); opacity: 0.75; }
+.dash .charts { display: grid; gap: 16px; margin-top: 16px; }
+.dash .charts .card { margin: 0; border-radius: 16px; padding: 20px; }
+.dash-main, .dash-side { display: grid; gap: 16px; align-content: start; min-width: 0; }
+.chart-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 6px 12px; margin-bottom: 12px; }
+.chart-head h2 { margin: 0; font-size: 17px; line-height: 1.3; }
+.chart-head .muted { font-size: 14px; }
+.quick ul { list-style: none; margin: 0; padding: 0; }
+.quick li { margin: 0; border-top: 1px solid var(--line); }
+.quick li:first-child { border-top: 0; }
+.quick a { display: flex; align-items: center; gap: 12px; min-height: 60px; padding: 10px 2px; text-decoration: none; color: var(--text); }
+.quick a:hover strong { color: var(--accent); }
+.quick .qa-text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.quick strong { font-weight: 600; font-size: 15px; }
+.quick .qa-text .muted { font-size: 13px; line-height: 1.4; }
+.quick .qa-go { flex: none; width: 8px; height: 8px; border-top: 2px solid var(--muted); border-inline-end: 2px solid var(--muted); transform: rotate(45deg); }
+html[dir="rtl"] .quick .qa-go { transform: rotate(-45deg); }
+@media (min-width: 900px) {
+  main.dash { max-width: calc(1120px + 64px); padding-top: 36px; }
+  .dash-head { grid-template-columns: 1fr auto; align-items: end; margin-bottom: 24px; }
+  .dash-head h1 { font-size: 34px; }
+  .dash .charts { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 20px; margin-top: 20px; }
+}
+.dash-pair .chart .center { display: flex; justify-content: center; }
+@media (min-width: 900px) { .dash-pair .chart { display: grid; grid-template-columns: auto 1fr; gap: 8px 24px; align-items: center; } .dash-pair .chart .chart-head { grid-column: 1 / -1; } }
+/* Quantity stepper on the ticket page. */
+.qty-field { margin-top: 14px; }
+.qty { display: inline-flex; align-items: stretch; border: 1px solid var(--line-strong); border-radius: 14px; overflow: hidden; background: var(--bg-2); }
+.qty-btn { width: 52px; min-height: 50px; border: 0; background: transparent; color: var(--text); font: inherit; font-size: 22px; line-height: 1; cursor: pointer; }
+.qty-btn:hover:not(:disabled) { background: var(--surface-2); }
+.qty-btn:disabled { color: var(--faint); cursor: default; }
+.qty-btn:focus-visible { outline: 3px solid var(--accent); outline-offset: -3px; }
+.buy-form .qty .qty-input { width: 64px; min-height: 50px; border: 0; border-inline: 1px solid var(--line); border-radius: 0; background: transparent; text-align: center; font-family: var(--font-head); font-size: 18px; font-weight: 700; -moz-appearance: textfield; appearance: textfield; padding: 0; }
+.qty-input::-webkit-outer-spin-button, .qty-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
