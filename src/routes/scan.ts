@@ -16,9 +16,9 @@
 //     the retry finishes step 5 before it can return green.
 
 import { Hono } from "hono/tiny";
-import { json, readJson, type AppEnv, type Ctx } from "../context";
+import { json, readJson, requireAuth, type AppEnv, type Ctx } from "../context";
 import { TicketDb } from "../db/tickets";
-import { csrfFor, isUuid, newId, parseToken, sha256hex, timingSafeEqualStr } from "../lib/crypto";
+import { csrfFor, isBase32, isUuid, newId, parseToken, sha256hex, timingSafeEqualStr } from "../lib/crypto";
 import { COOKIE_SESSION, rateLimited, readCookie, sameOrigin } from "../lib/http";
 import { formatHuman } from "../party/time";
 import { verifyQr } from "../qr";
@@ -57,6 +57,21 @@ scanRoutes.post("/", async (c) => {
   const qr = await verifyQr(c.env as unknown as Record<string, unknown>, qrText);
   if (!qr) return verdict(c, { verdict: "stop", reason: "invalid code" });
 
+  return admission(c, { scanId: b.scan_id, partyId: qr.partyId, sessionHash, ticketId: qr.ticketId, qrVersion: qr.version,
+    fingerprint: await sha256hex(qrText), manualBy: null });
+});
+
+/**
+ * Steps 3 to 5, shared by a QR scan and a manual admit (the same single-use
+ * redemption: there is no second way in). `fingerprint` is the QR text's SHA-256,
+ * or "manual" for a manual admit, whose staff member is then recorded in the
+ * audit log in the redemption batch.
+ */
+async function admission(c: Ctx, a: { scanId: string; partyId: string; sessionHash: string; ticketId: string; qrVersion: number;
+  fingerprint: string; manualBy: string | null }) {
+  const b = { scan_id: a.scanId };
+  const qr = { partyId: a.partyId, ticketId: a.ticketId, version: a.qrVersion };
+  const { sessionHash, fingerprint } = a;
   // 3. Control object (outside the main database).
   let control;
   try {
@@ -68,12 +83,11 @@ scanRoutes.post("/", async (c) => {
 
   // 4. The redemption batch.
   const now = c.var.deps.now();
-  const fingerprint = await sha256hex(qrText);
   let r;
   try {
     r = await new TicketDb(c.var.db.driver).redeem({
       scanId: b.scan_id, partyId: qr.partyId, sessionHash, ticketId: qr.ticketId, qrVersion: qr.version,
-      fingerprint, pauseNumber: control.pause_number, now, op: newId(),
+      fingerprint, pauseNumber: control.pause_number, now, op: newId(), manualBy: a.manualBy,
     });
   } catch {
     return verdict(c, { verdict: "cant_verify" });
@@ -134,5 +148,64 @@ scanRoutes.post("/", async (c) => {
   }
   // The record is written either way; a revoked scanner still gets no green.
   if (!r.sessionOk) return verdict(c, { verdict: "not_signed_in" });
-  return verdict(c, { verdict: "admit", name: t.guest_name, people: t.people, type: r.typeName });
+  return verdict(c, { verdict: "admit", name: t.guest_name, people: t.people, type: r.typeName, ...(a.manualBy ? { manual: true } : {}) });
+}
+
+// ------------------------------------------------------------- Find guest, manual admit
+//
+// Brainstorm idea 8: for a guest whose QR will not scan (cracked screen, dead
+// phone), door staff search by name and admit by hand. The admit goes through the
+// SAME redemption as a scan (admission(): control object, the guarded UPDATE that
+// marks the ticket used once, the ledger record, the control object re-read), so
+// a ticket can still never be admitted twice and nothing is green while paused or
+// unconfirmed. It is marked as manual in the audit log with the staff member.
+
+const SCAN_ROLES = ["door", "admin", "owner"] as const;
+
+/** "m***@example.com": enough to tell two guests with the same name apart. */
+function maskEmail(e: string | null): string | null {
+  if (!e) return null;
+  const at = e.indexOf("@");
+  return at < 1 ? null : `${e[0]}***${e.slice(at)}`;
+}
+
+scanRoutes.get("/find", requireAuth(SCAN_ROLES), async (c) => {
+  const q = (c.req.query("q") ?? "").trim().replace(/\s+/g, " ");
+  if (q.length < 2 || q.length > 80) return json(c, 400, { error: "invalid_request" });
+  const a = c.var.auth;
+  if (await rateLimited(c.env.RL_SCAN, `scan:${a.hash}`, "open")) return json(c, 429, { error: "rate_limited" });
+  const rows = await new TicketDb(c.var.db.driver).doorSearch({ hash: a.hash, partyId: a.info.party_id }, q, isBase32(q.toUpperCase(), 16) && q.length === 16, c.var.deps.now());
+  return json(c, 200, { tickets: rows.map((t) => ({
+    id: t.id, name: t.guest_name, email: maskEmail(t.guest_email), people: t.people, type: t.type_name,
+    // What the door can do: only "ready" can be admitted (the server checks again when admitting).
+    state: t.used_at ? "used" : t.status !== "approved" ? (t.status === "pending" ? "pending" : t.status)
+      : t.hold_at ? "on_hold" : t.released_at ? "ready" : "not_released",
+    used_at: t.used_at, used_by: t.used_by_name,
+  })) });
+});
+
+scanRoutes.post("/manual", requireAuth(SCAN_ROLES), async (c) => {
+  const a = c.var.auth;
+  if (await rateLimited(c.env.RL_SCAN, `scan:${a.hash}`, "open")) {
+    return verdict(c, { verdict: "cant_verify", reason: "too many scans from this phone, wait a moment" });
+  }
+  const b = await readJson(c);
+  const ticketId = typeof b?.ticket_id === "string" ? b.ticket_id : "";
+  if (!b || !isUuid(b.scan_id) || !isBase32(ticketId, 16)) return json(c, 400, { error: "invalid_request" });
+  let version: number | null;
+  try {
+    version = await new TicketDb(c.var.db.driver).qrVersionOf(a.info.party_id, ticketId);
+  } catch {
+    return verdict(c, { verdict: "cant_verify" });
+  }
+  if (version === null) return verdict(c, { verdict: "stop", reason: reasonText.unknown_ticket });
+  return admission(c, { scanId: b.scan_id, partyId: a.info.party_id, sessionHash: a.hash, ticketId, qrVersion: version,
+    fingerprint: "manual", manualBy: a.info.staff_id });
+});
+
+/** The organiser's review list of manual admits (owner and admin). */
+scanRoutes.get("/manual", requireAuth(["owner", "admin"]), async (c) => {
+  const a = c.var.auth;
+  const rows = await new TicketDb(c.var.db.driver).manualAdmits({ hash: a.hash, partyId: a.info.party_id }, ["owner", "admin"], c.var.deps.now());
+  return json(c, 200, { admits: rows });
 });

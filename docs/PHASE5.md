@@ -584,3 +584,30 @@ Brainstorm idea 16 (owner: "A phone or WhatsApp number. required"). Migration
 - **Owner action:** apply migration 0023 on staging, then add a contact number to
   each staging party in Settings (or rerun the demo script, which sets a fake
   demo number). Until then their ticket requests are closed.
+
+### Find guest and manual admit at the door (9 October 2026)
+
+Brainstorm idea 8. For a guest whose QR will not scan, the scanner has "Find
+guest": search by name (or ticket id), see each match's state (can enter, already
+inside with when and by whom, not approved, QR not sent, on hold, rejected,
+cancelled), and "Admit by hand" for one that can enter, after a confirmation.
+
+- `POST /api/scan/manual` goes through the SAME redemption as a scan
+  (`admission()` in `src/routes/scan.ts`, shared with `POST /api/scan`): the
+  control object must be open, the guarded UPDATE marks the ticket used only once,
+  the ledger admission record must be confirmed, and the control object is read
+  again. Paused is amber, an unconfirmed ledger write is amber ("recording", the
+  retry with the same scan id finishes it), anything else is red. A manual admit
+  after a scan, a scan after a manual admit, and two phones at once all admit the
+  ticket once (tests).
+- Recorded as manual: an `admitted_manually` audit row with the staff member, in
+  the redemption batch (only when that batch admitted the ticket). Migration
+  **0024** adds a partial index for the organiser's review list
+  (`GET /api/scan/manual`, owners and admins), shown on the Guests page as "Let in
+  by hand".
+- `GET /api/scan/find` (any door role): at most 10 matches, the email masked
+  ("m***@example.com"), the session checked in the statement, rate limited with
+  the scanner.
+- The QR scan path itself is unchanged in behaviour (its 25 tests pass); the
+  green screen says "Admitted by hand" for a manual admit.
+- Tests: `test/manual-admit.test.ts` (4), plus the unauthenticated-route list.

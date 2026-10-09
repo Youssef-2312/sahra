@@ -68,6 +68,8 @@ export class TicketDb {
   async redeem(a: {
     scanId: string; partyId: string; sessionHash: string; ticketId: string; qrVersion: number;
     fingerprint: string; pauseNumber: number; now: number; op: string;
+    /** Manual admit (the guest's QR would not scan): the staff member, recorded in the audit log in the same batch. */
+    manualBy?: string | null;
   }): Promise<RedeemResult> {
     const sess: SessionRef = { hash: a.sessionHash, partyId: a.partyId };
     const ok = sessionValid(sess, SCAN_ROLES, a.now);
@@ -115,6 +117,10 @@ export class TicketDb {
           CASE WHEN ty.entry_from IS NOT NULL THEN (SELECT time_zone FROM parties WHERE id = t.party_id) END AS sahra_party_tz
         FROM tickets t LEFT JOIN ticket_types ty ON ty.id = t.type_id
         WHERE t.id = (SELECT ticket_id FROM scans WHERE scan_id = ${a.scanId})`,
+      // A manual admit leaves an audit row only when THIS batch admitted the ticket (a retry adds none).
+      ...(a.manualBy ? [audit(a.now, a.manualBy, "admitted_manually", "ticket",
+        sql`SELECT party_id, id, rev FROM tickets WHERE id = ${a.ticketId} AND party_id = ${a.partyId} AND used_scan_id = ${a.scanId} AND last_op = ${a.op}`,
+        "QR not scanned; found by name at the door")] : []),
     ]);
     const r = rs[2]!.results[0] as Record<string, unknown>;
     const t = (rs[3]!.results[0] as (TicketRow & { used_by_name: string | null; sahra_type_name: string | null;
@@ -147,6 +153,39 @@ export class TicketDb {
       sessionOk: Number(r.session_ok) === 1,
       sessionParty: r.session_party == null ? null : String(r.session_party),
     };
+  }
+
+  /**
+   * "Find guest" at the door (brainstorm idea 8): this party's tickets whose name
+   * contains `q`, or the ticket with that id, at most 10, with what the door needs
+   * (no full email). Any scanning role; the session is checked in the statement.
+   */
+  async doorSearch(sess: SessionRef, q: string, byId: boolean, now: number) {
+    const like = q.replace(/[\\%_]/g, (m) => `\\${m}`);
+    const where = byId ? sql`t.id = ${q}` : sql`t.guest_name LIKE ${`%${like}%`} ESCAPE '\\'`;
+    const r = await this.driver.all<{ id: string; guest_name: string | null; guest_email: string | null; people: number; status: string;
+      released_at: number | null; used_at: number | null; hold_at: number | null; qr_version: number; type_name: string | null; used_by_name: string | null }>(
+      sql`SELECT t.id, t.guest_name, t.guest_email, t.people, t.status, t.released_at, t.used_at, t.hold_at, t.qr_version,
+          (SELECT name FROM ticket_types WHERE id = t.type_id) AS type_name, (SELECT name FROM staff WHERE id = t.used_by) AS used_by_name
+        FROM tickets t WHERE t.party_id = ${sess.partyId} AND ${where} AND ${sessionValid(sess, SCAN_ROLES, now)}
+        ORDER BY t.guest_name, t.created_at LIMIT 10`);
+    return r.results;
+  }
+
+  /** The current QR version of one of this party's tickets (manual admit redeems that version). */
+  async qrVersionOf(partyId: string, ticketId: string): Promise<number | null> {
+    const r = await this.driver.all<{ v: number }>(sql`SELECT qr_version AS v FROM tickets WHERE id = ${ticketId} AND party_id = ${partyId}`);
+    return r.results[0] ? Number(r.results[0].v) : null;
+  }
+
+  /** Manual admits for the party (the organiser's review list), newest first. */
+  async manualAdmits(sess: SessionRef, roles: readonly Role[], now: number) {
+    const r = await this.driver.all<{ at: number; ticket_id: string; guest_name: string | null; people: number; staff_name: string | null }>(
+      sql`SELECT a.at, a.entity_id AS ticket_id, t.guest_name, t.people, (SELECT name FROM staff WHERE id = a.actor_staff_id) AS staff_name
+        FROM audit a JOIN tickets t ON t.id = a.entity_id
+        WHERE a.party_id = ${sess.partyId} AND a.action = 'admitted_manually' AND ${sessionValid(sess, roles, now)}
+        ORDER BY a.at DESC LIMIT 200`);
+    return r.results;
   }
 
   // ------------------------------------------------------------- tickets

@@ -226,6 +226,19 @@
       el("p", { class: "small" }, el("a", { text: t("g_open_outbox"), attrs: { href: "/outbox.html" } })));
   }
 
+  // Guests let in by hand at the door (their QR would not scan), with who did it: for review.
+  var manualAdmits = [];
+  function manualCard() {
+    if (!manualAdmits.length) return null;
+    return S.section("manual", t("g_manual"), t("g_manual_p"),
+      el("ul", { class: "s-list" }, manualAdmits.map(function (x) {
+        return el("li", null,
+          el("div", { class: "s-type-text" }, el("strong", { text: x.guest_name || t("g_no_name"), attrs: { dir: "auto" } }),
+            el("span", { class: "muted small", text: t("g_manual_by", { time: Sahra.when(x.at), by: x.staff_name || t("g_unknown") }) })),
+          el("span", { class: "small muted", text: S.tn("g_people_n", x.people) }));
+      })));
+  }
+
   function scanners() {
     if (!stats || !stats.by_scanner || !stats.by_scanner.length) return null;
     return S.section("scanners", t("g_scanners"), t("g_scanners_p"),
@@ -241,7 +254,7 @@
     tilesNode = tiles();
     if (tilesNode) app.appendChild(tilesNode);
     app.appendChild(el("div", { class: "g-cols" },
-      el("div", { class: "g-main" }, findCard(), scannersNode = scanners()),
+      el("div", { class: "g-main" }, findCard(), scannersNode = scanners(), manualCard()),
       el("div", { class: "g-side" }, issueCard(), announceCard())));
   }
 
@@ -259,7 +272,8 @@
       render(me, app);
       if (!first) return;
       first = false;
-      Promise.all([Sahra.api.get("/api/party/stats"), Sahra.api.get("/api/tickets/types")]).then(function (rs) {
+      Promise.all([Sahra.api.get("/api/party/stats"), Sahra.api.get("/api/tickets/types"), Sahra.api.get("/api/scan/manual")]).then(function (rs) {
+        if (rs[2].ok) manualAdmits = rs[2].body.admits || [];
         if (rs[0].ok) stats = rs[0].body;
         if (rs[1].ok) types = rs[1].body.types || [];
         S.redraw();

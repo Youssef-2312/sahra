@@ -269,6 +269,9 @@ Object.assign(SahraText.en, {
   g_scanners: "At the door",
   g_scanners_p: "People let in by each scanner.",
   g_unknown: "Unknown",
+  g_manual: "Let in by hand",
+  g_manual_p: "Guests whose QR code would not scan, found by name at the door. Each still entered once.",
+  g_manual_by: "{time}, by {by}",
   g_people_n: "{n} people",
   g_people_n_1: "1 person",
 
@@ -710,6 +713,9 @@ Object.assign(SahraText.ar, {
   g_scanners: "عند الباب",
   g_scanners_p: "الأشخاص الذين أدخلهم كل ماسح.",
   g_unknown: "غير معروف",
+  g_manual: "أُدخلوا يدويًا",
+  g_manual_p: "ضيوف لم يُمسح رمزهم، وُجدوا بالاسم عند الباب. دخل كل منهم مرة واحدة.",
+  g_manual_by: "{time}، بواسطة {by}",
   g_people_n: "{n} أشخاص",
   g_people_n_1: "شخص واحد",
 

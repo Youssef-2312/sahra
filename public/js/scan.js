@@ -64,7 +64,8 @@
   function fromServer(v) {
     var tz = party && party.time_zone;
     if (v.verdict === "admit") {
-      return { kind: "yes", word: t("sc_admit"), lines: [v.name || "", [v.type, v.people > 1 ? t("sc_people", { n: v.people }) : null].filter(Boolean).join(" · ")] };
+      return { kind: "yes", word: t("sc_admit"), lines: [v.name || "", [v.type, v.people > 1 ? t("sc_people", { n: v.people }) : null].filter(Boolean).join(" · "),
+        v.manual ? t("sc_manual_done") : null] };
     }
     if (v.verdict === "used") {
       var when = v.when ? Sahra.time(v.when, tz) : "";
@@ -77,14 +78,18 @@
     return { kind: "maybe", word: t("sc_cant"), lines: [v.reason ? reasonText(v) : t("sc_cant_hint")] };
   }
 
-  async function check(text) {
+  function check(text) { return submit("/api/scan", { qr: text }); }
+
+  // One redemption request (a QR scan, or a manual admit of a guest found by name):
+  // the same scan id for every retry of it, so it can never admit twice.
+  async function submit(path, body) {
     state = "checking";
     shown = { kind: "checking", word: t("sc_checking"), lines: [] };
     render();
     var scanId = crypto.randomUUID();
     var v = null;
     for (var i = 0; i < 6; i++) {
-      var r = await Sahra.api.post("/api/scan", { scan_id: scanId, qr: text });
+      var r = await Sahra.api.post(path, Object.assign({ scan_id: scanId }, body));
       v = r.status === 200 ? r.body : r.status === 0 ? { verdict: "network" } : { verdict: "cant_verify" };
       if (v.verdict !== "recording" && v.verdict !== "network") break;
       shown = { kind: "checking", word: t("sc_recording"), lines: [] };
@@ -98,6 +103,56 @@
     render();
     // Green goes back to the camera by itself after a moment; red and amber wait for "Next guest".
     if (shown.kind === "yes") nextTimer = setTimeout(next, 2500);
+  }
+
+  // ------------------------------------------------------------ find guest (brainstorm idea 8)
+  // For a guest whose QR will not scan: search by name, then admit by hand through the
+  // same redemption as a scan (POST /api/scan/manual). The server decides; nothing here
+  // can admit a ticket that is not ready or already used.
+
+  var lookup = null;               // null, or { q, results, busy, error }
+
+  async function search() {
+    var q = lookup.q.trim();
+    if (q.length < 2) { lookup.error = t("sc_find_short"); render(); return; }
+    lookup.busy = true; lookup.error = null; render();
+    var r = await Sahra.api.get("/api/scan/find?q=" + encodeURIComponent(q));
+    lookup.busy = false;
+    if (r.ok) lookup.results = r.body.tickets;
+    else lookup.error = r.status === 429 ? t("r_too_many") : Sahra.errorText(r);
+    render();
+    var box = document.getElementById("find-q");
+    if (box) box.focus();
+  }
+
+  function manual(x) {
+    var who = x.name || t("sc_no_name");
+    if (!window.confirm(t("sc_manual_confirm", { name: who, n: x.people > 1 ? t("sc_people", { n: x.people }) : t("one_person") }))) return;
+    lookup = null;
+    submit("/api/scan/manual", { ticket_id: x.id });
+  }
+
+  function lookupPanel() {
+    var input = el("input", { attrs: { id: "find-q", type: "search", value: lookup.q, placeholder: t("sc_find_ph"), autocomplete: "off", enterkeyhint: "search" } });
+    input.addEventListener("input", function () { lookup.q = input.value; });
+    var form = el("form", { class: "sc-find-form", attrs: { role: "search" } }, input,
+      el("button", { class: "btn primary small-btn", text: t("sc_find_go"), attrs: { type: "submit", disabled: lookup.busy } }));
+    form.addEventListener("submit", function (e) { e.preventDefault(); search(); });
+    var tz = party && party.time_zone;
+    var list = lookup.results ? (lookup.results.length ? el("ul", { class: "sc-find-list" }, lookup.results.map(function (x) {
+      var cls = x.state === "ready" ? "yes" : x.state === "used" ? "no" : "maybe";
+      var info = [x.email, x.type, x.people > 1 ? t("sc_people", { n: x.people }) : null].filter(Boolean).join(" · ");
+      return el("li", null,
+        el("div", { class: "sc-find-who" }, el("strong", { text: x.name || t("sc_no_name"), attrs: { dir: "auto" } }),
+          el("span", { class: "pill " + cls, text: t("sc_st_" + x.state) }),
+          info ? el("span", { class: "small muted", text: info, attrs: { dir: "auto" } }) : null,
+          x.state === "used" && x.used_at ? el("span", { class: "small muted", text: x.used_by ? t("sc_used_at", { time: Sahra.time(x.used_at, tz), by: x.used_by }) : t("sc_used_at_nobody", { time: Sahra.time(x.used_at, tz) }) }) : null),
+        x.state === "ready" ? el("button", { class: "btn yes small-btn", text: t("sc_manual_go"), attrs: { type: "button" }, on: { click: function () { manual(x); } } }) : null);
+    })) : el("p", { class: "muted small", text: t("sc_find_none") })) : el("p", { class: "muted small", text: t("sc_find_hint") });
+    return el("section", { class: "card sc-find" },
+      el("div", { class: "row" }, el("strong", { text: t("sc_find_title") }),
+        el("button", { class: "btn link", text: t("sc_find_close"), attrs: { type: "button" }, on: { click: function () { lookup = null; state = stream ? "scanning" : "idle"; render(); } } })),
+      form, lookup.error ? el("p", { class: "notice no", text: lookup.error }) : null, list);
   }
 
   function next() {
@@ -219,6 +274,9 @@
       app.appendChild(el("p", { class: "center muted", text: t("sc_point") }));
       if (hasTorch()) app.appendChild(el("button", { class: "btn" + (torchOn ? " primary" : ""), text: t("sc_light"), attrs: { type: "button", "aria-pressed": String(torchOn) }, on: { click: toggleLight } }));
     }
+    if (lookup) app.appendChild(lookupPanel());
+    else if (!shown) app.appendChild(el("button", { class: "btn", text: t("sc_find_open"), attrs: { type: "button" },
+      on: { click: function () { lookup = { q: "", results: null, busy: false, error: null }; state = "finding"; render(); var b = document.getElementById("find-q"); if (b) b.focus(); } } }));
     // The organiser's number, so door staff can call during a problem (brainstorm idea 16).
     var sup = party && (party.support ? party.support.phone : party.support_phone);
     if (sup) app.appendChild(el("p", { class: "small muted center sc-contact" }, t("sc_organiser") + " ",
