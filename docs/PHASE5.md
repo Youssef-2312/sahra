@@ -378,6 +378,16 @@ the `staging` branch; a finished piece the owner should try is pushed there too.
   missing. Deletions are permanent (Drive advanced service, not the trash).
   Checked by `node scripts/backup-e2e.mjs` (all steps OK, local simulation only).
 
+- ID photos and Instagram handles (owner request; migration 0020): a party's form
+  can ask for each ("none" default, "optional", "required"; checked by the server).
+  The handle is reduced to Instagram's form (a pasted link or "@" is fine); the ID
+  photo is stored like the screenshot (owner "idphoto:<ticket>"), opened only by
+  owners and admins (GET /api/tickets/:id/id-photo, never door staff), and deleted
+  7 days after the party, a rejection or a cancellation. The handle goes with the
+  other guest details at 7 days (tickets and change log). The inline notice then
+  says the ID is checked (privacy version "+id"). Queue: "Show ID photo" and the
+  handle as a link; CSV exports include it. Tests: test/idphoto.test.ts.
+
 ## Next
 
 Piece 8: party settings (details, ticket types, sign-up questions).

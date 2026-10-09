@@ -2,7 +2,8 @@
 //
 // Run once a day from the health checks (src/health/). For each party that ended
 // (ends_at, or 12 hours after starts_at) more than GUEST_RETENTION.days ago:
-//  - tickets: guest_name, guest_email, answers and reject_reason become NULL;
+//  - tickets: guest_name, guest_email, instagram, answers and reject_reason become NULL
+//    (the ID photo's bytes go with the daily file purge, src/storage/);
 //  - change log (ledger database): the same four fields become null in EVERY
 //    logged copy of those tickets (event ids "ticket:<id>:<rev>", rev 1 to the
 //    current one), so recovery and its verification still see the same state;
@@ -38,7 +39,7 @@ export const GUEST_RETENTION = {
 };
 const DAY = 86_400_000;
 /** The four ticket fields that identify or describe a guest. */
-export const GUEST_FIELDS = ["guest_name", "guest_email", "answers", "reject_reason"] as const;
+export const GUEST_FIELDS = ["guest_name", "guest_email", "instagram", "answers", "reject_reason"] as const;
 
 export interface EraseReport {
   parties: number;
@@ -66,7 +67,7 @@ export async function eraseGuestDetails(main: SqlDriver, ledger: SqlDriver, now:
   for (const partyId of parties) {
     if (budget <= 0) { report.more = true; break; }
     const rows = (await main.all<{ id: string; rev: number }>(sql`SELECT id, rev FROM tickets
-      WHERE party_id = ${partyId} AND (guest_name IS NOT NULL OR guest_email IS NOT NULL OR answers IS NOT NULL OR reject_reason IS NOT NULL)
+      WHERE party_id = ${partyId} AND (guest_name IS NOT NULL OR guest_email IS NOT NULL OR instagram IS NOT NULL OR answers IS NOT NULL OR reject_reason IS NOT NULL)
       LIMIT ${budget + 1}`)).results;
     const todo = rows.slice(0, budget);
     const finished = rows.length <= budget;
@@ -75,22 +76,22 @@ export async function eraseGuestDetails(main: SqlDriver, ledger: SqlDriver, now:
       const events = todo.flatMap((t) => Array.from({ length: Number(t.rev) }, (_, i) => `ticket:${t.id}:${i + 1}`));
       for (const part of chunks(events, GUEST_RETENTION.chunk)) {
         const r = await ledger.all(sql`UPDATE change_log SET state = json_set(state,
-            '$.guest_name', json('null'), '$.guest_email', json('null'), '$.answers', json('null'), '$.reject_reason', json('null'))
+            '$.guest_name', json('null'), '$.guest_email', json('null'), '$.instagram', json('null'), '$.answers', json('null'), '$.reject_reason', json('null'))
           WHERE event_id IN (${inList(part)})
-            AND (json_extract(state, '$.guest_name') IS NOT NULL OR json_extract(state, '$.guest_email') IS NOT NULL
+            AND (json_extract(state, '$.guest_name') IS NOT NULL OR json_extract(state, '$.guest_email') IS NOT NULL OR json_extract(state, '$.instagram') IS NOT NULL
               OR json_extract(state, '$.answers') IS NOT NULL OR json_extract(state, '$.reject_reason') IS NOT NULL)`);
         report.log_entries += r.meta.changes;
       }
       // 2. The main database, one batch.
       const writes = chunks(todo.map((t) => t.id), GUEST_RETENTION.chunk).flatMap((ids) => [
-        sql`UPDATE tickets SET guest_name = NULL, guest_email = NULL, answers = NULL, reject_reason = NULL
+        sql`UPDATE tickets SET guest_name = NULL, guest_email = NULL, instagram = NULL, answers = NULL, reject_reason = NULL
           WHERE party_id = ${partyId} AND id IN (${inList(ids)})`,
         sql`UPDATE audit SET detail = NULL WHERE entity_type = 'ticket' AND action = 'rejected' AND party_id = ${partyId}
           AND entity_id IN (${inList(ids)}) AND detail IS NOT NULL`,
       ]);
       writes.push(sql`INSERT INTO audit (party_id, at, actor_staff_id, action, entity_type, entity_id, entity_rev, detail)
         VALUES (${partyId}, ${now}, NULL, 'guest_details_deleted', 'party', ${partyId}, NULL,
-          ${`${todo.length} ticket${todo.length === 1 ? "" : "s"}: name, email, answers and rejection reason deleted ${GUEST_RETENTION.days} days after the party`})`);
+          ${`${todo.length} ticket${todo.length === 1 ? "" : "s"}: name, email, Instagram, answers and rejection reason deleted ${GUEST_RETENTION.days} days after the party`})`);
       await main.batch(writes);
       report.tickets += todo.length;
       budget -= todo.length;

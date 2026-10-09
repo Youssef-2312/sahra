@@ -8,7 +8,8 @@
 //   keeps the two equal). Change it together with the page.
 // - Privacy notice: PRIVACY_VERSION, the date of public/privacy.html, plus
 //   "+email" when the notice includes the sentence about emails (shown only when
-//   an email provider is configured, since only then is it true).
+//   an email provider is configured, since only then is it true), and "+id" when
+//   it says the ID is checked (the party's form asks for an ID photo).
 // - Party rules: "r-" and the first 16 hex digits of the SHA-256 of the entry
 //   rules and the cancellation policy together; null when the party has
 //   neither. The sign-up INSERT also compares both texts, so an edit between
@@ -37,9 +38,10 @@ export async function rulesVersion(rules: string | null, cancellation: string | 
 
 export type Policy = { terms_version: string; privacy_version: string; rules_version: string | null; email: boolean };
 
-export async function currentPolicy(env: Parameters<typeof emailConfigured>[0], rules: string | null, cancellation: string | null): Promise<Policy> {
+export async function currentPolicy(env: Parameters<typeof emailConfigured>[0], rules: string | null, cancellation: string | null, idPhoto = false): Promise<Policy> {
   const email = emailConfigured(env);
-  return { terms_version: TERMS_VERSION, privacy_version: PRIVACY_VERSION + (email ? "+email" : ""), rules_version: await rulesVersion(rules, cancellation), email };
+  return { terms_version: TERMS_VERSION, privacy_version: PRIVACY_VERSION + (email ? "+email" : "") + (idPhoto ? "+id" : ""),
+    rules_version: await rulesVersion(rules, cancellation), email };
 }
 
 /** The versions a sign-up form says it displayed ("" for "no party rules"). */

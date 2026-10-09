@@ -387,6 +387,9 @@ export interface SignupFields {
   terms?: string | null;
   privacy?: string | null;
   rules?: string | null;
+  /** An ID photo and an Instagram handle (as typed), when the party's form asks for them. */
+  idPhoto?: Uint8Array;
+  instagram?: string;
 }
 
 /** A guest sign-up request as the page sends it: multipart with a Content-Length. */
@@ -400,6 +403,8 @@ export async function signupInit(f: SignupFields = {}): Promise<RequestInit> {
   const shot = f.screenshot === undefined ? PNG : f.screenshot;
   if (shot) fd.set("screenshot", new File([shot], "shot.png", { type: "image/png" }));
   if (f.turnstile !== null) fd.set("cf-turnstile-response", f.turnstile ?? TURNSTILE_TOKEN);
+  if (f.idPhoto) fd.set("id_photo", new File([f.idPhoto], "id.jpg", { type: "image/jpeg" }));
+  if (f.instagram !== undefined) fd.set("instagram", f.instagram);
   if (f.accept !== false) fd.set("accept_terms", "yes");
   if (f.terms !== null) fd.set("terms_version", f.terms ?? TERMS_VERSION);
   if (f.privacy !== null) fd.set("privacy_version", f.privacy ?? PRIVACY_VERSION);

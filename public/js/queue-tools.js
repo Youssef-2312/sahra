@@ -129,11 +129,11 @@
     var keys = {};
     rows.forEach(function (t) { Object.keys(t.answers || {}).forEach(function (k) { keys[k] = true; }); });
     var qs = Object.keys(keys);
-    var head = ["ticket", "status", "name", "email", "people", "type", "price per person (EGP)", "total (EGP)", "requested", "approved", "approved by", "rejected", "rejected by",
+    var head = ["ticket", "status", "name", "email", "instagram", "people", "type", "price per person (EGP)", "total (EGP)", "requested", "approved", "approved by", "rejected", "rejected by",
       "reason", "QR sent", "QR sent by", "scanned", "scanned by"].concat(qs);
     var lines = [head.map(csvCell).join(",")];
     rows.forEach(function (t) {
-      lines.push([t.id, t.status, t.guest_name, t.guest_email, t.people, t.type_name, t.price, t.total_price, when(t.created_at), when(t.approved_at), t.approved_by,
+      lines.push([t.id, t.status, t.guest_name, t.guest_email, t.instagram ? "@" + t.instagram : "", t.people, t.type_name, t.price, t.total_price, when(t.created_at), when(t.approved_at), t.approved_by,
         when(t.rejected_at), t.rejected_by, t.reject_reason, when(t.released_at), t.released_by, when(t.used_at), t.scanned_by]
         .concat(qs.map(function (q) { return (t.answers || {})[q]; })).map(csvCell).join(","));
     });

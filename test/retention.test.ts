@@ -58,7 +58,7 @@ describe("guest details, 7 days after the party", () => {
 
     for (const id of [a.body.ticket_id!, b.body.ticket_id!]) {
       const t = await ticket(id);
-      expect(t).toMatchObject({ guest_name: null, guest_email: null, answers: null, reject_reason: null });
+      expect(t).toMatchObject({ guest_name: null, guest_email: null, instagram: null, answers: null, reject_reason: null });
       // Every logged copy is cleared, and the current one still equals the row (recovery's check).
       const es = await entries(id);
       expect(es.length).toBeGreaterThan(0);
@@ -72,7 +72,7 @@ describe("guest details, 7 days after the party", () => {
     // The rejection reason is gone from the audit log; one audit row records the deletion.
     expect(await env.DB.prepare("SELECT detail FROM audit WHERE entity_type = 'ticket' AND action = 'rejected' AND entity_id = ?").bind(b.body.ticket_id).first("detail")).toBeNull();
     expect(await env.DB.prepare("SELECT detail FROM audit WHERE party_id = ? AND action = 'guest_details_deleted'").bind(party).first("detail"))
-      .toBe("2 tickets: name, email, answers and rejection reason deleted 7 days after the party");
+      .toBe("2 tickets: name, email, Instagram, answers and rejection reason deleted 7 days after the party");
     // The email: no address or text left, and it will not be sent.
     expect(await env.DB.prepare("SELECT to_email, subject, body_text, status FROM outbox WHERE party_id = ?").bind(party).first())
       .toEqual({ to_email: "", subject: "", body_text: "", status: "cancelled" });

@@ -133,7 +133,7 @@ export class GuestDb {
    */
   async signup(a: {
     id: string; partyId: string; people: number; name: string; email: string; answers: string | null;
-    screenshotKey: string | null; typeId: string | null; now: number; op: string;
+    screenshotKey: string | null; idPhotoKey?: string | null; instagram?: string | null; typeId: string | null; now: number; op: string;
     rules: string | null; cancellation: string | null; accepted: { terms: string; rules: string | null; privacy: string };
   }): Promise<"created" | "already" | SignupRefusal> {
     const reg = registrationRules(a.now, a.email);
@@ -141,9 +141,9 @@ export class GuestDb {
     const roomOk = sql`${held(sql`p.id`)} + ${a.people} <= p.capacity`;
     const rulesOk = sql`(p.rules IS ${a.rules} AND p.cancellation_policy IS ${a.cancellation})`;
     const rs = await this.driver.batch([
-      sql`INSERT INTO tickets (id, party_id, status, people, guest_name, guest_email, answers, screenshot_key, type_id, price,
+      sql`INSERT INTO tickets (id, party_id, status, people, guest_name, guest_email, answers, screenshot_key, id_photo_key, instagram, type_id, price,
           terms_version, rules_version, privacy_version, terms_accepted_at, created_at, last_op, last_action)
-        SELECT ${a.id}, p.id, 'pending', ${a.people}, ${a.name}, ${a.email}, ${a.answers}, ${a.screenshotKey}, ${a.typeId}, ${ty.price},
+        SELECT ${a.id}, p.id, 'pending', ${a.people}, ${a.name}, ${a.email}, ${a.answers}, ${a.screenshotKey}, ${a.idPhotoKey ?? null}, ${a.instagram ?? null}, ${a.typeId}, ${ty.price},
           ${a.accepted.terms}, ${a.accepted.rules}, ${a.accepted.privacy}, ${a.now}, ${a.now}, ${a.op}, 'ticket_requested'
         FROM parties p
         WHERE p.id = ${a.partyId} AND ${a.people} <= p.max_people_per_ticket AND ${roomOk} AND ${rulesOk}
@@ -262,7 +262,7 @@ export class GuestDb {
     const cursor = after ? sql`AND (t.created_at > ${after.at} OR (t.created_at = ${after.at} AND t.id > ${after.id}))` : sql``;
     // same_email: the address's other pending/approved tickets (the duplicate warning; index tickets_party_email).
     const r = await this.driver.all(sql`SELECT t.id, t.status, t.people, t.guest_name, t.guest_email, t.answers,
-        t.screenshot_key IS NOT NULL AS has_screenshot, t.created_at, t.approved_at, t.released_at, t.reject_reason, t.hold_at,
+        t.screenshot_key IS NOT NULL AS has_screenshot, t.id_photo_key IS NOT NULL AS has_id_photo, t.instagram, t.created_at, t.approved_at, t.released_at, t.reject_reason, t.hold_at,
         t.used_at, t.qr_version, t.rev, t.type_id, (SELECT name FROM ticket_types WHERE id = t.type_id) AS type_name, t.price,
         CASE WHEN t.guest_email IS NULL THEN 0 ELSE (SELECT COUNT(*) FROM tickets d WHERE d.party_id = t.party_id
           AND d.guest_email = t.guest_email AND d.id != t.id AND d.status IN ('pending', 'approved')) END AS same_email
@@ -270,6 +270,13 @@ export class GuestDb {
         AND ${sessionValid(sess, MANAGERS, now)}
       ORDER BY t.created_at, t.id LIMIT ${limit}`);
     return r.results;
+  }
+
+  /** The ID photo key of one of the party's tickets (owner/admin only; checked in the query). */
+  async idPhotoKey(sess: SessionRef, id: string, now: number): Promise<string | null> {
+    const r = await this.driver.all<{ id_photo_key: string | null }>(sql`SELECT id_photo_key FROM tickets
+      WHERE id = ${id} AND party_id = ${sess.partyId} AND ${sessionValid(sess, MANAGERS, now)}`);
+    return r.results[0]?.id_photo_key ?? null;
   }
 
   /** The screenshot key of one of the party's tickets (owner/admin only; checked in the query). */
@@ -383,7 +390,7 @@ export class GuestDb {
    * scanned each ticket, and when. The browser builds the CSV.
    */
   async exportPage(sess: SessionRef, after: string, limit: number, now: number) {
-    const r = await this.driver.all(sql`SELECT t.id, t.status, t.people, t.guest_name, t.guest_email, t.answers, t.created_at,
+    const r = await this.driver.all(sql`SELECT t.id, t.status, t.people, t.guest_name, t.guest_email, t.instagram, t.answers, t.created_at,
         t.approved_at, ap.name AS approved_by, t.rejected_at, rj.name AS rejected_by, t.reject_reason,
         t.released_at, rl.name AS released_by, t.used_at, us.name AS scanned_by, t.qr_version, t.hold_at,
         ty.name AS type_name, t.price, t.price * t.people AS total_price

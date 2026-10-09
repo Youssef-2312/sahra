@@ -104,6 +104,7 @@ const cases: Case[] = [
   ["guest form set, junk session", "POST", "/api/tickets/form", (h) => h.req("/api/tickets/form", { method: "POST", headers: JSON_H, cookies: junkCookie, body: JSON.stringify({ form: { questions: [] } }) })],
   ["export, junk session", "GET", "/api/tickets/export", (h) => h.req("/api/tickets/export", { cookies: junkCookie })],
   ["screenshot, junk session", "GET", "/api/tickets/:id/screenshot", (h) => h.req(`/api/tickets/${tid}/screenshot`, { cookies: junkCookie })],
+  ["ID photo, junk session", "GET", "/api/tickets/:id/id-photo", (h) => h.req(`/api/tickets/${tid}/id-photo`, { cookies: junkCookie })],
   ["approve, junk session", "POST", "/api/tickets/approve", (h) => h.req("/api/tickets/approve", { method: "POST", headers: JSON_H, cookies: junkCookie, body: JSON.stringify({ ids: [tid] }) })],
   ["reject, junk session", "POST", "/api/tickets/reject", (h) => h.req("/api/tickets/reject", { method: "POST", headers: JSON_H, cookies: junkCookie, body: JSON.stringify({ ids: [tid] }) })],
   ["reject old pending, junk session", "POST", "/api/tickets/reject-stale", (h) => h.req("/api/tickets/reject-stale", { method: "POST", headers: JSON_H, cookies: junkCookie, body: JSON.stringify({ hours: 1, reason: "x" }) })],

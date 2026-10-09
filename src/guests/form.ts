@@ -3,10 +3,13 @@
 //
 //   { "questions": [ { "id": "instagram", "label": "Instagram handle", "type": "text", "required": true },
 //                    { "id": "size", "label": "T-shirt size", "type": "choice", "options": ["S", "M", "L"], "required": false } ],
-//     "screenshot": "required" | "optional" | "none" }
+//     "screenshot": "required" | "optional" | "none",
+//     "id_photo": "required" | "optional" | "none",      (default "none")
+//     "instagram": "required" | "optional" | "none" }    (default "none")
 //
 // A party without a form asks only name, email and people, and requires a payment
-// screenshot.
+// screenshot. The ID photo and Instagram handle are their own fields (stored on the
+// ticket, migrations/0020), not questions.
 
 export interface Question {
   id: string;
@@ -16,12 +19,31 @@ export interface Question {
   options?: string[];
 }
 
+export type Ask = "required" | "optional" | "none";
 export interface GuestForm {
   questions: Question[];
-  screenshot: "required" | "optional" | "none";
+  screenshot: Ask;
+  id_photo: Ask;
+  instagram: Ask;
 }
 
-export const DEFAULT_FORM: GuestForm = { questions: [], screenshot: "required" };
+export const DEFAULT_FORM: GuestForm = { questions: [], screenshot: "required", id_photo: "none", instagram: "none" };
+const isAsk = (v: unknown): v is Ask => v === "required" || v === "optional" || v === "none";
+
+/**
+ * An Instagram handle as the guest typed it ("@name", "name" or a profile link),
+ * reduced to the handle: lower case, 1-30 letters, digits, dots and underscores,
+ * not starting or ending with a dot and without two dots in a row. null if it is not one.
+ */
+export function cleanInstagram(v: unknown): string | null {
+  if (typeof v !== "string") return null;
+  let s = v.trim().toLowerCase();
+  const link = /^(?:https?:\/\/)?(?:www\.|m\.)?instagram\.com\/([^/?#\s]+)\/?(?:[?#].*)?$/.exec(s);
+  if (link) s = link[1]!;
+  s = s.replace(/^@/, "");
+  if (!/^[a-z0-9._]{1,30}$/.test(s) || s.startsWith(".") || s.endsWith(".") || s.includes("..")) return null;
+  return s;
+}
 
 const MAX_QUESTIONS = 20;
 const MAX_LABEL = 200;
@@ -40,7 +62,9 @@ export function parseForm(v: unknown): GuestForm | null {
   if (typeof v !== "object" || v === null || Array.isArray(v)) return null;
   const o = v as Record<string, unknown>;
   const screenshot = o.screenshot ?? "required";
-  if (screenshot !== "required" && screenshot !== "optional" && screenshot !== "none") return null;
+  const idPhoto = o.id_photo ?? "none";
+  const instagram = o.instagram ?? "none";
+  if (!isAsk(screenshot) || !isAsk(idPhoto) || !isAsk(instagram)) return null;
   const qs = o.questions ?? [];
   if (!Array.isArray(qs) || qs.length > MAX_QUESTIONS) return null;
   const out: Question[] = [];
@@ -64,7 +88,7 @@ export function parseForm(v: unknown): GuestForm | null {
     }
     out.push(question);
   }
-  return { questions: out, screenshot };
+  return { questions: out, screenshot, id_photo: idPhoto, instagram };
 }
 
 /** The stored form (written only through parseForm), or the default. */

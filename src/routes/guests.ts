@@ -21,7 +21,7 @@ import { json, readJson, type AppEnv, type Ctx } from "../context";
 import { D1Driver } from "../db/driver";
 import { GuestDb, type SignupParty, type SignupRefusal } from "../guests/db";
 import { emailTemplates, groupNote, linkEmail } from "../guests/emails";
-import { checkAnswers, storedForm } from "../guests/form";
+import { checkAnswers, cleanInstagram, storedForm } from "../guests/form";
 import { currentPolicy, samePolicy, shownPolicy, type Policy } from "../guests/policy";
 import { linkPath, signLink, verifyLink } from "../guests/link";
 import { turnstileConfigured, verifyTurnstile } from "../guests/turnstile";
@@ -34,13 +34,14 @@ import { visiblePartyDetails } from "../party/details";
 import { FlyerDb, flyerUrl, isFlyerId } from "../party/flyers";
 import { getFlyerFile } from "../storage";
 import { signQr } from "../qr";
-import { FileStore, MAX_FILE_BYTES, sniffImage, uploadTarget, type FilesCapacity } from "../storage";
+import { FileStore, idPhotoOwner, MAX_FILE_BYTES, sniffImage, uploadTarget, type FilesCapacity } from "../storage";
 
 export const guestRoutes = new Hono<AppEnv>();
 
 const PARTY_RE = /^[a-z0-9-]{3,24}$/;
 /** The whole multipart request: the screenshot plus room for the other fields. */
-const MAX_SIGNUP_BYTES = MAX_FILE_BYTES + 64 * 1024;
+// A payment screenshot and an ID photo, plus the form fields.
+const MAX_SIGNUP_BYTES = 2 * MAX_FILE_BYTES + 64 * 1024;
 const MAX_ANSWERS_JSON = 16 * 1024;
 /** One "resend my link" email per address per party per window (see GuestDb.addLinkEmail). */
 const LINK_EMAIL_WINDOW_MS = 10 * 60_000;
@@ -70,7 +71,11 @@ async function signupIds(partyId: string, token: string) {
   const h = await sha256(`sahra-signup-v1|${partyId}|${token}`);
   let n = 0;
   for (const b of h.subarray(10, 16)) n = n * 256 + b;
-  return { ticketId: base32(h.subarray(0, 10), 16), fileId: n + 1 };
+  // The ID photo's file id: from a second hash, so it never equals the screenshot's.
+  const h2 = await sha256(`sahra-idphoto-v1|${partyId}|${token}`);
+  let m = 0;
+  for (const b of h2.subarray(0, 6)) m = m * 256 + b;
+  return { ticketId: base32(h.subarray(0, 10), 16), fileId: n + 1, idFileId: m + 1 };
 }
 
 const shotsOk = (cap: FilesCapacity) => cap.state === "ok";
@@ -255,7 +260,7 @@ guestRoutes.get("/parties/:party", async (c) => {
     }),
     uploads: shotsOk(await uploadTarget(c.env, c.var.deps.now())),
     // What the form shows and the guest accepts; a request echoes these versions (src/guests/policy.ts).
-    policy: await currentPolicy(c.env, p.rules, p.cancellation_policy),
+    policy: await currentPolicy(c.env, p.rules, p.cancellation_policy, form.id_photo !== "none"),
     turnstile_site_key: turnstileConfigured(c.env) ? c.env.TURNSTILE_SITE_KEY : null,
   });
 });
@@ -304,24 +309,34 @@ guestRoutes.post("/parties/:party/signup", async (c) => {
       return json(c, 400, { error: "invalid_request" });
     }
   }
-  let shot: { bytes: Uint8Array; type: NonNullable<ReturnType<typeof sniffImage>> } | null = null;
-  if (file !== null && typeof file !== "string") {
-    if (file.size > MAX_FILE_BYTES) return json(c, 413, { error: "too_large", max_screenshot_bytes: MAX_FILE_BYTES });
-    const bytes = new Uint8Array(await file.arrayBuffer());
+  type Image = { bytes: Uint8Array; type: NonNullable<ReturnType<typeof sniffImage>> };
+  const image = async (v: File | string | null, what: "screenshot" | "id_photo"): Promise<Image | null | Response> => {
+    if (v === null) return null;
+    if (typeof v === "string") return json(c, 400, { error: "invalid_request" });
+    if (v.size > MAX_FILE_BYTES) return json(c, 413, { error: "too_large", max_screenshot_bytes: MAX_FILE_BYTES });
+    const bytes = new Uint8Array(await v.arrayBuffer());
     const type = sniffImage(bytes);
-    if (!type || bytes.length === 0) return json(c, 415, { error: "screenshot_must_be_jpeg_png_or_webp" });
-    shot = { bytes, type };
-  } else if (file !== null) {
-    return json(c, 400, { error: "invalid_request" });
-  }
-  // Fail closed: without the files database a screenshot cannot be kept.
-  if (shot && !c.env.FILES) return json(c, 503, { error: "uploads_not_configured" });
+    if (!type || bytes.length === 0) return json(c, 415, { error: `${what}_must_be_jpeg_png_or_webp` });
+    return { bytes, type };
+  };
+  const shotOr = await image(file, "screenshot");
+  if (shotOr instanceof Response) return shotOr;
+  const idOr = await image(form.get("id_photo"), "id_photo");
+  if (idOr instanceof Response) return idOr;
+  const shot = shotOr, idPhoto = idOr;
+  // The Instagram handle as typed ("@name", a profile link...), reduced to the handle.
+  const instaField = form.get("instagram");
+  const instaGiven = typeof instaField === "string" && instaField.trim() !== "";
+  const instagram = instaGiven ? cleanInstagram(instaField) : null;
+  if (instaGiven && !instagram) return json(c, 400, { error: "invalid_instagram" });
+  // Fail closed: without the files database a screenshot or ID photo cannot be kept.
+  if ((shot || idPhoto) && !c.env.FILES) return json(c, 503, { error: "uploads_not_configured" });
 
   const bot = await verifyTurnstile(c.var.deps.fetch, c.env, form.get("cf-turnstile-response"), ip);
   if (bot !== "ok") return turnstileAnswer(c, bot);
 
   const gdb = new GuestDb(c.var.db.driver);
-  const { ticketId, fileId } = await signupIds(partyId, token);
+  const { ticketId, fileId, idFileId } = await signupIds(partyId, token);
   const now = c.var.deps.now();
   const party = await gdb.signupParty(partyId, ticketId, { email, typeId, now });
   if (!party) return json(c, 404, { error: "not_found" });
@@ -338,7 +353,7 @@ guestRoutes.post("/parties/:party/signup", async (c) => {
   if (party.existing_party === partyId) return done(200);
   if (party.existing_party !== null) return json(c, 409, { error: "invalid_request" });
   // The guest accepted what the form showed; it must still be what applies now.
-  const policy = await currentPolicy(c.env, party.rules, party.cancellation_policy);
+  const policy = await currentPolicy(c.env, party.rules, party.cancellation_policy, storedForm(party.guest_form).id_photo !== "none");
   if (!samePolicy(shown, policy)) return termsChanged(c, party, policy);
 
   const pf = storedForm(party.guest_form);
@@ -347,6 +362,9 @@ guestRoutes.post("/parties/:party/signup", async (c) => {
   if (people > party.max_people_per_ticket) return json(c, 400, { error: "too_many_people", max_people_per_ticket: party.max_people_per_ticket });
   if (pf.screenshot === "required" && !shot) return json(c, 400, { error: "screenshot_required" });
   if (pf.screenshot === "none" && shot) return json(c, 400, { error: "screenshot_not_wanted" });
+  if (pf.id_photo === "required" && !idPhoto) return json(c, 400, { error: "id_photo_required" });
+  if (pf.id_photo === "none" && idPhoto) return json(c, 400, { error: "id_photo_not_wanted" });
+  if (pf.instagram === "required" && !instagram) return json(c, 400, { error: "instagram_required" });
   // Early answers (the insert below re-checks every rule in the same statement).
   const reg = registration(party, now);
   if (reg.state === "not_open_yet") return refusal(c, "registration_not_open");
@@ -357,7 +375,7 @@ guestRoutes.post("/parties/:party/signup", async (c) => {
   if (party.type_left !== null && party.type_left < people) return refusal(c, "type_full");
   if (party.held + people > party.capacity) return json(c, 409, { error: "full", message: REFUSAL.full.message });
   // Every files database past 70% (or unreadable): no new screenshots (fail closed; health alerts the owner).
-  const target = shot ? await uploadTarget(c.env, now) : null;
+  const target = shot || idPhoto ? await uploadTarget(c.env, now) : null;
   if (target && target.state !== "ok") {
     return json(c, 503, target.state === "full"
       ? { error: "uploads_full", message: "Screenshot uploads are paused for a moment. Please try again later." }
@@ -373,15 +391,21 @@ guestRoutes.post("/parties/:party/signup", async (c) => {
       id: fileId, partyId, ticketId, type: shot.type, bytes: shot.bytes, now,
     });
   }
+  let idPhotoKey: string | null = null;
+  if (idPhoto) {
+    idPhotoKey = await FileStore.for(c.env, target!.writable!)!.put({
+      id: idFileId, partyId, ticketId: idPhotoOwner(ticketId), type: idPhoto.type, bytes: idPhoto.bytes, now,
+    });
+  }
   const r = await gdb.signup({
     id: ticketId, partyId, people, name, email, answers: Object.keys(answers).length ? JSON.stringify(answers) : null,
-    screenshotKey, typeId, now, op: crypto.randomUUID(),
+    screenshotKey, idPhotoKey, instagram: pf.instagram === "none" ? null : instagram, typeId, now, op: crypto.randomUUID(),
     rules: party.rules, cancellation: party.cancellation_policy, accepted: { terms: policy.terms_version, rules: policy.rules_version, privacy: policy.privacy_version },
   });
   // The rules were edited between the read above and the insert: show the new ones.
   if (r === "terms_changed") {
     const fresh = (await gdb.signupParty(partyId, ticketId)) ?? { rules: null, cancellation_policy: null };
-    return termsChanged(c, fresh, await currentPolicy(c.env, fresh.rules, fresh.cancellation_policy));
+    return termsChanged(c, fresh, await currentPolicy(c.env, fresh.rules, fresh.cancellation_policy, pf.id_photo !== "none"));
   }
   // A screenshot stored for a sign-up that was then refused stays as an orphan row
   // (no ticket points to it); it is never served (reads need the ticket).

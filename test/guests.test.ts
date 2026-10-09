@@ -515,7 +515,7 @@ describe("export and form", () => {
     expect(r.status).toBe(200);
     const p = await env.DB.prepare("SELECT rev, logged_rev, last_action FROM parties WHERE id = ?").bind(party).first();
     expect(p).toEqual({ rev: 2, logged_rev: 2, last_action: "guest_form_changed" });
-    expect(((await (await h.req(`/api/guest/parties/${party}`)).json()) as { form: unknown }).form).toEqual({ ...form, questions: [{ ...form.questions[0], required: true }] });
+    expect(((await (await h.req(`/api/guest/parties/${party}`)).json()) as { form: unknown }).form).toEqual({ ...form, questions: [{ ...form.questions[0], required: true }], id_photo: "none", instagram: "none" });
     for (const bad of [{ questions: [{ id: "A B", label: "x", type: "text" }] }, { questions: [{ id: "a", label: "x", type: "choice" }] }, { screenshot: "maybe" },
       { questions: [{ id: "a", label: "x", type: "text" }, { id: "a", label: "y", type: "text" }] }]) {
       expect((await h.req("/api/tickets/form", api(os, { form: bad }))).status, JSON.stringify(bad)).toBe(400);

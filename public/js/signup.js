@@ -185,7 +185,8 @@
     function validity() { box.setCustomValidity(box.checked ? "" : t("e_terms_not_accepted")); }
     function fill() {
       Sahra.clear(notice);
-      notice.append(t("pn_text") + (policy.email ? " " + t("pn_email") : "") + " " + t("pn_read"), newTab(t("pn_link"), "/privacy"), t("pn_end"));
+      var withId = /\+id$/.test(policy.privacy_version);
+      notice.append(t(withId ? "pn_text_id" : "pn_text") + (policy.email ? " " + t("pn_email") : "") + " " + t("pn_read"), newTab(t("pn_link"), "/privacy"), t("pn_end"));
       Sahra.clear(text);
       text.append(t("acc_a"), newTab(t("acc_terms"), "/terms"));
       // Only what the page actually shows: the entry rules and/or the cancellation policy.
@@ -288,8 +289,9 @@
 
   // The payment screenshot: a large target with the chosen photo's name and preview
   // (the real file input stays in the form, focusable, for the browser's checks).
-  function uploadField(shot) {
-    var input = el("input", { class: "sr-file", attrs: { type: "file", id: "shot-file", name: "screenshot", accept: "image/jpeg,image/png,image/webp", required: shot === "required" } });
+  function uploadField(ask, o) {
+    o = o || { name: "screenshot", id: "shot-file", label: t("screenshot"), hint: t("screenshot_hint") + " " + t("screenshot_size") };
+    var input = el("input", { class: "sr-file", attrs: { type: "file", id: o.id, name: o.name, accept: "image/jpeg,image/png,image/webp", required: ask === "required" } });
     var name = el("span", { class: "up-name", text: t("up_none") });
     var action = el("strong", { text: t("up_choose") });
     var thumb = el("img", { class: "up-thumb", attrs: { alt: "" } });
@@ -306,10 +308,23 @@
       }
     });
     return el("div", { class: "field upload-field" },
-      el("p", { class: "label", text: t("screenshot") + (shot === "required" ? "" : " (" + t("optional") + ")") }),
+      el("p", { class: "label", text: o.label + (ask === "required" ? "" : " (" + t("optional") + ")") }),
       input,
-      el("label", { class: "upload", attrs: { for: "shot-file" } }, thumb, el("span", { class: "up-text" }, action, name)),
-      el("span", { class: "hint", text: t("screenshot_hint") + " " + t("screenshot_size") }));
+      el("label", { class: "upload", attrs: { for: o.id } }, thumb, el("span", { class: "up-text" }, action, name)),
+      el("span", { class: "hint", text: o.hint }));
+  }
+
+  // The party's form can ask for an Instagram handle and an ID photo (none / optional / required).
+  function instagramField(ask, draft) {
+    if (ask === "none") return null;
+    return el("div", { class: "field" }, el("label", null, t("insta_label") + (ask === "required" ? "" : " (" + t("optional") + ")"),
+      el("input", { attrs: { type: "text", name: "instagram", maxlength: 100, required: ask === "required", autocomplete: "off",
+        autocapitalize: "none", spellcheck: "false", inputmode: "text", dir: "ltr", placeholder: "@", value: draft.instagram || "" } }),
+      el("span", { class: "hint", text: t("insta_hint") })));
+  }
+  function idPhotoField(ask) {
+    if (ask === "none") return null;
+    return uploadField(ask, { name: "id_photo", id: "id-file", label: t("id_label"), hint: t("id_hint") });
   }
 
   function step(title, children) {
@@ -333,6 +348,8 @@
         el("span", { class: "hint", text: t("email_hint") }))),
       el("div", { class: "field", hidden: maxPeople <= 1 }, el("label", null, t("people"), people,
         el("span", { class: "hint", text: t("people_hint", { n: maxPeople }) }))),
+      instagramField(data.form.instagram || "none", draft),
+      idPhotoField(data.form.id_photo || "none"),
       data.form.questions.map(questionField)]),
       shot === "none" ? null : step(t("step_pay"), [
         el("div", { class: "pay-box", attrs: { "data-pay": "" } }),
@@ -437,7 +454,8 @@
     var f = app.querySelector("form");
     if (!f || !f.elements.name) return;
     try {
-      sessionStorage.setItem(draftKey, JSON.stringify({ name: f.elements.name.value, email: f.elements.email.value, people: f.elements.people.value }));
+      sessionStorage.setItem(draftKey, JSON.stringify({ name: f.elements.name.value, email: f.elements.email.value, people: f.elements.people.value,
+        instagram: f.elements.instagram ? f.elements.instagram.value : "" }));
     } catch (e) { /* not kept */ }
   }
 
@@ -483,16 +501,24 @@
     fd.set("cf-turnstile-response", window.turnstile ? window.turnstile.getResponse(widgets.signup) || "" : "");
     btn.disabled = true;
     btn.textContent = t("sending");
+    if (f.elements.instagram) fd.set("instagram", f.elements.instagram.value);
+    var which = "screenshot";
     try {
       var file = f.elements.screenshot && f.elements.screenshot.files[0];
       if (file) {
         var shot = await compress(file);
         fd.set("screenshot", shot, shot === file ? file.name : "screenshot.jpg");
       }
+      which = "id_photo";
+      var idFile = f.elements.id_photo && f.elements.id_photo.files[0];
+      if (idFile) {
+        var idSmall = await compress(idFile);
+        fd.set("id_photo", idSmall, idSmall === idFile ? idFile.name : "id.jpg");
+      }
     } catch (err) {
       btn.disabled = false;
       btn.textContent = t("request_ticket");
-      return say("no", t("e_screenshot_must_be_jpeg_png_or_webp"));
+      return say("no", t("e_" + which + "_must_be_jpeg_png_or_webp"));
     }
     var r = await Sahra.api.post("/api/guest/parties/" + encodeURIComponent(party) + "/signup", fd);
     if (window.turnstile && widgets.signup !== undefined) window.turnstile.reset(widgets.signup);

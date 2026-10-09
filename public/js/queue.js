@@ -91,17 +91,19 @@
   // --- screenshot ----------------------------------------------------------
 
   // The image comes from an authenticated endpoint; shown as a data: URL (the page policy allows data: images).
-  async function showShot(id, box, button) {
+  // `what`: "screenshot" or "id-photo" (the ID photo when the party's form asks for one).
+  async function showShot(id, box, button, what) {
+    what = what || "screenshot";
     button.disabled = true;
     var r;
-    try { r = await fetch("/api/tickets/" + encodeURIComponent(id) + "/screenshot", { credentials: "same-origin" }); } catch (e) { r = null; }
+    try { r = await fetch("/api/tickets/" + encodeURIComponent(id) + "/" + what, { credentials: "same-origin" }); } catch (e) { r = null; }
     if (!r || !r.ok) {
       button.remove();
-      box.appendChild(el("p", { class: "small muted", text: r && r.status === 410 ? t("q_shot_gone") : t("error_generic") }));
+      box.appendChild(el("p", { class: "small muted", text: r && r.status === 410 ? t(what === "id-photo" ? "q_id_gone" : "q_shot_gone") : t("error_generic") }));
       return;
     }
     var reader = new FileReader();
-    reader.onload = function () { button.remove(); box.appendChild(el("img", { attrs: { src: reader.result, alt: t("q_show_shot") } })); };
+    reader.onload = function () { button.remove(); box.appendChild(el("img", { attrs: { src: reader.result, alt: t(what === "id-photo" ? "q_show_id" : "q_show_shot") } })); };
     reader.readAsDataURL(await r.blob());
   }
 
@@ -135,11 +137,18 @@
     } else if (row.price) {
       shot.appendChild(el("p", { class: "small muted", text: t("q_no_shot") }));
     }
+    if (row.has_id_photo) {
+      var ib = el("button", { class: "btn link", text: t("q_show_id"), attrs: { type: "button" } });
+      ib.addEventListener("click", function () { showShot(row.id, shot, ib, "id-photo"); });
+      shot.appendChild(ib);
+    }
 
     var answers = Object.keys(row.answers || {});
     var details = el("details", null, el("summary", { text: t("q_details") }),
       el("ul", { class: "facts" },
         row.guest_email ? el("li", null, el("span", { class: "muted", text: t("q_email") + ": " }), el("span", { text: row.guest_email, attrs: { dir: "ltr" } })) : null,
+        row.instagram ? el("li", null, el("span", { class: "muted", text: t("insta_label") + ": " }),
+          el("a", { text: "@" + row.instagram, attrs: { href: "https://www.instagram.com/" + encodeURIComponent(row.instagram) + "/", target: "_blank", rel: "noopener noreferrer", dir: "ltr" } })) : null,
         el("li", { class: "muted", text: t("q_requested", { when: Sahra.rel(row.created_at) }) }),
         answers.map(function (k) {
           return el("li", null, el("span", { class: "muted", text: k + ": ", attrs: { dir: "auto" } }), el("span", { class: "pre", text: String(row.answers[k]), attrs: { dir: "auto" } }));
@@ -268,11 +277,11 @@
     var keys = {};
     all.forEach(function (x) { Object.keys(x.answers || {}).forEach(function (k) { keys[k] = true; }); });
     var qs = Object.keys(keys);
-    var head = ["ticket", "status", "name", "email", "people", "type", "price per person (EGP)", "total (EGP)", "requested", "approved", "approved by", "rejected", "rejected by",
+    var head = ["ticket", "status", "name", "email", "instagram", "people", "type", "price per person (EGP)", "total (EGP)", "requested", "approved", "approved by", "rejected", "rejected by",
       "reason", "QR sent", "QR sent by", "scanned", "scanned by"].concat(qs);
     var lines = [head.map(csvCell).join(",")];
     all.forEach(function (x) {
-      lines.push([x.id, x.status, x.guest_name, x.guest_email, x.people, x.type_name, x.price, x.total_price, iso(x.created_at), iso(x.approved_at), x.approved_by,
+      lines.push([x.id, x.status, x.guest_name, x.guest_email, x.instagram ? "@" + x.instagram : "", x.people, x.type_name, x.price, x.total_price, iso(x.created_at), iso(x.approved_at), x.approved_by,
         iso(x.rejected_at), x.rejected_by, x.reject_reason, iso(x.released_at), x.released_by, iso(x.used_at), x.scanned_by]
         .concat(qs.map(function (q) { return (x.answers || {})[q]; })).map(csvCell).join(","));
     });

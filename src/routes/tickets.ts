@@ -26,7 +26,7 @@ import { base32, isBase32, isUuid, newId, sha256, sha256hex } from "../lib/crypt
 import { chargeStaff } from "../limits";
 import type { OutboxRow } from "../outbox";
 import { PartyDb } from "../party/db";
-import { getScreenshot } from "../storage";
+import { getIdPhoto, getScreenshot } from "../storage";
 import { guestEmail } from "./guests";
 
 export const ticketRoutes = new Hono<AppEnv>();
@@ -71,7 +71,7 @@ ticketRoutes.get("/", requireAuth(MANAGERS), async (c) => {
   const rows = await new GuestDb(c.var.db.driver).list(sess, status, m ? { at: Number(m[1]), id: m[2]! } : null, limit, now);
   const last = rows.at(-1);
   return json(c, 200, {
-    tickets: rows.map((r) => ({ ...r, answers: r.answers ? JSON.parse(String(r.answers)) : {}, has_screenshot: !!r.has_screenshot })),
+    tickets: rows.map((r) => ({ ...r, answers: r.answers ? JSON.parse(String(r.answers)) : {}, has_screenshot: !!r.has_screenshot, has_id_photo: !!r.has_id_photo })),
     next: rows.length === limit && last ? `${last.created_at}.${last.id}` : null,
   });
 });
@@ -263,6 +263,22 @@ ticketRoutes.get("/:id/screenshot", requireAuth(MANAGERS), async (c) => {
   if ("deleted" in f) return json(c, 410, { error: "screenshot_deleted", message: f.deleted });
   return new Response(f.bytes, {
     headers: { "content-type": f.type, "cache-control": "no-store, private", "content-disposition": "inline" },
+  });
+});
+
+/** The ID photo of one of this party's tickets (when its form asks for one). Owner/admin only, never cached; door staff never. */
+ticketRoutes.get("/:id/id-photo", requireAuth(MANAGERS), async (c) => {
+  const id = c.req.param("id");
+  if (!isTicketId(id)) return json(c, 404, { error: "not_found" });
+  const { sess, now } = sessOf(c);
+  const key = await new GuestDb(c.var.db.driver).idPhotoKey(sess, id, now);
+  if (!key) return json(c, 404, { error: "not_found" });
+  const f = await getIdPhoto(c.env, key, sess.partyId, id);
+  if (f === "not_configured") return json(c, 503, { error: "uploads_not_configured" });
+  if (!f) return json(c, 404, { error: "not_found" });
+  if ("deleted" in f) return json(c, 410, { error: "id_photo_deleted", message: f.deleted });
+  return new Response(f.bytes, {
+    headers: { "content-type": f.type, "cache-control": "no-store, private", "content-disposition": "inline", "x-content-type-options": "nosniff" },
   });
 });
 
