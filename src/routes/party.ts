@@ -17,6 +17,8 @@ import { chargeStaff } from "../limits";
 import { PartyDb } from "../party/db";
 import { doorView, staffView, visiblePartyDetails, type Viewer } from "../party/details";
 import { parseEdit, text, TIME_OR_PLACE } from "../party/input";
+import { pauseAdmission } from "./admission";
+import { isBase32 } from "../lib/crypto";
 import { announceText, AUDIENCES, noticeText, type Audience } from "../party/notice";
 import { flyerIdsFor, FlyerDb, flyerUrl, isFlyerId, MAX_FLYERS, type FlyerRow } from "../party/flyers";
 import { sessionValid } from "../db";
@@ -290,4 +292,69 @@ partyRoutes.post("/flyers/:id/delete", requireAuth(["owner", "admin"]), async (c
   if (r.status === "rejected") return json(c, r.reason === "not_found" ? 404 : 401, { error: r.reason === "not_allowed" ? "not_signed_in" : r.reason });
   await flushChangeLog(c.var.db, c.var.ledger, now);
   return json(c, 200, { status: r.status });
+});
+
+// ------------------------------------------------------------- cancel the party, refunds
+//
+// Brainstorm idea 14. Cancelling (owner only, cannot be undone): admission is
+// paused first (the control object, as "Pause admission" does), then the party is
+// marked cancelled (no new requests), paid pending/approved tickets are marked
+// "refund due" when asked, and a notice to every guest is prepared in Emails
+// (awaiting approval) when asked. Sahra records refunds; it never sends money.
+// Body: op (UUID, the same for retries), reason, mark_refunds, email_guests.
+
+function cancelText(name: string, reason: string | null, phone: string | null) {
+  const lines = [`Hello,`, ``, `${name} has been cancelled by the organiser.`];
+  if (reason) lines.push(``, reason);
+  lines.push(``, `Your ticket will not be valid at the door. If you paid, the organiser will contact you about your refund; Sahra does not handle payments.`);
+  if (phone) lines.push(`Organiser contact: ${phone}`);
+  lines.push(``, `Sorry for the change of plans.`);
+  return lines.join("\n") + "\n";
+}
+
+partyRoutes.post("/cancel", requireAuth(["owner"]), async (c) => {
+  const b = await readJson(c);
+  const reason = b?.reason === undefined || b?.reason === null || b?.reason === "" ? null : text(b.reason, 500, true);
+  if (!b || !isUuid(b.op) || reason === undefined || typeof b.mark_refunds !== "boolean" || typeof b.email_guests !== "boolean") {
+    return json(c, 400, { error: "invalid_request" });
+  }
+  const a = c.var.auth;
+  const sess = { hash: a.hash, partyId: a.info.party_id };
+  const now = c.var.deps.now();
+  const db = partyDb(c);
+  const before = await db.get(sess.partyId);
+  if (!before) return json(c, 404, { error: "not_found" });
+  // 1. Admission stops first: scanners show PAUSED from now on (skipped on a retry once cancelled).
+  if (!before.cancelled_at && (await pauseAdmission(c, sess, a.info.staff_id, now)) === null) return json(c, 409, { error: "changed_meanwhile_try_again" });
+  // 2. Cancelled, with refunds due.
+  const r = await db.cancel(sess, a.info.staff_id, { reason: before.cancelled_at ? before.cancel_reason ?? null : reason, markRefunds: b.mark_refunds }, now, b.op);
+  if (r.status === "rejected") return json(c, 409, { error: "not_allowed" });
+  await flushChangeLog(c.var.db, c.var.ledger, now);
+  // 3. The notice to guests, prepared in Emails (nothing is sent until approved there).
+  let queued = 0;
+  if (b.email_guests) {
+    const over = await chargeStaff(c, "announce", 1, ["owner"]);
+    if (over) return over;
+    const n = await db.announce(sess, { op: b.op, audience: "everyone", typeId: null, subject: `Cancelled: ${before.name}`,
+      body: cancelText(before.name, before.cancelled_at ? before.cancel_reason ?? null : reason, before.support_phone ?? null) }, a.info.staff_id, now);
+    queued = n.queued;
+  }
+  return json(c, 200, { status: r.status, refunds_due: r.due, emails_queued: queued });
+});
+
+partyRoutes.get("/refunds", requireAuth(["owner", "admin"]), async (c) => {
+  const a = c.var.auth;
+  const rows = await partyDb(c).refunds({ hash: a.hash, partyId: a.info.party_id }, c.var.deps.now());
+  const due = rows.filter((r) => r.state === "due"), done = rows.filter((r) => r.state === "done");
+  return json(c, 200, { refunds: rows, due_count: due.length, due_amount: due.reduce((n, r) => n + r.amount, 0),
+    done_count: done.length, done_amount: done.reduce((n, r) => n + r.amount, 0) });
+});
+
+partyRoutes.post("/refunds/:ticket", requireAuth(["owner", "admin"]), async (c) => {
+  const id = c.req.param("ticket");
+  const b = await readJson(c);
+  if (!isBase32(id, 16) || (b?.state !== "due" && b?.state !== "done")) return json(c, 400, { error: "invalid_request" });
+  const a = c.var.auth;
+  const ok = await partyDb(c).setRefund({ hash: a.hash, partyId: a.info.party_id }, a.info.staff_id, id, b.state, c.var.deps.now());
+  return ok ? json(c, 200, { state: b.state }) : json(c, 409, { error: "not_allowed" });
 });

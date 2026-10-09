@@ -491,18 +491,60 @@
     });
   }
 
-  var BUILD = { basics: basics, contact: contact, time: time, location: location, requests: requests, rules: rules, pictures: pictures, types: typesCard, form: formCardGuest, emails: emails };
+  // Cancel the party (owners; brainstorm idea 14). Cannot be undone: admission pauses, requests stop,
+  // paid tickets can be marked "refund due", and a notice to every guest waits in Emails for approval.
+  var cancelOp = null, who = null;
+  function cancelCard() {
+    if (!who || who.staff.role !== "owner") return el("div");
+    if (party.cancelled_at) {
+      return S.section("cancel", t("s_cancelled"), t("s_cancelled_p", { when: Sahra.when(party.cancelled_at, party.time_zone) }),
+        noteFor("cancel"),
+        party.cancel_reason ? el("p", { class: "pre", text: party.cancel_reason, attrs: { dir: "auto" } }) : null,
+        el("div", { class: "g-actions" }, el("a", { class: "btn small-btn", text: t("s_open_refunds"), attrs: { href: "/guests.html#refunds" } }),
+          el("a", { class: "btn small-btn", text: t("s_open_emails"), attrs: { href: "/outbox.html" } })));
+    }
+    var box = noteFor("cancel");
+    var go = el("button", { class: "btn no small-btn", text: t("s_cancel_go"), attrs: { type: "submit" } });
+    var f = el("form", { attrs: { novalidate: true } },
+      S.field(t("s_cancel_reason"), textarea("reason", "", 500, 3), t("s_cancel_reason_h")),
+      S.check("mark_refunds", t("s_cancel_refunds"), true, t("s_cancel_refunds_h")),
+      S.check("email_guests", t("s_cancel_email"), true, t("s_cancel_email_h")),
+      el("div", { class: "s-save" }, go, box));
+    f.addEventListener("submit", async function (e) {
+      e.preventDefault();
+      var typed = window.prompt(t("s_cancel_confirm", { name: party.name }));
+      if (typed === null) return;
+      if (typed.trim() !== party.name.trim()) { S.say(box, "no", t("s_cancel_mismatch")); return; }
+      cancelOp = cancelOp || crypto.randomUUID();
+      go.disabled = true;
+      S.say(box, "maybe", t("s_saving"));
+      var r = await S.act("/api/party/cancel", { op: cancelOp, reason: f.elements.reason.value.trim() || null,
+        mark_refunds: f.elements.mark_refunds.checked, email_guests: f.elements.email_guests.checked });
+      go.disabled = false;
+      if (!r.ok) { S.say(box, "no", S.why(r)); return; }
+      var g = await Sahra.api.get("/api/party");
+      if (g.ok) party = g.body;
+      rebuild("cancel", ["yes", t("s_cancel_done", { due: r.body.refunds_due, emails: r.body.emails_queued })]);
+    });
+    var card = S.section("cancel", t("s_cancel"), t("s_cancel_p"), f);
+    card.classList.add("s-danger");
+    return card;
+  }
+
+  var BUILD = { basics: basics, contact: contact, time: time, location: location, requests: requests, rules: rules, pictures: pictures, types: typesCard, form: formCardGuest, emails: emails, cancel: cancelCard };
   var ORDER = [["basics", "s_basics"], ["contact", "s_contact"], ["time", "s_time"], ["location", "s_location"], ["requests", "s_requests"], ["rules", "s_rules"],
-    ["pictures", "s_pictures"], ["types", "s_types"], ["form", "s_form"], ["emails", "s_emails"]];
+    ["pictures", "s_pictures"], ["types", "s_types"], ["form", "s_form"], ["emails", "s_emails"], ["cancel", "s_cancel"]];
 
   function render(me, app) {
+    who = me;
     if (loadErr) { app.appendChild(el("p", { class: "notice no", text: S.why(loadErr) })); return; }
     if (!party) { app.appendChild(el("p", { class: "muted", text: t("loading") })); return; }
-    var toc = el("nav", { class: "s-toc", attrs: { "aria-label": t("s_sections") } }, el("ul", null, ORDER.map(function (o) {
+    var order = ORDER.filter(function (o) { return o[0] !== "cancel" || me.staff.role === "owner"; });
+    var toc = el("nav", { class: "s-toc", attrs: { "aria-label": t("s_sections") } }, el("ul", null, order.map(function (o) {
       return el("li", null, el("a", { text: t(o[1]), attrs: { href: "#" + o[0] } }));
     })));
     var main = el("div", { class: "s-main" });
-    ORDER.forEach(function (o) { nodes[o[0]] = BUILD[o[0]](); main.appendChild(nodes[o[0]]); });
+    order.forEach(function (o) { nodes[o[0]] = BUILD[o[0]](); main.appendChild(nodes[o[0]]); });
     app.appendChild(el("div", { class: "s-layout" }, toc, main));
   }
 

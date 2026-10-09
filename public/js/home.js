@@ -39,8 +39,9 @@
   }
 
   function statePill(p) {
+    if (p.state === "cancelled") return el("span", { class: "pill no", text: t("h_state_cancelled") });
     if (p.state === "full") return el("span", { class: "pill no", text: t("h_state_full") });
-    if (p.state === "not_open_yet") return el("span", { class: "pill", text: t("h_state_not_open_yet", { rel: Sahra.rel(p.opens_at) }) });
+    if (p.state === "not_open_yet") return el("span", { class: "pill", text: p.opens_at ? t("h_state_not_open_yet", { rel: Sahra.rel(p.opens_at) }) : t("h_state_soon") });
     if (p.state === "closed") return el("span", { class: "pill", text: t("h_state_closed") });
     return el("span", { class: "pill yes", text: t("h_state_open") });
   }
@@ -124,9 +125,9 @@
   }
   function availability(p, my) {
     if (my) return el("span", { class: "tags" }, myPill(my.status));
-    var cls = p.state === "open" ? "yes" : p.state === "full" ? "no" : "off";
-    var text = p.state === "full" ? t("h_state_full")
-      : p.state === "not_open_yet" ? t("h_state_not_open_yet", { rel: Sahra.rel(p.opens_at) })
+    var cls = p.state === "open" ? "yes" : p.state === "full" || p.state === "cancelled" ? "no" : "off";
+    var text = p.state === "cancelled" ? t("h_state_cancelled") : p.state === "full" ? t("h_state_full")
+      : p.state === "not_open_yet" ? (p.opens_at ? t("h_state_not_open_yet", { rel: Sahra.rel(p.opens_at) }) : t("h_state_soon"))
       : p.state === "closed" ? t("h_state_closed") : t("h_state_open");
     return el("span", { class: "status " + cls }, el("span", { class: "dot", attrs: { "aria-hidden": "true" } }), el("span", { text: text }));
   }

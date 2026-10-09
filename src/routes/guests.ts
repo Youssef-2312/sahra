@@ -19,6 +19,7 @@ import { Hono } from "hono/tiny";
 import { flushChangeLog } from "../changelog";
 import { json, readJson, type AppEnv, type Ctx } from "../context";
 import { D1Driver } from "../db/driver";
+import { sql } from "../db/sql";
 import { GuestDb, type SignupParty, type SignupRefusal } from "../guests/db";
 import { emailTemplates, findEmail, groupNote, linkEmail } from "../guests/emails";
 import { checkAnswers, cleanInstagram, storedForm } from "../guests/form";
@@ -92,13 +93,14 @@ async function orderIds(partyId: string, token: string, count: number) {
 const shotsOk = (cap: FilesCapacity) => cap.state === "ok";
 
 /** Registration state at `now` (party rules, migrations/0014). */
-function registration(p: Pick<SignupParty, "registration_opens_at" | "registration_closes_at" | "support_phone">, now: number) {
+function registration(p: Pick<SignupParty, "registration_opens_at" | "registration_closes_at" | "support_phone" | "cancelled_at">, now: number) {
   // Requests open only once the organiser has set a support number (brainstorm idea 16).
   const needsContact = !p.support_phone;
   const notYet = needsContact || (p.registration_opens_at !== null && p.registration_opens_at > now);
-  const over = p.registration_closes_at !== null && p.registration_closes_at <= now;
-  return { opens_at: needsContact ? null : p.registration_opens_at, closes_at: p.registration_closes_at, open: !notYet && !over,
-    state: notYet ? "not_open_yet" : over ? "closed" : "open", needs_contact: needsContact } as const;
+  const over = !!p.cancelled_at || (p.registration_closes_at !== null && p.registration_closes_at <= now);
+  return { opens_at: needsContact ? null : p.registration_opens_at, closes_at: p.registration_closes_at, open: !p.cancelled_at && !notYet && !over,
+    state: p.cancelled_at ? "closed" : notYet ? "not_open_yet" : over ? "closed" : "open", needs_contact: needsContact && !p.cancelled_at,
+    cancelled: !!p.cancelled_at } as const;
 }
 
 /** Guest-facing words for a refused request. */
@@ -150,7 +152,7 @@ guestRoutes.get("/parties", async (c) => {
         id: p.id, name: p.name, starts_at: p.starts_at, ends_at: p.ends_at, time_zone: p.time_zone,
         from_price: p.from_price, price_count: p.price_count, places_left: left,
         flyers: p.flyers.map((f) => ({ id: f.id, url: flyerUrl(p.id, f.id, f.rev) })),
-        state: left === 0 ? "full" : notYet ? "not_open_yet" : over ? "closed" : "open",
+        state: p.cancelled_at ? "cancelled" : left === 0 ? "full" : notYet ? "not_open_yet" : over ? "closed" : "open",
         opens_at: notYet && p.support_phone ? p.registration_opens_at : null,
       };
     }) } };
@@ -558,12 +560,17 @@ guestRoutes.get("/ticket", async (c) => {
   const showQr = released && t.hold_at == null;
   const party = await new PartyDb(c.var.db.driver).get(t.party_id);
   if (!party) return json(c, 404, { error: "invalid_link" });
+  // A refund the organiser recorded for this ticket (migrations/0026); read only for a cancelled party or a cancelled ticket.
+  const refund = party.cancelled_at || t.status === "cancelled"
+    ? (await c.var.db.driver.all<{ state: string; amount: number }>(sql`SELECT state, amount FROM refunds WHERE ticket_id = ${t.id} AND party_id = ${t.party_id}`)).results[0] ?? null
+    : null;
   return json(c, 200, {
     // Only what this ticket may see: the place stays hidden until its address mode allows it.
     party: visiblePartyDetails(party, { kind: "ticket", status: t.status, released: t.released_at != null, onHold: t.hold_at != null }, c.var.deps.now()),
     ticket: {
       id: t.id,
       reference: referenceOf(t.id),
+      refund: refund ? { state: refund.state, amount: refund.amount } : null,
       status: released ? "released" : t.status,
       guest_name: t.guest_name,
       people: t.people,

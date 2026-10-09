@@ -79,7 +79,7 @@
     if (!data) { app.appendChild(el("p", { class: "muted", text: t("loading") })); return; }
     var k = data.ticket, p = data.party;
     Sahra.title(p.name);
-    var usable = !!k.qr && !k.used && !k.on_hold && k.status === "released";
+    var usable = !!k.qr && !k.used && !k.on_hold && k.status === "released" && !p.cancelled;
 
     var side = el("div", { class: "side" }), body = el("div");
     app.appendChild(el("div", { class: "cols" }, side, body));
@@ -87,6 +87,9 @@
       var src = qrImage(k.qr);
       side.appendChild(el("div", { class: "qr-box" }, el("img", { attrs: { src: src, alt: "QR", width: 300, height: 300 } })));
       side.appendChild(el("p", { class: "center muted", text: t("brightness") }));
+    } else if (p.cancelled) {
+      side.appendChild(el("p", { class: "notice no", text: t("tk_cancelled") }));
+      if (p.cancelled.reason) side.appendChild(el("p", { class: "pre", text: p.cancelled.reason, attrs: { dir: "auto" } }));
     } else {
       var m = statusMessage(k);
       side.appendChild(el("p", { class: "notice " + m[0], text: m[1] }));
@@ -112,6 +115,9 @@
     body.appendChild(addressCard(p));
     if (p.rules) body.appendChild(el("section", { class: "card" }, el("p", { class: "small muted", text: t("rules") }), el("p", { class: "pre", text: p.rules, attrs: { dir: "auto" } })));
     if (p.cancellation_policy) body.appendChild(el("section", { class: "card" }, el("p", { class: "small muted", text: t("cancel_title") }), el("p", { class: "pre", text: p.cancellation_policy, attrs: { dir: "auto" } })));
+    // A refund the organiser recorded (Sahra records refunds; it never sends money).
+    if (k.refund) side.appendChild(el("p", { class: "notice " + (k.refund.state === "done" ? "yes" : "maybe"),
+      text: t(k.refund.state === "done" ? "tk_refund_done" : "tk_refund_due", { amount: Sahra.amount(k.refund.amount) }) }));
     var contact = Sahra.contactCard(p.support);
     if (contact) body.appendChild(contact);
 

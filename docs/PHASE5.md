@@ -625,3 +625,16 @@ Tests: `test/reference.test.ts`.
 
 Not built from idea 15: the "edit email" action with a notice to the old address
 (the existing name transfer already changes the email and replaces the link).
+
+### Cancel a party and track refunds (9 October 2026, in progress)
+
+Brainstorm idea 14. Migration **0026**: `parties.cancelled_at`, `cancel_reason`,
+and a separate `refunds` table (due / done, amount = price x people), kept apart
+from tickets so the door's records never change. Settings has "Cancel the party"
+(owners; typed party name to confirm; cannot be undone): admission pauses first
+and can never reopen, requests close, paid waiting/approved tickets can be marked
+"refund due", and a notice to every guest waits in Emails for approval. Guests >
+Refunds lists due and done with totals; owners and admins tick "refunded"
+(audited). Guest pages say the party was cancelled, hide the QR, and show the
+refund state. Refunds are in the backup. Tests: `test/cancel.test.ts`.
+Left: a phone-width fix for the refund totals, and a final browser pass.

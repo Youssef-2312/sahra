@@ -72,6 +72,8 @@ const BASE: readonly TableSpec[] = [
   { db: "main", table: "staff", key: ["id"] },
   { db: "main", table: "invites", key: ["id"] },
   { db: "main", table: "tickets", key: ["id"] },
+  // Refunds owed and paid back (migrations/0026): a record of money, kept like the tickets.
+  { db: "main", table: "refunds", key: ["ticket_id"] },
   { db: "main", table: "scans", key: ["scan_id"] },
   { db: "main", table: "audit", key: ["id"], intKey: ["id"] },
   { db: "main", table: "email_quota", key: ["provider", "hour"], intKey: ["hour"] },

@@ -226,6 +226,42 @@
       el("p", { class: "small" }, el("a", { text: t("g_open_outbox"), attrs: { href: "/outbox.html" } })));
   }
 
+  // Refunds (brainstorm idea 14): due and done, ticked by owners and admins after paying back outside Sahra.
+  var refunds = null, refundBusy = {};
+  function refundsCard() {
+    if (!refunds || (!refunds.refunds.length && !(party && party.cancelled_at))) return null;
+    var head = el("div", { class: "g-tiles tiles stats r-totals" },
+      el("div", { class: "tile stat" }, el("div", { class: "label", text: t("g_ref_due") }), el("div", { class: "big", text: Sahra.amount(refunds.due_amount) }),
+        el("div", { class: "sub muted", text: S.tn("g_ref_n", refunds.due_count) })),
+      el("div", { class: "tile stat" }, el("div", { class: "label", text: t("g_ref_done") }), el("div", { class: "big", text: Sahra.amount(refunds.done_amount) }),
+        el("div", { class: "sub muted", text: S.tn("g_ref_n", refunds.done_count) })));
+    var list = refunds.refunds.length ? el("ul", { class: "s-list" }, refunds.refunds.map(function (x) {
+      var done = x.state === "done";
+      var b = el("button", { class: "btn small-btn" + (done ? "" : " yes"), text: done ? t("g_ref_undo") : t("g_ref_mark"), attrs: { type: "button", disabled: !!refundBusy[x.ticket_id] } });
+      b.addEventListener("click", async function () {
+        refundBusy[x.ticket_id] = true; b.disabled = true;
+        var r = await S.act("/api/party/refunds/" + encodeURIComponent(x.ticket_id), { state: done ? "due" : "done" });
+        delete refundBusy[x.ticket_id];
+        if (!r.ok) { window.alert(S.why(r)); b.disabled = false; return; }
+        await loadRefunds();
+      });
+      return el("li", { class: done ? "off" : null },
+        el("div", { class: "s-type-text" }, el("strong", { text: x.guest_name || t("g_no_name"), attrs: { dir: "auto" } }),
+          el("span", { class: "muted small", text: [Sahra.amount(x.amount), x.guest_email, Sahra.ref(x.ticket_id)].filter(Boolean).join(" \u00b7 "), attrs: { dir: "auto" } }),
+          done ? el("span", { class: "small muted", text: t("g_ref_done_by", { time: Sahra.when(x.updated_at), by: x.by_name || t("g_unknown") }) }) : null),
+        b);
+    })) : el("p", { class: "s-empty muted", text: t("g_ref_none") });
+    return S.section("refunds", t("g_refunds"), t("g_refunds_p"), head, list);
+  }
+  var refundsNode = null;
+  async function loadRefunds() {
+    var r = await Sahra.api.get("/api/party/refunds");
+    if (r.ok) refunds = r.body;
+    var n = refundsCard();
+    if (refundsNode && refundsNode.parentNode) { if (n) refundsNode.parentNode.replaceChild(n, refundsNode); refundsNode = n; }
+    else S.redraw();
+  }
+
   // Guests let in by hand at the door (their QR would not scan), with who did it: for review.
   var manualAdmits = [];
   function manualCard() {
@@ -254,7 +290,7 @@
     tilesNode = tiles();
     if (tilesNode) app.appendChild(tilesNode);
     app.appendChild(el("div", { class: "g-cols" },
-      el("div", { class: "g-main" }, findCard(), scannersNode = scanners(), manualCard()),
+      el("div", { class: "g-main" }, refundsNode = refundsCard(), findCard(), scannersNode = scanners(), manualCard()),
       el("div", { class: "g-side" }, issueCard(), announceCard())));
   }
 
@@ -272,8 +308,11 @@
       render(me, app);
       if (!first) return;
       first = false;
-      Promise.all([Sahra.api.get("/api/party/stats"), Sahra.api.get("/api/tickets/types"), Sahra.api.get("/api/scan/manual")]).then(function (rs) {
+      Promise.all([Sahra.api.get("/api/party/stats"), Sahra.api.get("/api/tickets/types"), Sahra.api.get("/api/scan/manual"),
+        Sahra.api.get("/api/party/refunds"), Sahra.api.get("/api/party")]).then(function (rs) {
         if (rs[2].ok) manualAdmits = rs[2].body.admits || [];
+        if (rs[3].ok) refunds = rs[3].body;
+        if (rs[4].ok) party = rs[4].body;
         if (rs[0].ok) stats = rs[0].body;
         if (rs[1].ok) types = rs[1].body.types || [];
         S.redraw();

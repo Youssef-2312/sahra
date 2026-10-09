@@ -65,6 +65,7 @@
     if (!data) return null;
     if (!data.turnstile_site_key) return t("closed_unavailable");
     if (data.full) return t("closed_full");
+    if (data.registration.cancelled) return t("closed_cancelled") + (data.details && data.details.cancelled && data.details.cancelled.reason ? " " + data.details.cancelled.reason : "");
     if (data.registration.needs_contact) return t("closed_contact");
     if (data.registration.state === "not_open_yet") return t("closed_not_yet", { when: Sahra.when(data.registration.opens_at, tz()) });
     if (data.registration.state === "closed") return t("closed_over");

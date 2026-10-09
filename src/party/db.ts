@@ -13,7 +13,7 @@ import { announceInsert, announceRecipients, type Audience, MAX_NOTICES_PER_EDIT
 const COLUMNS = `id, name, description, starts_at, ends_at, time_zone, venue_name, address, map_url, rules, cancellation_policy,
   payment_instructions, capacity, max_people_per_ticket, address_mode, reveal_at, revealed_at, address_locked_at,
   email_ticket_subject, email_ticket_body, email_link_subject, email_link_body,
-  registration_opens_at, registration_closes_at, max_tickets_per_email, support_phone, support_email, support_note, review_time, rev`;
+  registration_opens_at, registration_closes_at, max_tickets_per_email, support_phone, support_email, support_note, review_time, cancelled_at, cancel_reason, rev`;
 
 /** Places held: people on pending and approved tickets (used ones are approved too). */
 function heldPlaces(partyId: string): Sql {
@@ -108,6 +108,67 @@ export class PartyDb {
    * audit row when any was queued, and the counts, in one batch. The session is
    * checked inside the insert. The same op queues nobody twice.
    */
+  /**
+   * Cancels the party (owner only; brainstorm idea 14), in one batch: marks it
+   * cancelled with the reason (new requests are refused from then on, checked in
+   * the sign-up INSERT; admission is paused by the route BEFORE this), and, when
+   * asked, records "refund due" for every paid ticket still pending or approved
+   * (price per person x people). A retry with the same op changes nothing more.
+   * Cannot be undone.
+   */
+  async cancel(sess: SessionRef, actor: string, a: { reason: string | null; markRefunds: boolean }, now: number, op: string) {
+    const ok = sessionValid(sess, ["owner"], now);
+    const p = sess.partyId;
+    const rs = await this.driver.batch([
+      sql`UPDATE parties SET cancelled_at = ${now}, cancel_reason = ${a.reason}, rev = rev + 1, last_op = ${op}, last_action = 'party_cancelled'
+        WHERE id = ${p} AND cancelled_at IS NULL AND ${ok}`,
+      audit(now, actor, "party_cancelled", "party", sql`SELECT id AS party_id, id, rev FROM parties WHERE id = ${p} AND last_op = ${op}`, a.reason),
+      ...(a.markRefunds ? [sql`INSERT INTO refunds (ticket_id, party_id, amount, state, created_at, updated_at, updated_by)
+          SELECT t.id, t.party_id, COALESCE(t.price, 0) * t.people, 'due', ${now}, ${now}, ${actor}
+          FROM tickets t WHERE t.party_id = ${p} AND t.status IN ('pending', 'approved') AND COALESCE(t.price, 0) > 0
+            AND EXISTS (SELECT 1 FROM parties WHERE id = ${p} AND cancelled_at IS NOT NULL) AND ${ok}
+          ON CONFLICT (ticket_id) DO NOTHING`] : []),
+      sql`SELECT cancelled_at, ${ok} AS ok, (SELECT COUNT(*) FROM refunds WHERE party_id = ${p} AND state = 'due') AS due
+        FROM parties WHERE id = ${p}`,
+    ]);
+    const row = rs[rs.length - 1]!.results[0] as undefined | { cancelled_at: number | null; ok: number; due: number };
+    if (!row || Number(row.ok) !== 1) return { status: "rejected" as const, due: 0 };
+    return { status: rs[0]!.meta.changes === 1 ? "cancelled" as const : "already" as const, due: Number(row.due) };
+  }
+
+  /** The party's refunds (owner and admin), with what the list needs to find the guest. */
+  async refunds(sess: SessionRef, now: number) {
+    const r = await this.driver.all<{ ticket_id: string; amount: number; state: string; updated_at: number; guest_name: string | null; guest_email: string | null; people: number; status: string; by_name: string | null }>(
+      sql`SELECT r.ticket_id, r.amount, r.state, r.updated_at, t.guest_name, t.guest_email, t.people, t.status,
+          (SELECT name FROM staff WHERE id = r.updated_by) AS by_name
+        FROM refunds r JOIN tickets t ON t.id = r.ticket_id
+        WHERE r.party_id = ${sess.partyId} AND ${sessionValid(sess, ["owner", "admin"], now)}
+        ORDER BY r.state = 'done', t.guest_name, r.ticket_id LIMIT 2000`);
+    return r.results;
+  }
+
+  /**
+   * Marks one ticket's refund "due" or "done" (owner and admin). "due" also adds a
+   * row for a paid ticket that has none (a guest who cancelled on their own).
+   * Audited. Returns false when the ticket is not this party's paid ticket.
+   */
+  async setRefund(sess: SessionRef, actor: string, ticketId: string, state: "due" | "done", now: number) {
+    const ok = sessionValid(sess, ["owner", "admin"], now);
+    const p = sess.partyId;
+    const rs = await this.driver.batch([
+      sql`INSERT INTO refunds (ticket_id, party_id, amount, state, created_at, updated_at, updated_by)
+        SELECT t.id, t.party_id, COALESCE(t.price, 0) * t.people, ${state}, ${now}, ${now}, ${actor}
+        FROM tickets t WHERE t.id = ${ticketId} AND t.party_id = ${p} AND COALESCE(t.price, 0) > 0 AND ${ok}
+        ON CONFLICT (ticket_id) DO UPDATE SET state = excluded.state, updated_at = excluded.updated_at, updated_by = excluded.updated_by
+          WHERE refunds.party_id = ${p} AND refunds.state != excluded.state`,
+      sql`INSERT INTO audit (party_id, at, actor_staff_id, action, entity_type, entity_id, entity_rev, detail)
+        SELECT party_id, ${now}, ${actor}, ${state === "done" ? "refund_done" : "refund_due"}, 'ticket', ticket_id, NULL, CAST(amount AS TEXT)
+        FROM refunds WHERE ticket_id = ${ticketId} AND party_id = ${p} AND updated_at = ${now} AND state = ${state} AND ${ok}`,
+      sql`SELECT state FROM refunds WHERE ticket_id = ${ticketId} AND party_id = ${p} AND ${ok}`,
+    ]);
+    return (rs[2]!.results[0] as { state?: string } | undefined)?.state === state;
+  }
+
   async announce(sess: SessionRef, a: { op: string; audience: Audience; typeId: string | null; subject: string; body: string },
     actor: string, now: number) {
     const ok = sessionValid(sess, ["owner", "admin"], now);

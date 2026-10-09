@@ -105,8 +105,11 @@
         el("p", { class: "dash-meta" }, when ? el("span", { text: when }) : null,
           admission ? el("span", { class: "pill " + (admission.open ? "yes" : "maybe"), text: admission.open ? t("d_doors_open") : t("d_doors_paused") }) : null)),
       headActions()));
+    if (party && party.cancelled_at) app.appendChild(el("div", { class: "notice no dash-warn" },
+      el("p", { text: t("d_cancelled", { when: Sahra.when(party.cancelled_at, party.time_zone) }) }),
+      el("a", { class: "btn small-btn", text: t("s_open_refunds"), attrs: { href: "/guests.html#refunds" } })));
     // Requests stay closed until the party has a contact number (brainstorm idea 16).
-    if (party && !party.support_phone) app.appendChild(el("div", { class: "notice maybe dash-warn" },
+    else if (party && !party.support_phone) app.appendChild(el("div", { class: "notice maybe dash-warn" },
       el("p", { text: t("d_contact_missing") }), el("a", { class: "btn small-btn", text: t("d_contact_add"), attrs: { href: "/party.html#contact" } })));
     app.appendChild(tiles());
     var C = window.SahraCharts;

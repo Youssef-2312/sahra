@@ -1026,3 +1026,9 @@ html[lang="ar"] .home-story h2, html[lang="ar"] .home-guide h2 { letter-spacing:
 .sc-find-list .btn { margin: 0; }
 .scan-wrap > .btn:not(.link):not(.primary) { margin-top: 12px; }
 .done-ref { margin: 4px 0 14px; } .done-ref strong { font-family: var(--font-mono); font-size: 18px; letter-spacing: 0.04em; }
+/* Cancel the party (Settings) and refunds (Guests) */
+.s-card.s-danger { border-color: rgba(255, 123, 114, 0.35); }
+.r-totals { grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 14px 0 4px; }
+@media (min-width: 900px) { .r-totals { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.r-totals .tile.stat .big { font-size: 26px; white-space: nowrap; }
+@media (min-width: 900px) { .r-totals .tile.stat .big { font-size: 32px; } }
