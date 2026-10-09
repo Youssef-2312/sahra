@@ -12,3 +12,12 @@
 /signup.html
   ! Content-Security-Policy
   Content-Security-Policy: default-src 'none'; script-src 'self' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; style-src 'self'; img-src 'self' data:; connect-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'; font-src 'self'
+
+# Contact: the form is sent to the owner's inbox through FormSubmit (owner decision);
+# only this page may connect to formsubmit.co.
+/contact
+  ! Content-Security-Policy
+  Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' https://formsubmit.co; form-action 'self'; frame-ancestors 'none'; base-uri 'none'; font-src 'self'
+/contact.html
+  ! Content-Security-Policy
+  Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' https://formsubmit.co; form-action 'self'; frame-ancestors 'none'; base-uri 'none'; font-src 'self'

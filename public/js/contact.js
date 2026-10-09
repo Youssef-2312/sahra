@@ -1,37 +1,77 @@
-// Contact form (contact.html): stores nothing. "Send on WhatsApp" or "Send by
-// email" opens that app with the message filled in, addressed to Nova (who
-// builds and runs Sahra). The page has one form per language; both work alike.
+// Contact form (contact.html). "Send message" emails it to us through FormSubmit
+// (owner decision; this page's policy allows connecting to formsubmit.co only).
+// "Message sent" is shown only when FormSubmit answers that it accepted it.
+// WhatsApp and email open those apps with the message filled in; nothing is
+// claimed as sent then. Sahra itself stores nothing. One form per language.
 "use strict";
 (function () {
   var WHATSAPP = "201119990639";
   var EMAIL = "novadevco@icloud.com";
+  var FORMSUBMIT = "https://formsubmit.co/ajax/db6a97da86c51e677ae5d16e12abd9ab";
 
   document.querySelectorAll("form[data-contact]").forEach(function (form) {
-    var via = "whatsapp";
+    var via = "form";
+    var busy = false;
+    var status = form.querySelector("[data-status]");
+    function say(cls, text) { status.className = "notice " + cls; status.textContent = text; status.hidden = false; }
     form.querySelectorAll("button[data-via]").forEach(function (b) {
       b.addEventListener("click", function () { via = b.getAttribute("data-via"); });
     });
-    form.addEventListener("submit", function (e) {
+    form.addEventListener("submit", async function (e) {
       e.preventDefault();
+      if (busy) return;
       var f = form.elements;
-      var name = f.name.value.trim(), reach = f.reach.value.trim(), message = f.message.value.trim();
-      var error = form.querySelector("[data-error]");
-      if (!name || !reach || !message) { error.hidden = false; (name ? reach ? f.message : f.reach : f.name).focus(); return; }
-      error.hidden = true;
       var ar = Sahra.lang() === "ar";
+      var v = function (k) { return f[k] && typeof f[k].value === "string" ? f[k].value.trim() : ""; };
+      var name = v("name"), email = v("email"), message = v("message");
+      if (!name || !email || !message || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        say("no", ar ? "أضف اسمك وبريدك الإلكتروني ورسالة قصيرة." : "Please add your name, your email and a short message.");
+        (name ? email ? f.message : f.email : f.name).focus();
+        return;
+      }
       var lines = [
         ar ? "مرحبًا، أريد تنظيم حفلة مع سهرة." : "Hi, I would like to host a party with Sahra.",
         (ar ? "الاسم: " : "Name: ") + name,
-        (ar ? "للتواصل: " : "Contact: ") + reach,
+        (ar ? "البريد: " : "Email: ") + email,
       ];
-      if (f.date.value.trim()) lines.push((ar ? "التاريخ: " : "Date: ") + f.date.value.trim());
-      if (f.guests.value) lines.push((ar ? "الضيوف: " : "Guests: ") + f.guests.value);
+      if (v("phone")) lines.push((ar ? "الهاتف: " : "Phone: ") + v("phone"));
+      lines.push((ar ? "التاريخ: " : "Date: ") + (v("date") || (ar ? "لم يُحدد بعد" : "not decided yet")));
+      if (v("guests")) lines.push((ar ? "الضيوف: " : "Guests: ") + v("guests"));
       lines.push("", message);
       var text = lines.join("\n");
-      if (via === "email") {
-        location.href = "mailto:" + EMAIL + "?subject=" + encodeURIComponent(ar ? "تنظيم حفلة مع سهرة" : "Hosting a party with Sahra") + "&body=" + encodeURIComponent(text);
+      var subject = ar ? "تنظيم حفلة مع سهرة" : "Hosting a party with Sahra";
+
+      if (via === "whatsapp") { status.hidden = true; window.open("https://wa.me/" + WHATSAPP + "?text=" + encodeURIComponent(text), "_blank", "noopener"); return; }
+      if (via === "email") { status.hidden = true; location.href = "mailto:" + EMAIL + "?subject=" + encodeURIComponent(subject) + "&body=" + encodeURIComponent(text); return; }
+
+      if (!f.consent.checked) {
+        say("no", ar ? "وافق على إرسال بياناتك عبر FormSubmit، أو تابع على واتساب أو البريد." : "Please agree to sending your details through FormSubmit, or continue in WhatsApp or by email.");
+        f.consent.focus();
+        return;
+      }
+      if (v("_honey")) return; // filled only by bots
+      busy = true;
+      var button = form.querySelector("button[data-via=form]");
+      button.disabled = true;
+      say("info", ar ? "جارٍ الإرسال..." : "Sending...");
+      var ok = false;
+      try {
+        var r = await fetch(FORMSUBMIT, {
+          method: "POST",
+          headers: { "content-type": "application/json", accept: "application/json" },
+          body: JSON.stringify({ name: name, email: email, phone: v("phone"), date: v("date") || "not decided yet", guests: v("guests"),
+            message: message, _subject: subject, _template: "table", _captcha: "false", _replyto: email }),
+        });
+        var j = await r.json().catch(function () { return {}; });
+        ok = r.ok && (j.success === true || j.success === "true");
+      } catch (err) { ok = false; }
+      busy = false;
+      button.disabled = false;
+      if (ok) {
+        form.reset();
+        say("yes", ar ? "تم إرسال رسالتك. سنرد عليك بالبريد." : "Message sent. We will reply by email.");
       } else {
-        window.open("https://wa.me/" + WHATSAPP + "?text=" + encodeURIComponent(text), "_blank", "noopener");
+        say("no", ar ? "تعذّر الإرسال الآن. حاول مرة أخرى، أو تابع على واتساب أو البريد." : "It could not be sent just now. Try again, or continue in WhatsApp or by email.");
       }
     });
   });

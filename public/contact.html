@@ -11,38 +11,43 @@
 <link rel="stylesheet" href="/css/sahra.css">
 </head>
 <body>
-<!-- Contact (owner request), after Nova's contact page: the ways to reach us on
-     one side, a short form on the other. The form stores nothing: "Send on
-     WhatsApp" or "Send by email" opens that app with the message filled in
-     (js/contact.js). Contact details are Nova's (Sahra is built and run by Nova). -->
+<!-- Contact (owner request, after Nova's contact page): the ways to reach us on
+     one side, a short form on the other. The form is emailed through FormSubmit
+     (owner decision; js/contact.js) and Sahra stores nothing; WhatsApp and email
+     stay as alternatives that open those apps with the message filled in. -->
 <main class="page">
 <article data-lang="en" data-tab="Contact">
   <div class="contact-wrap">
     <section class="contact-intro">
       <p class="label-line">Contact</p>
       <h1>Host your party with Sahra.</h1>
-      <p class="lede">Planning a house party? Tell us the date, roughly how many guests and what you have in mind. We reply within a day.</p>
-      <ul class="contact-list">
-        <li><span class="label-line">WhatsApp</span><a href="https://wa.me/201119990639" target="_blank" rel="noopener" dir="ltr">+20 111 999 0639</a></li>
-        <li><span class="label-line">Email</span><a href="mailto:novadevco@icloud.com" dir="ltr">novadevco@icloud.com</a></li>
-        <li><span class="label-line">Instagram</span><a href="https://www.instagram.com/nova.dev26/" target="_blank" rel="noopener" dir="ltr">@nova.dev26</a></li>
-      </ul>
+      <p class="lede">Planning a house party? Tell us the date, roughly how many guests and what you have in mind.</p>
+      <div class="msg-panel">
+        <p class="label-line">Prefer to message?</p>
+        <a class="msg-row" href="https://wa.me/201119990639" target="_blank" rel="noopener"><span class="k">WhatsApp</span><span class="v" dir="ltr">+20 111 999 0639</span></a>
+        <a class="msg-row" href="mailto:novadevco@icloud.com"><span class="k">Email</span><span class="v" dir="ltr">novadevco@icloud.com</span></a>
+        <a class="msg-row" href="https://www.instagram.com/nova.dev26/" target="_blank" rel="noopener"><span class="k">Instagram</span><span class="v" dir="ltr">@nova.dev26</span></a>
+      </div>
     </section>
     <form class="contact-form card" data-contact novalidate>
-      <div class="field"><label for="c-name-en">Your name</label><input id="c-name-en" name="name" type="text" autocomplete="name" required maxlength="80"></div>
-      <div class="field"><label for="c-email-en">Email or phone</label><input id="c-email-en" name="reach" type="text" autocomplete="email" required maxlength="120"></div>
+      <div class="form-head"><h2>Tell us about your party</h2><p class="muted">The more you share, the easier it is to plan.</p></div>
       <div class="two">
-        <div class="field"><label for="c-date-en">Party date</label><input id="c-date-en" name="date" type="text" placeholder="e.g. 31 October" maxlength="40"></div>
-        <div class="field"><label for="c-guests-en">Guests</label>
+        <div class="field"><label for="c-name-en">Your name</label><input id="c-name-en" name="name" type="text" autocomplete="name" required maxlength="80"></div>
+        <div class="field"><label for="c-email-en">Email</label><input id="c-email-en" name="email" type="email" autocomplete="email" required maxlength="120" dir="ltr"></div>
+      </div>
+      <div class="field"><label for="c-phone-en">Phone or WhatsApp <span class="opt">(optional)</span></label><input id="c-phone-en" name="phone" type="tel" autocomplete="tel" maxlength="40" dir="ltr"></div>
+      <div class="two">
+        <div class="field"><label for="c-date-en">Party date <span class="opt">(optional)</span></label><input id="c-date-en" name="date" type="date"><span class="hint">Leave it empty if you have not decided yet.</span></div>
+        <div class="field"><label for="c-guests-en">Guests <span class="opt">(optional)</span></label>
           <select id="c-guests-en" name="guests"><option value="">Not sure yet</option><option>Up to 50</option><option>50 to 150</option><option>150 to 300</option><option>More than 300</option></select></div>
       </div>
       <div class="field"><label for="c-msg-en">Tell us about your party</label><textarea id="c-msg-en" name="message" required maxlength="1500"></textarea></div>
-      <p class="notice no" data-error hidden>Please add your name, how to reach you and a short message.</p>
-      <div class="ab-actions">
-        <button class="btn primary" type="submit" data-via="whatsapp">Send on WhatsApp</button>
-        <button class="btn" type="submit" data-via="email">Send by email</button>
-      </div>
-      <p class="small muted">Sending opens WhatsApp or your email app with your message filled in. Nothing is stored on Sahra.</p>
+      <input class="trap" type="text" name="_honey" tabindex="-1" autocomplete="off" aria-hidden="true">
+      <label class="check consent"><input type="checkbox" name="consent" required><span>I agree that my details are emailed to Sahra through FormSubmit so we can reply. See the <a href="/privacy">Privacy</a> page.</span></label>
+      <p class="notice" data-status hidden></p>
+      <button class="btn primary wide-btn" type="submit" data-via="form">Send message</button>
+      <p class="alt-actions">Or continue in <button class="btn link" type="submit" data-via="whatsapp">WhatsApp</button> or by <button class="btn link" type="submit" data-via="email">email</button></p>
+      <p class="small muted helper">Sending emails your message to us through FormSubmit; Sahra stores nothing. WhatsApp or email opens that app with your message filled in: review it and press Send there.</p>
     </form>
   </div>
 </article>
@@ -52,28 +57,33 @@
     <section class="contact-intro">
       <p class="label-line">تواصل معنا</p>
       <h1>نظّم حفلتك مع سهرة.</h1>
-      <p class="lede">تخطط لحفلة منزلية؟ أخبرنا بالتاريخ وعدد الضيوف تقريبًا وما تفكر فيه. نرد خلال يوم.</p>
-      <ul class="contact-list">
-        <li><span class="label-line">واتساب</span><a href="https://wa.me/201119990639" target="_blank" rel="noopener" dir="ltr">+20 111 999 0639</a></li>
-        <li><span class="label-line">البريد</span><a href="mailto:novadevco@icloud.com" dir="ltr">novadevco@icloud.com</a></li>
-        <li><span class="label-line">إنستغرام</span><a href="https://www.instagram.com/nova.dev26/" target="_blank" rel="noopener" dir="ltr">@nova.dev26</a></li>
-      </ul>
+      <p class="lede">تخطط لحفلة منزلية؟ أخبرنا بالتاريخ وعدد الضيوف تقريبًا وما تفكر فيه.</p>
+      <div class="msg-panel">
+        <p class="label-line">تفضّل المراسلة؟</p>
+        <a class="msg-row" href="https://wa.me/201119990639" target="_blank" rel="noopener"><span class="k">واتساب</span><span class="v" dir="ltr">+20 111 999 0639</span></a>
+        <a class="msg-row" href="mailto:novadevco@icloud.com"><span class="k">البريد</span><span class="v" dir="ltr">novadevco@icloud.com</span></a>
+        <a class="msg-row" href="https://www.instagram.com/nova.dev26/" target="_blank" rel="noopener"><span class="k">إنستغرام</span><span class="v" dir="ltr">@nova.dev26</span></a>
+      </div>
     </section>
     <form class="contact-form card" data-contact novalidate>
-      <div class="field"><label for="c-name-ar">اسمك</label><input id="c-name-ar" name="name" type="text" autocomplete="name" required maxlength="80" dir="auto"></div>
-      <div class="field"><label for="c-email-ar">البريد أو رقم الهاتف</label><input id="c-email-ar" name="reach" type="text" autocomplete="email" required maxlength="120" dir="auto"></div>
+      <div class="form-head"><h2>أخبرنا عن حفلتك</h2><p class="muted">كلما شاركت أكثر، كان التخطيط أسهل.</p></div>
       <div class="two">
-        <div class="field"><label for="c-date-ar">تاريخ الحفلة</label><input id="c-date-ar" name="date" type="text" placeholder="مثلًا 31 أكتوبر" maxlength="40" dir="auto"></div>
-        <div class="field"><label for="c-guests-ar">عدد الضيوف</label>
+        <div class="field"><label for="c-name-ar">اسمك</label><input id="c-name-ar" name="name" type="text" autocomplete="name" required maxlength="80" dir="auto"></div>
+        <div class="field"><label for="c-email-ar">البريد الإلكتروني</label><input id="c-email-ar" name="email" type="email" autocomplete="email" required maxlength="120" dir="ltr"></div>
+      </div>
+      <div class="field"><label for="c-phone-ar">الهاتف أو واتساب <span class="opt">(اختياري)</span></label><input id="c-phone-ar" name="phone" type="tel" autocomplete="tel" maxlength="40" dir="ltr"></div>
+      <div class="two">
+        <div class="field"><label for="c-date-ar">تاريخ الحفلة <span class="opt">(اختياري)</span></label><input id="c-date-ar" name="date" type="date"><span class="hint">اتركه فارغًا إذا لم تحدده بعد.</span></div>
+        <div class="field"><label for="c-guests-ar">عدد الضيوف <span class="opt">(اختياري)</span></label>
           <select id="c-guests-ar" name="guests"><option value="">لست متأكدًا بعد</option><option>حتى 50</option><option>من 50 إلى 150</option><option>من 150 إلى 300</option><option>أكثر من 300</option></select></div>
       </div>
       <div class="field"><label for="c-msg-ar">أخبرنا عن حفلتك</label><textarea id="c-msg-ar" name="message" required maxlength="1500" dir="auto"></textarea></div>
-      <p class="notice no" data-error hidden>أضف اسمك وطريقة التواصل معك ورسالة قصيرة.</p>
-      <div class="ab-actions">
-        <button class="btn primary" type="submit" data-via="whatsapp">أرسل على واتساب</button>
-        <button class="btn" type="submit" data-via="email">أرسل بالبريد</button>
-      </div>
-      <p class="small muted">الإرسال يفتح واتساب أو تطبيق البريد ورسالتك جاهزة. لا يُحفظ شيء على سهرة.</p>
+      <input class="trap" type="text" name="_honey" tabindex="-1" autocomplete="off" aria-hidden="true">
+      <label class="check consent"><input type="checkbox" name="consent" required><span>أوافق على إرسال بياناتي إلى سهرة بالبريد عبر FormSubmit حتى نرد عليك. راجع صفحة <a href="/privacy">الخصوصية</a>.</span></label>
+      <p class="notice" data-status hidden></p>
+      <button class="btn primary wide-btn" type="submit" data-via="form">أرسل الرسالة</button>
+      <p class="alt-actions">أو تابع على <button class="btn link" type="submit" data-via="whatsapp">واتساب</button> أو عبر <button class="btn link" type="submit" data-via="email">البريد</button></p>
+      <p class="small muted helper">الإرسال يوصل رسالتك إلينا بالبريد عبر FormSubmit، ولا تحفظ سهرة شيئًا. واتساب أو البريد يفتح التطبيق ورسالتك جاهزة: راجعها واضغط إرسال هناك.</p>
     </form>
   </div>
 </article>

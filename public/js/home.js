@@ -133,56 +133,15 @@
         el("span", { class: "go", text: action })));
   }
 
-  function chevron(next) {
-    var ns = "http://www.w3.org/2000/svg";
-    var svg = document.createElementNS(ns, "svg");
-    svg.setAttribute("viewBox", "0 0 24 24");
-    svg.setAttribute("aria-hidden", "true");
-    var path = document.createElementNS(ns, "path");
-    path.setAttribute("d", next ? "M9 5l7 7-7 7" : "M15 5l-7 7 7 7");
-    path.setAttribute("fill", "none");
-    path.setAttribute("stroke", "currentColor");
-    path.setAttribute("stroke-width", "2");
-    path.setAttribute("stroke-linecap", "round");
-    path.setAttribute("stroke-linejoin", "round");
-    svg.appendChild(path);
-    return svg;
-  }
-
-  // Parties as pages of a fixed grid (owner): 3 columns x 3 rows on desktops
-  // (party 1 2 3 / 4 5 6 / 7 8 9), 2 x 3 on tablets, 1 x 3 on phones. The arrows
-  // turn the page; they appear only when there is more than one page.
-  var page = 0;
-  var WIDE = window.matchMedia ? window.matchMedia("(min-width: 900px)") : null;
-  var MID = window.matchMedia ? window.matchMedia("(min-width: 600px)") : null;
-  function perPage() { return 3 * (WIDE && WIDE.matches ? 3 : MID && MID.matches ? 2 : 1); }
-  var sectionBox = null;
-  function redrawParties() {
-    if (!sectionBox || !sectionBox.parentNode) return;
-    var fresh = el("div", { class: "parties-section" }, partiesSection());
-    sectionBox.parentNode.replaceChild(fresh, sectionBox);
-    sectionBox = fresh;
-  }
-  [WIDE, MID].forEach(function (mq) {
-    if (!mq) return;
-    var on = function () { redrawParties(); };
-    if (mq.addEventListener) mq.addEventListener("change", on); else if (mq.addListener) mq.addListener(on);
-  });
-
+  // Parties as one wrapping grid (owner): 3 columns on wide screens, 2 where
+  // they fit, 1 on phones. Nothing to page through.
   function partiesSection() {
-    var per = perPage();
-    var pages = parties && parties.length ? Math.ceil(parties.length / per) : 1;
-    page = Math.min(page, pages - 1);
-    function turn(d) { page = Math.max(0, Math.min(pages - 1, page + d)); redrawParties(); }
-    var nav = pages > 1 ? el("div", { class: "rail-nav" },
-      el("button", { class: "round", attrs: { type: "button", "aria-label": t("h_prev"), disabled: page === 0 }, on: { click: function () { turn(-1); } } }, chevron(false)),
-      el("span", { class: "page-count", text: t("h_page", { n: page + 1, total: pages }), attrs: { "aria-live": "polite" } }),
-      el("button", { class: "round", attrs: { type: "button", "aria-label": t("h_next"), disabled: page === pages - 1 }, on: { click: function () { turn(1); } } }, chevron(true))) : null;
-    var list = [el("div", { class: "section-head", attrs: { id: "parties" } }, el("h2", { text: t("h_upcoming") }), nav)];
+    var list = [el("div", { class: "section-head", attrs: { id: "parties" } }, el("h2", { text: t("h_upcoming") }))];
     if (failed) list.push(el("p", { class: "notice no", text: failed }));
     else if (!parties) list.push(el("p", { class: "muted", text: t("loading") }));
-    else if (!parties.length) list.push(el("p", { class: "empty", text: t("h_none") }));
-    else list.push(el("div", { class: "parties-grid" }, parties.slice(page * per, page * per + per).map(card)));
+    else if (!parties.length) list.push(el("div", { class: "empty-note" },
+      el("p", { class: "lead", text: t("h_none_t") }), el("p", { class: "muted", text: t("h_none_p") })));
+    else list.push(el("div", { class: "parties-grid" }, parties.map(card)));
     return list;
   }
 
@@ -198,7 +157,16 @@
       }))];
   }
 
-  // How tickets work: plain text in three columns, then the organiser sign-in row.
+  // Four short questions (owner spec), as native details/summary: keyboard and screen readers work as is.
+  function faq() {
+    return el("div", { class: "faq" },
+      el("h2", { text: t("h_faq_title") }),
+      [1, 2, 3, 4].map(function (n) {
+        return el("details", null, el("summary", { text: t("h_faq" + n + "_q") }), el("p", { text: t("h_faq" + n + "_a") }));
+      }));
+  }
+
+  // How tickets work: plain text in three columns, the questions, then the organiser sign-in row.
   function how() {
     return el("section", { class: "how", attrs: { id: "how" } },
       el("div", { class: "section-head" }, el("h2", { text: t("h_how_title") })),
@@ -208,6 +176,7 @@
           el("h3", { text: t("h_step" + n + "_t") }),
           el("p", { text: t("h_step" + n + "_p") }));
       })),
+      faq(),
       el("div", { class: "host" },
         el("div", null, el("h3", { text: t("h_host_t") }), el("p", { class: "muted", text: t("h_host_p") })),
         el("div", { class: "host-actions" },
@@ -221,8 +190,7 @@
     Sahra.clear(heroBox).appendChild(hero());
     var m = mineSection();
     if (m) m.forEach(function (n) { app.appendChild(n); });
-    sectionBox = el("div", { class: "parties-section" }, partiesSection());
-    app.appendChild(sectionBox);
+    app.appendChild(el("div", { class: "parties-section" }, partiesSection()));
     app.appendChild(how());
   }
 
