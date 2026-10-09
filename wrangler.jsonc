@@ -20,7 +20,7 @@
   // Pages and static files are static assets: they do not invoke the Worker.
   "assets": { "directory": "./public", "html_handling": "auto-trailing-slash", "not_found_handling": "none" },
   "vars": {
-    "PUBLIC_ORIGIN": "https://sahra.youssefwaelkabbeel.workers.dev",
+    "PUBLIC_ORIGIN": "https://sahra.bynova.workers.dev",
     // Production Google OAuth client (the client ID is not a secret).
     "GOOGLE_CLIENT_ID": "222809062636-edlaqu3p8s0boqnetsq6jtgi5461cu98.apps.googleusercontent.com",
     "COOKIE_KEY_ID": "1",
@@ -56,7 +56,7 @@
       "observability": { "enabled": true, "head_sampling_rate": 1 },
       "assets": { "directory": "./public", "html_handling": "auto-trailing-slash", "not_found_handling": "none" },
       "vars": {
-        "PUBLIC_ORIGIN": "https://sahra-staging.youssefwaelkabbeel.workers.dev",
+        "PUBLIC_ORIGIN": "https://sahra-staging.bynova.workers.dev",
         // Staging Google OAuth client (separate from production).
         "GOOGLE_CLIENT_ID": "222809062636-mul6md6m5g52oespv7na0lj4u2e2en2t.apps.googleusercontent.com",
         "COOKIE_KEY_ID": "1",
