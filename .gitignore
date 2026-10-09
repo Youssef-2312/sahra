@@ -5,3 +5,4 @@ node_modules/
 *.log
 coverage/
 cpu-report-*.json
+load-test-report-*.json

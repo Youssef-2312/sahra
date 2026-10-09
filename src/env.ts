@@ -13,10 +13,30 @@ export interface Env {
   QR_KEY_ID?: string;
   QR_MASTER_K1?: string;
   LINK_MASTER_K1?: string;
+  LINK_KEY_ID?: string;
+  /** sahra-files-N: payment screenshots (src/storage/). Not created yet: without it, uploads answer 503. */
+  FILES?: D1Database;
+  /** More screenshot databases (sahra-files-2 .. 4), used in order once FILES is 70% full. Optional. */
+  FILES_2?: D1Database;
+  FILES_3?: D1Database;
+  FILES_4?: D1Database;
+  /** Cloudflare Turnstile for guest sign-up and "resend my link" (the secret is a Cloudflare secret). */
+  TURNSTILE_SITE_KEY?: string;
+  TURNSTILE_SECRET?: string;
   COOKIE_MASTER_K1?: string;
   COOKIE_KEY_ID?: string;
   /** "1" only while a controlled recovery runs (set and removed by scripts/recover.mjs). */
   MAINTENANCE?: string;
+  /** Email (src/email/): the platform's own Gmail account (var) and its app password (secret). */
+  GMAIL_ADDRESS?: string;
+  GMAIL_APP_PASSWORD?: string;
+  /** Email fallback: Brevo API key (secret) and its verified sender address (var). */
+  BREVO_API_KEY?: string;
+  BREVO_SENDER?: string;
+  /** Backup export (src/routes/backup.ts): HMAC key shared with the owner's Apps Script (secret; base64url, at least 32 bytes). Missing: 503. */
+  BACKUP_KEY?: string;
+  /** Optional: health alerts also go to a Discord channel through this webhook (secret, set by the owner). */
+  DISCORD_WEBHOOK_URL?: string;
 }
 
 export const CONFIG = {

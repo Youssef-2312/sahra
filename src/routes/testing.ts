@@ -6,9 +6,10 @@
 import { Hono } from "hono/tiny";
 import { LogPendingError, flushChangeLog } from "../changelog";
 import { json, readJson, requireAuth, type AppEnv } from "../context";
+import { audit, sessionValid } from "../db";
 import { sql } from "../db/sql";
 import { TicketDb } from "../db/tickets";
-import { base32, newId, newToken, randomBytes, sha256hex } from "../lib/crypto";
+import { base32, newId, newToken, parseToken, randomBytes, sha256hex } from "../lib/crypto";
 import { signQr } from "../qr";
 
 export const testingRoutes = new Hono<AppEnv>();
@@ -22,6 +23,8 @@ testingRoutes.post("/tickets", requireAuth(["owner", "admin", "door"]), async (c
   const b = (await readJson(c)) ?? {};
   const count = Number(b.count ?? 1);
   const people = Number(b.people ?? 1);
+  // released: false gives approved tickets whose QR was not sent yet (the load test's "not released" denials).
+  const released = b.released !== false;
   if (!Number.isInteger(count) || count < 1 || count > 20 || !Number.isInteger(people) || people < 1 || people > 10) {
     return json(c, 400, { error: "invalid_request" });
   }
@@ -32,7 +35,7 @@ testingRoutes.post("/tickets", requireAuth(["owner", "admin", "door"]), async (c
     const id = base32(randomBytes(10), 16);
     return { id, guestName: `Test guest ${id.slice(0, 4)}` };
   });
-  if (!(await tdb.createTestTickets({ hash: a.hash, partyId: a.info.party_id }, a.info.party_id, list, people, now, a.info.staff_id, newId()))) {
+  if (!(await tdb.createTestTickets({ hash: a.hash, partyId: a.info.party_id }, a.info.party_id, list, people, now, a.info.staff_id, newId(), released))) {
     return json(c, 401, { error: "not_signed_in" });
   }
   const out: { id: string; qr: string }[] = [];
@@ -54,6 +57,58 @@ testingRoutes.post("/door-invite", requireAuth(["owner", "admin", "door"]), asyn
   if (!ok) return json(c, 401, { error: "not_signed_in" });
   await flushChangeLog(c.var.db, c.var.ledger, now);
   return json(c, 200, { token, invite_id: inviteId });
+});
+
+/**
+ * Load test (scripts/load-test.mjs): a new test party, an owner session for it and
+ * admission opened, in one call, so the test can run 10 parties without Google
+ * sign-ins. Needs any valid staff session (the door session from an invitation
+ * link is enough); the party, its owner and the session are created in ONE batch
+ * whose every statement requires that session. The caller chooses the new
+ * session's value (like door join), so a retry with the same body returns the
+ * same party. The session lasts 3 hours; the script logs it out at the end.
+ */
+testingRoutes.post("/party", requireAuth(["owner", "admin", "door"]), async (c) => {
+  const b = (await readJson(c)) ?? {};
+  const session = typeof b.session === "string" ? b.session : "";
+  const name = typeof b.name === "string" && b.name.length >= 1 && b.name.length <= 60 ? b.name : "Load test party";
+  if (!parseToken(session)) return json(c, 400, { error: "invalid_request" });
+  const a = c.var.auth;
+  const now = c.var.deps.now();
+  const newHash = await sha256hex(session);
+  const partyId = `lt-${(await sha256hex(`sahra-test-party|${session}`)).slice(0, 16)}`;
+  const staffId = newId();
+  const op = newId();
+  const ok = sessionValid({ hash: a.hash, partyId: a.info.party_id }, ["owner", "admin", "door"], now);
+  const rs = await c.var.db.driver.batch([
+    sql`INSERT INTO parties (id, name, capacity, created_at, last_op, last_action)
+      SELECT ${partyId}, ${name}, 5000, ${now}, ${op}, 'party_created'
+      WHERE ${ok} AND NOT EXISTS (SELECT 1 FROM parties WHERE id = ${partyId})`,
+    sql`INSERT INTO staff (id, party_id, name, role, created_at, created_by, last_op, last_action)
+      SELECT ${staffId}, ${partyId}, 'test-owner', 'owner', ${now}, ${a.info.staff_id}, ${op}, 'staff_added'
+      WHERE EXISTS (SELECT 1 FROM parties WHERE id = ${partyId} AND last_op = ${op})`,
+    sql`INSERT INTO sessions (id_hash, kind, party_id, staff_id, role, created_at, expires_at)
+      SELECT ${newHash}, 'google', ${partyId}, ${staffId}, 'owner', ${now}, ${now + 3 * 3600_000}
+      WHERE EXISTS (SELECT 1 FROM staff WHERE id = ${staffId} AND last_op = ${op})`,
+    audit(now, a.info.staff_id, "party_created", "party", sql`SELECT id AS party_id, id, rev FROM parties WHERE id = ${partyId} AND last_op = ${op}`,
+      `test party (load test), created from party ${a.info.party_id}`),
+    audit(now, a.info.staff_id, "staff_added", "staff", sql`SELECT party_id, id, rev FROM staff WHERE id = ${staffId} AND last_op = ${op}`, "test"),
+    sql`SELECT party_id FROM sessions WHERE id_hash = ${newHash}`,
+  ]);
+  // Created now, or by an earlier try with the same session value.
+  if ((rs[5]!.results[0] as { party_id: string } | undefined)?.party_id !== partyId) return json(c, 401, { error: "not_signed_in" });
+  // Opening, exactly as POST /api/admission does: main database first, then the control object.
+  const owner = { hash: newHash, partyId };
+  const control = await c.var.ledger.getControl(partyId);
+  const pn = control?.pause_number ?? 0;
+  if (!(await new TicketDb(c.var.db.driver).setAdmission(owner, "open", pn, now, staffId, newId()))) return json(c, 409, { error: "not_allowed" });
+  if (control?.state !== "open" && !(await c.var.ledger.setControl(partyId, control?.rev ?? 0, { state: "open", pause_number: pn }, now, staffId))
+    && (await c.var.ledger.getControl(partyId))?.state !== "open") {
+    // Another try with the same body opened it meanwhile: that is fine; anything else is not.
+    return json(c, 409, { error: "changed_meanwhile_try_again" });
+  }
+  await flushChangeLog(c.var.db, c.var.ledger, now);
+  return json(c, 200, { party_id: partyId, admission: "open" });
 });
 
 /**

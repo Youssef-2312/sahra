@@ -7,6 +7,7 @@
 import type { SqlDriver } from "./driver";
 import { inList, sql, type Sql } from "./sql";
 import { CONFIG } from "../env";
+import { PLATFORM } from "../platform/db";
 
 /**
  * True while the staff member has created fewer than the hourly cap of sessions.
@@ -52,7 +53,7 @@ export function audit(
   now: number,
   actor: string | null,
   action: string,
-  entityType: "staff" | "invite" | "party" | "session" | "ticket",
+  entityType: "staff" | "invite" | "party" | "session" | "ticket" | "ticket_type" | "flyer",
   from: Sql,
   detail: string | null = null,
 ): Sql {
@@ -61,7 +62,7 @@ export function audit(
     SELECT party_id, ${now}, ${actor}, ${action}, ${entityType}, id, rev, ${detail} FROM (${from})`;
 }
 
-export type LogEntity = "party" | "staff" | "invite" | "ticket";
+export type LogEntity = "party" | "staff" | "invite" | "ticket" | "platform_admin" | "organiser" | "organiser_invite" | "ticket_type" | "flyer";
 export interface UnloggedRow {
   entity: LogEntity;
   id: string;
@@ -129,7 +130,7 @@ export class Db {
     const r = await this.driver.all<{ staff_id: string; party_id: string; party_name: string; role: Role; name: string }>(
       sql`SELECT st.id AS staff_id, st.party_id, p.name AS party_name, st.role, st.name
         FROM staff st JOIN parties p ON p.id = st.party_id
-        WHERE st.google_sub = ${sub} AND st.disabled_at IS NULL AND st.role IN ('owner', 'admin')
+        WHERE st.google_sub = ${sub} AND st.disabled_at IS NULL AND st.role IN ('owner', 'admin') AND p.disabled_at IS NULL
         ORDER BY p.name`,
     );
     return r.results;
@@ -145,7 +146,8 @@ export class Db {
       sql`INSERT INTO sessions (id_hash, kind, party_id, staff_id, role, created_at, expires_at)
         SELECT ${a.hash}, 'google', party_id, id, role, ${a.now}, ${a.expiresAt} FROM staff
         WHERE id = ${a.staffId} AND party_id = ${a.partyId} AND google_sub = ${a.sub} AND disabled_at IS NULL
-          AND role IN ('owner', 'admin') AND ${underSessionCap(a.staffId, a.now)}`,
+          AND role IN ('owner', 'admin') AND ${underSessionCap(a.staffId, a.now)}
+          AND NOT EXISTS (SELECT 1 FROM parties dp WHERE dp.id = staff.party_id AND dp.disabled_at IS NOT NULL)`,
       sql`INSERT INTO audit (party_id, at, actor_staff_id, action, entity_type, entity_id, entity_rev, detail)
         SELECT party_id, ${a.now}, staff_id, 'login_google', 'staff', staff_id, NULL, NULL FROM sessions WHERE id_hash = ${a.hash}`,
       sql`SELECT ${underSessionCap(a.staffId, a.now)} AS under_cap`,
@@ -220,12 +222,13 @@ export class Db {
           AND NOT EXISTS (SELECT 1 FROM invites WHERE id = ${a.inviteId})`,
       audit(a.now, actor, "staff_added", "staff", sql`SELECT party_id, id, rev FROM staff WHERE id = ${a.staffId} AND last_op = ${a.op}`),
       audit(a.now, actor, "invite_created", "invite", sql`SELECT party_id, id, rev FROM invites WHERE id = ${a.inviteId} AND last_op = ${a.op}`),
-      sql`SELECT st.id, st.party_id, st.invited_email, st.role, i.id AS invite_id, i.party_id AS invite_party
+      sql`SELECT st.id, st.party_id, st.invited_email, st.role, i.id AS invite_id, i.party_id AS invite_party, ${ok} AS ok
         FROM staff st LEFT JOIN invites i ON i.id = ${a.inviteId} AND i.staff_id = st.id WHERE st.id = ${a.staffId}`,
     ]);
-    const row = rs[4]!.results[0] as undefined | { party_id: string; invited_email: string; role: string; invite_id: string | null };
+    const row = rs[4]!.results[0] as undefined | { party_id: string; invited_email: string; role: string; invite_id: string | null; ok: number };
     if (rs[0]!.meta.changes === 1) return "created" as const;
-    if (row && row.party_id === p && row.invited_email === a.email && row.role === a.role && row.invite_id) return "already" as const;
+    // A retry is answered "already" only while the session still holds the authority.
+    if (row && Number(row.ok) === 1 && row.party_id === p && row.invited_email === a.email && row.role === a.role && row.invite_id) return "already" as const;
     return "rejected" as const;
   }
 
@@ -252,10 +255,10 @@ export class Db {
       audit(a.now, actor, "invite_revoked", "invite",
         sql`SELECT party_id, id, rev FROM invites WHERE staff_id = ${a.staffId} AND last_op = ${a.op} AND last_action = 'invite_revoked'`),
       audit(a.now, actor, "invite_created", "invite", sql`SELECT party_id, id, rev FROM invites WHERE id = ${a.inviteId} AND last_op = ${a.op}`),
-      sql`SELECT party_id, staff_id, token_hash FROM invites WHERE id = ${a.inviteId}`,
+      sql`SELECT party_id, staff_id, token_hash, ${ok} AS ok FROM invites WHERE id = ${a.inviteId}`,
     ]);
-    const row = rs[6]!.results[0] as undefined | { party_id: string; staff_id: string; token_hash: string };
-    if (row && row.party_id === p && row.staff_id === a.staffId && row.token_hash === a.tokenHash) {
+    const row = rs[6]!.results[0] as undefined | { party_id: string; staff_id: string; token_hash: string; ok: number };
+    if (row && Number(row.ok) === 1 && row.party_id === p && row.staff_id === a.staffId && row.token_hash === a.tokenHash) {
       return rs[2]!.meta.changes === 1 ? ("created" as const) : ("already" as const);
     }
     return "rejected" as const;
@@ -332,10 +335,10 @@ export class Db {
       sql`UPDATE sessions SET revoked_at = ${now} WHERE invite_id = ${inviteId} AND revoked_at IS NULL
         AND EXISTS (SELECT 1 FROM invites WHERE id = ${inviteId} AND party_id = ${p} AND revoked_at IS NOT NULL)`,
       audit(now, actor, "invite_revoked", "invite", sql`SELECT party_id, id, rev FROM invites WHERE id = ${inviteId} AND last_op = ${op}`),
-      sql`SELECT revoked_at FROM invites WHERE id = ${inviteId} AND party_id = ${p}`,
+      sql`SELECT revoked_at, ${ok} AS ok FROM invites WHERE id = ${inviteId} AND party_id = ${p}`,
     ]);
-    const row = rs[3]!.results[0] as undefined | { revoked_at: number | null };
-    if (row?.revoked_at != null) return rs[0]!.meta.changes === 1 ? ("revoked" as const) : ("already" as const);
+    const row = rs[3]!.results[0] as undefined | { revoked_at: number | null; ok: number };
+    if (row?.revoked_at != null && Number(row.ok) === 1) return rs[0]!.meta.changes === 1 ? ("revoked" as const) : ("already" as const);
     return "rejected" as const;
   }
 
@@ -354,11 +357,11 @@ export class Db {
       sql`UPDATE sessions SET revoked_at = ${now} WHERE staff_id = ${staffId} AND revoked_at IS NULL
         AND EXISTS (SELECT 1 FROM staff WHERE id = ${staffId} AND party_id = ${p} AND last_op = ${op})`,
       audit(now, actor, "role_changed", "staff", sql`SELECT party_id, id, rev FROM staff WHERE id = ${staffId} AND last_op = ${op}`, role),
-      sql`SELECT role, disabled_at FROM staff WHERE id = ${staffId} AND party_id = ${p}`,
+      sql`SELECT role, disabled_at, ${ok} AS ok FROM staff WHERE id = ${staffId} AND party_id = ${p}`,
     ]);
-    const row = rs[3]!.results[0] as undefined | { role: string; disabled_at: number | null };
+    const row = rs[3]!.results[0] as undefined | { role: string; disabled_at: number | null; ok: number };
     if (rs[0]!.meta.changes === 1) return "changed" as const;
-    if (row && row.role === role && row.disabled_at == null) return "already" as const;
+    if (row && Number(row.ok) === 1 && row.role === role && row.disabled_at == null) return "already" as const;
     return "rejected" as const;
   }
 
@@ -377,11 +380,11 @@ export class Db {
           AND EXISTS (SELECT 1 FROM staff WHERE id = ${staffId} AND last_op = ${op})`,
       audit(now, actor, "staff_disabled", "staff", sql`SELECT party_id, id, rev FROM staff WHERE id = ${staffId} AND last_op = ${op}`),
       audit(now, actor, "invite_revoked", "invite", sql`SELECT party_id, id, rev FROM invites WHERE staff_id = ${staffId} AND last_op = ${op}`),
-      sql`SELECT disabled_at FROM staff WHERE id = ${staffId} AND party_id = ${p}`,
+      sql`SELECT disabled_at, ${ok} AS ok FROM staff WHERE id = ${staffId} AND party_id = ${p}`,
     ]);
-    const row = rs[5]!.results[0] as undefined | { disabled_at: number | null };
+    const row = rs[5]!.results[0] as undefined | { disabled_at: number | null; ok: number };
     if (rs[0]!.meta.changes === 1) return "disabled" as const;
-    if (row?.disabled_at != null) return "already" as const;
+    if (row?.disabled_at != null && Number(row.ok) === 1) return "already" as const;
     return "rejected" as const;
   }
 
@@ -400,7 +403,7 @@ export class Db {
 
   /**
    * Rows whose latest rev is not yet confirmed in the change log (ledger): all
-   * parties, staff and invites (small tables), plus the given tickets. Tickets are
+   * parties, staff, invites, ticket types and party pictures (small tables), plus the given tickets. Tickets are
    * never scanned as a whole: there can be thousands, and admissions write their
    * own ledger record on the scan path without updating `logged_rev`.
    */
@@ -412,6 +415,11 @@ export class Db {
       ticketIds.length
         ? sql`SELECT * FROM tickets WHERE id IN (${inList(ticketIds)}) AND rev > logged_rev LIMIT ${limit}`
         : sql`SELECT 1 WHERE 0`,
+      sql`SELECT * FROM platform_admins WHERE rev > logged_rev LIMIT ${limit}`,
+      sql`SELECT * FROM organisers WHERE rev > logged_rev LIMIT ${limit}`,
+      sql`SELECT * FROM organiser_invites WHERE rev > logged_rev LIMIT ${limit}`,
+      sql`SELECT * FROM ticket_types WHERE rev > logged_rev LIMIT ${limit}`,
+      sql`SELECT * FROM party_flyers WHERE rev > logged_rev LIMIT ${limit}`,
     ]);
     const out: UnloggedRow[] = [];
     const add = (entity: LogEntity, rows: Record<string, unknown>[]) => {
@@ -420,7 +428,7 @@ export class Db {
         out.push({
           entity,
           id: String(r.id),
-          party_id: String(entity === "party" ? r.id : r.party_id),
+          party_id: String(entity === "party" ? r.id : (r.party_id ?? PLATFORM)),
           rev: Number(r.rev),
           state,
         });
@@ -430,12 +438,18 @@ export class Db {
     add("staff", rs[1]!.results);
     add("invite", rs[2]!.results);
     add("ticket", rs[3]!.results);
+    add("platform_admin", rs[4]!.results);
+    add("organiser", rs[5]!.results);
+    add("organiser_invite", rs[6]!.results);
+    add("ticket_type", rs[7]!.results);
+    add("flyer", rs[8]!.results);
     return out;
   }
 
   async markLogged(rows: { entity: LogEntity; id: string; rev: number }[]): Promise<void> {
     if (rows.length === 0) return;
-    const table = { party: "parties", staff: "staff", invite: "invites", ticket: "tickets" } as const;
+    const table = { party: "parties", staff: "staff", invite: "invites", ticket: "tickets",
+      platform_admin: "platform_admins", organiser: "organisers", organiser_invite: "organiser_invites", ticket_type: "ticket_types", flyer: "party_flyers" } as const;
     await this.driver.batch(
       rows.map((r) => {
         const t = table[r.entity];

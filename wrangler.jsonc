@@ -20,24 +20,34 @@
   // Pages and static files are static assets: they do not invoke the Worker.
   "assets": { "directory": "./public", "html_handling": "auto-trailing-slash", "not_found_handling": "none" },
   "vars": {
-    "PUBLIC_ORIGIN": "https://sahra.youssefwaelkabbeel.workers.dev",
+    "PUBLIC_ORIGIN": "https://sahra.bynova.workers.dev",
     // Production Google OAuth client (the client ID is not a secret).
     "GOOGLE_CLIENT_ID": "222809062636-edlaqu3p8s0boqnetsq6jtgi5461cu98.apps.googleusercontent.com",
     "COOKIE_KEY_ID": "1",
     "QR_KEY_ID": "1",
+    "LINK_KEY_ID": "1",
+    // Cloudflare Turnstile site key (public; the secret is TURNSTILE_SECRET).
+    "TURNSTILE_SITE_KEY": "0x4AAAAAAFQ3fpQgN9f15-El",
     // Test ticket/invitation endpoints never run in production.
     "ENABLE_TEST_TICKETS": "0"
   },
   // Secrets (set by the owner, never committed):
-  //   GOOGLE_CLIENT_SECRET, COOKIE_MASTER_K1, QR_MASTER_K1, LINK_MASTER_K1
+  //   GOOGLE_CLIENT_SECRET, COOKIE_MASTER_K1, QR_MASTER_K1, LINK_MASTER_K1,
+  //   TURNSTILE_SECRET, BACKUP_KEY, GMAIL_APP_PASSWORD (+ GMAIL_ADDRESS var),
+  //   BREVO_API_KEY (+ BREVO_SENDER var), DISCORD_WEBHOOK_URL (all optional except the first four)
   "d1_databases": [
     { "binding": "DB", "database_name": "sahra-prod", "database_id": "637368a6-14fe-4034-b945-d28918ae29f0", "migrations_dir": "migrations" },
-    { "binding": "LEDGER", "database_name": "sahra-ledger-prod", "database_id": "4a8f4f70-04d6-4798-8815-fde97f524a0d", "migrations_dir": "migrations-ledger" }
+    { "binding": "LEDGER", "database_name": "sahra-ledger-prod", "database_id": "4a8f4f70-04d6-4798-8815-fde97f524a0d", "migrations_dir": "migrations-ledger" },
+    // Payment screenshots (src/storage). More sahra-files-N later, same region.
+    { "binding": "FILES", "database_name": "sahra-files-1", "database_id": "98e07b6e-1521-4c73-954b-776603a420f6", "migrations_dir": "migrations-files" }
   ],
   "ratelimits": [
     { "name": "RL_AUTH", "namespace_id": "41001", "simple": { "limit": 20, "period": 60 } },
     { "name": "RL_SCAN", "namespace_id": "41002", "simple": { "limit": 120, "period": 60 } }
   ],
+  // Once a minute: the email sender (src/email/sender.ts). With no provider
+  // configured it returns before any query. About 1,440 invocations a day.
+  "triggers": { "crons": ["* * * * *"] },
   "env": {
     "staging": {
       "name": "sahra-staging",
@@ -46,23 +56,27 @@
       "observability": { "enabled": true, "head_sampling_rate": 1 },
       "assets": { "directory": "./public", "html_handling": "auto-trailing-slash", "not_found_handling": "none" },
       "vars": {
-        "PUBLIC_ORIGIN": "https://sahra-staging.youssefwaelkabbeel.workers.dev",
+        "PUBLIC_ORIGIN": "https://sahra-staging.bynova.workers.dev",
         // Staging Google OAuth client (separate from production).
         "GOOGLE_CLIENT_ID": "222809062636-mul6md6m5g52oespv7na0lj4u2e2en2t.apps.googleusercontent.com",
         "COOKIE_KEY_ID": "1",
         "QR_KEY_ID": "1",
+        "LINK_KEY_ID": "1",
+        "TURNSTILE_SITE_KEY": "0x4AAAAAAFQ3fpQgN9f15-El",
         "ENABLE_TEST_TICKETS": "1"
       },
       "d1_databases": [
         { "binding": "DB", "database_name": "sahra-staging", "database_id": "edf71c74-5457-42f5-8374-b0a25868bd99", "migrations_dir": "migrations" },
-        { "binding": "LEDGER", "database_name": "sahra-ledger-staging", "database_id": "8715bbed-2b46-498c-9ea9-b7d967756c99", "migrations_dir": "migrations-ledger" }
+        { "binding": "LEDGER", "database_name": "sahra-ledger-staging", "database_id": "8715bbed-2b46-498c-9ea9-b7d967756c99", "migrations_dir": "migrations-ledger" },
+        { "binding": "FILES", "database_name": "sahra-files-staging", "database_id": "d0317c1c-7059-4074-96f2-4ad8c67f08be", "migrations_dir": "migrations-files" }
       ],
       "ratelimits": [
         // Higher than production so the live-check script (many joins from one IP) is not throttled.
         { "name": "RL_AUTH", "namespace_id": "42001", "simple": { "limit": 400, "period": 60 } },
         // Higher than production so the Checkpoint A script (one session acting as many phones) is not throttled.
         { "name": "RL_SCAN", "namespace_id": "42002", "simple": { "limit": 1000, "period": 60 } }
-      ]
+      ],
+      "triggers": { "crons": ["* * * * *"] }
     }
   }
 }

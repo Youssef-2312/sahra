@@ -2,7 +2,7 @@
 
 For a Claude Code cloud session whose environment has:
 
-- network access that allows `sahra-staging.youssefwaelkabbeel.workers.dev` and
+- network access that allows `sahra-staging.bynova.workers.dev` and
   `api.cloudflare.com` (the owner set full access);
 - environment variables `CLOUDFLARE_API_TOKEN` (Account > Workers Tail > Read
   ONLY: it must not have D1 or any edit permission) and `CLOUDFLARE_ACCOUNT_ID`.

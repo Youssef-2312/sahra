@@ -14,6 +14,12 @@ import { scanRoutes } from "./routes/scan";
 import { admissionRoutes } from "./routes/admission";
 import { testingRoutes } from "./routes/testing";
 import { recoveryRoutes } from "./routes/recovery";
+import { partyRoutes } from "./routes/party";
+import { outboxRoutes } from "./routes/outbox";
+import { guestRoutes } from "./routes/guests";
+import { ticketRoutes } from "./routes/tickets";
+import { platformRoutes } from "./routes/platform";
+import { backupRoutes } from "./routes/backup";
 
 export type { Deps } from "./context";
 
@@ -75,6 +81,7 @@ export function createApp(deps: Deps) {
         d1_queries: driver.usage.queries,
         rows_read: driver.usage.rows_read,
         rows_written: driver.usage.rows_written,
+        ledger_rows_read: ledgerDriver.usage.rows_read,
         ledger_rows_written: ledgerDriver.usage.rows_written,
         jwks: deps.jwks.lastLookup,
         iso_req: isoReq,
@@ -119,6 +126,12 @@ export function createApp(deps: Deps) {
   app.route("/api/admission", admissionRoutes);
   app.route("/api/test", testingRoutes);
   app.route("/api/recovery", recoveryRoutes);
+  app.route("/api/party", partyRoutes);
+  app.route("/api/outbox", outboxRoutes);
+  app.route("/api/guest", guestRoutes);
+  app.route("/api/tickets", ticketRoutes);
+  app.route("/api/platform", platformRoutes);
+  app.route("/api/backup", backupRoutes);
 
   app.get("/api/me", requireAuth(["owner", "admin", "door"]), async (c) => {
     const a = c.var.auth;

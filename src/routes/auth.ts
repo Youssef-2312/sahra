@@ -3,6 +3,8 @@ import { json, requireAuth, type AppEnv, type Ctx } from "../context";
 import { authUrl, canAutoLink, exchangeCode, normalizeEmail, pkceChallenge, verifyIdToken, AuthError } from "../auth/google";
 import { flushChangeLog } from "../changelog";
 import { CONFIG } from "../env";
+import { platformCallback, platformSession } from "../platform/auth";
+import { PlatformDb } from "../platform/db";
 import { newId, newToken, parseToken, seal, sha256hex, timingSafeEqualStr, unseal } from "../lib/crypto";
 import {
   COOKIE_LOGIN,
@@ -34,7 +36,7 @@ function htmlPage(c: Ctx, status: number, title: string, body: string, refreshTo
   return res;
 }
 
-const tryAgain = `<p><a href="/">Back to sign in</a></p>`;
+const tryAgain = `<p><a href="/signin.html">Back to sign in</a></p>`;
 
 const LOGIN_PURPOSE = "login-attempt";
 const PICK_PURPOSE = "party-pick";
@@ -42,14 +44,17 @@ const PICK_PURPOSE = "party-pick";
 // Step 1: our sign-in page POSTs here (a form). Nothing is written to the database:
 // state, nonce and the PKCE verifier travel in a sealed (AES-GCM, key id, expiry),
 // short-lived Lax cookie, and the browser goes to Google.
-authRoutes.post("/google/start", async (c) => {
+async function startSignIn(c: Ctx, platform: boolean) {
   if (!sameOrigin(c, c.env.PUBLIC_ORIGIN)) return json(c, 403, { error: "bad_origin" });
   if (await rateLimited(c.env.RL_AUTH, `login:${clientIp(c)}`)) return json(c, 429, { error: "rate_limited" });
   const now = c.var.deps.now();
   const state = newToken();
   const nonce = newToken();
   const codeVerifier = newToken();
-  const sealed = await seal(envRecord(c), LOGIN_PURPOSE, { s: state, n: nonce, v: codeVerifier }, now + CONFIG.loginAttemptMs);
+  // `p` marks a platform (admin/organiser) sign-in; it is sealed, so it cannot be changed on the way.
+  const attempt: Record<string, unknown> = { s: state, n: nonce, v: codeVerifier };
+  if (platform) attempt.p = 1;
+  const sealed = await seal(envRecord(c), LOGIN_PURPOSE, attempt, now + CONFIG.loginAttemptMs);
   const url = authUrl({
     clientId: c.env.GOOGLE_CLIENT_ID,
     redirectUri: redirectUri(c),
@@ -61,7 +66,13 @@ authRoutes.post("/google/start", async (c) => {
   // Lax so it is sent on Google's top-level redirect back to us.
   res.headers.append("set-cookie", cookie(COOKIE_LOGIN, sealed, { maxAgeS: CONFIG.loginAttemptMs / 1000, sameSite: "Lax" }));
   return res;
-});
+}
+
+// The sign-in page's one "Continue with Google" (owner: one button): the callback
+// finds every kind of access the account has (party team, organiser, site owner).
+authRoutes.post("/google/start", (c) => startSignIn(c, false));
+// The platform page's own button: platform access only, a separate session (src/platform/auth.ts).
+authRoutes.post("/platform/start", (c) => startSignIn(c, true));
 
 // Step 2: Google redirects back here. The sealed cookie must exist, be genuine and
 // unexpired, and hold the same state as the URL (this binds the sign-in to the
@@ -112,22 +123,37 @@ authRoutes.get("/google/callback", async (c) => {
 
   // From here on the request carries a verified Google identity. Writes happen
   // only if that identity matches a pending invitation or is active staff.
+  if (attempt.p === 1) return platformCallback(c, claims, clear);
   const db = c.var.db;
+  const pdb = new PlatformDb(db.driver);
   const email = claims.email ? normalizeEmail(claims.email) : null;
-  const linked = email && canAutoLink(claims) ? await db.linkGoogleInvites(claims.sub, email, now, newId()) : 0;
+  const autoLink = !!email && canAutoLink(claims);
+  const linked = autoLink ? await db.linkGoogleInvites(claims.sub, email!, now, newId()) : 0;
+  if (autoLink) await pdb.link(claims.sub, email!, now, newId());
   const staff = await db.activeStaffForSub(claims.sub);
-  if (staff.length === 0) {
-    if (email && !canAutoLink(claims) && (await db.hasPendingGoogleInvite(email, now))) {
+  const platform = await pdb.hasAccess(claims.sub);
+  if (staff.length === 0 && !platform) {
+    if (email && !autoLink && ((await db.hasPendingGoogleInvite(email, now)) || (await pdb.hasPendingInvite(email, now)))) {
       return htmlPage(c, 403, "Confirmation needed",
-        `<p>You were invited with an address that is not Gmail or Google Workspace. Such addresses must be confirmed by email, which is not available yet. Ask the party owner to invite a Gmail address instead.</p>${tryAgain}`,
+        `<p>You were invited with an address that is not Gmail or Google Workspace. Such addresses must be confirmed by email, which is not available yet. Ask for an invitation to a Gmail address instead.</p>${tryAgain}`,
         undefined, clear);
     }
-    return htmlPage(c, 403, "No access", `<p>This Google account is not staff at any party.</p>${tryAgain}`, undefined, clear);
+    return htmlPage(c, 403, "No access", `<p>This Google account has not been invited to Sahra.</p>${tryAgain}`, undefined, clear);
   }
-  // Confirm every staff/invite change (including any link just made) in the change log first.
-  if (linked > 0 || staff.length > 0) await flushChangeLog(db, c.var.ledger, now);
+  // Confirm every staff/invite/platform change (including any link just made) in the change log first.
+  if (linked > 0 || staff.length > 0 || platform) await flushChangeLog(db, c.var.ledger, now);
 
-  if (staff.length === 1) {
+  // Organiser or site owner: their own session (cookie) too.
+  const cookies = [...clear];
+  if (platform) {
+    const s = await platformSession(pdb, claims.sub, now);
+    if (s === "capped") return htmlPage(c, 429, "Too many sign-ins", `<p>Too many sign-ins for this account in the last hour. Try again later.</p>${tryAgain}`, undefined, clear);
+    if (s === "changed") return htmlPage(c, 403, "No access", `<p>Access changed during sign-in. Try again.</p>${tryAgain}`, undefined, clear);
+    cookies.push(s.cookie);
+    if (staff.length === 0) return htmlPage(c, 200, "Signed in", `<p>Signed in. <a href="/platform">Continue</a></p>`, "/platform", cookies);
+  }
+
+  if (staff.length === 1 && !platform) {
     const s = staff[0]!;
     const token = newToken();
     const ok = await db.createGoogleSession({
@@ -149,8 +175,10 @@ authRoutes.get("/google/callback", async (c) => {
   const forms = staff
     .map((s) => `<form method="post" action="/api/auth/select-party"><input type="hidden" name="party_id" value="${escapeHtml(s.party_id)}"><button type="submit">${escapeHtml(s.party_name)} (${escapeHtml(s.role)})</button></form>`)
     .join("");
-  return htmlPage(c, 200, "Choose party", `<p>Choose a party:</p>${forms}`, undefined, [
-    ...clear,
+  // Also an organiser or site owner (already signed in to that page above): it is one more choice.
+  const platformLink = platform ? `<p><a href="/platform">Organiser page</a></p>` : "";
+  return htmlPage(c, 200, "Choose party", `<p>Choose a party:</p>${forms}${platformLink}`, undefined, [
+    ...cookies,
     cookie(COOKIE_PICK, pick, { maxAgeS: CONFIG.loginGrantMs / 1000, sameSite: "Strict" }),
   ]);
 });

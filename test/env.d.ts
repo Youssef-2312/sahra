@@ -9,8 +9,13 @@ declare global {
       TEST_LEDGER_MIGRATIONS: D1Migration[];
       TEST_STAGING_MAIN: D1Migration[];
       TEST_STAGING_LEDGER: D1Migration[];
+      TEST_FILES_MIGRATIONS: D1Migration[];
       COOKIE_MASTER_K2: string;
       RL_TEST: RateLimit;
+      RESTORE_MAIN: D1Database;
+      RESTORE_LEDGER: D1Database;
+      RESTORE_FILES: D1Database;
+      RESTORE_FILES_2: D1Database;
     }
   }
 }

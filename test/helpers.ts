@@ -1,8 +1,11 @@
+import { PRIVACY_VERSION, TERMS_VERSION } from "../src/guests/policy";
+import { SITE_OWNER_EMAIL } from "../src/platform/db";
 import { env } from "cloudflare:test";
 import { createApp, type Deps } from "../src/app";
 import { GOOGLE_JWKS_URL, GOOGLE_TOKEN_URL, JwksCache } from "../src/auth/google";
 import { b64url, csrfFor, newId, newToken, parseToken, sha256, sha256hex } from "../src/lib/crypto";
 import type { Intent, Ledger, LogEntry } from "../src/ledger";
+import { TURNSTILE_VERIFY_URL } from "../src/guests/turnstile";
 
 export const ORIGIN = "https://sahra.test";
 export const CLIENT_ID = "test-client.apps.googleusercontent.com";
@@ -179,9 +182,37 @@ export class FlakyLedger implements Ledger {
   }
 }
 
+/**
+ * Stands in for Turnstile's siteverify, answering like Cloudflare does for its
+ * documented test secrets: 1x...AA always passes, 2x...AA always fails, 3x...AA
+ * answers "token already spent"; any other secret is invalid. `down` simulates an
+ * unreachable siteverify.
+ */
+export class FakeTurnstile {
+  calls = 0;
+  down = false;
+  async fetch(init?: RequestInit): Promise<Response> {
+    this.calls++;
+    if (this.down) throw new Error("network down");
+    const form = new URLSearchParams(String(init?.body ?? ""));
+    const secret = form.get("secret") ?? "";
+    const response = form.get("response") ?? "";
+    const fail = (codes: string[]) => Response.json({ success: false, "error-codes": codes });
+    if (!response) return fail(["missing-input-response"]);
+    if (secret === "1x0000000000000000000000000000000AA") return Response.json({ success: true, hostname: "example.com", "error-codes": [] });
+    if (secret === "2x0000000000000000000000000000000AA") return fail(["invalid-input-response"]);
+    if (secret === "3x0000000000000000000000000000000AA") return fail(["timeout-or-duplicate"]);
+    return fail(["invalid-input-secret"]);
+  }
+}
+
+/** Cloudflare's documented dummy token (what the test site keys produce). */
+export const TURNSTILE_TOKEN = "XXXX.DUMMY.TOKEN.XXXX";
+
 export interface Harness {
   clock: Clock;
   google: FakeGoogle;
+  turnstile: FakeTurnstile;
   ledger: FlakyLedger;
   jwks: JwksCache;
   app: ReturnType<typeof createApp>;
@@ -192,7 +223,9 @@ export async function harness(opts: { google?: FakeGoogle; clock?: Clock; env?: 
   const clock = opts.clock ?? new Clock();
   const google = opts.google ?? (await FakeGoogle.create());
   const ledger = new FlakyLedger(null as unknown as Ledger);
-  const fetcher = google.fetcher(clock);
+  const turnstile = new FakeTurnstile();
+  const googleFetch = google.fetcher(clock);
+  const fetcher = (input: string, init?: RequestInit) => input === TURNSTILE_VERIFY_URL ? turnstile.fetch(init) : googleFetch(input, init);
   const jwks = new JwksCache(fetcher);
   const deps: Deps = { fetch: fetcher, now: clock.now, jwks, ledger: (base) => { ledger.inner = base; return ledger; },
     driver: (base, which) => new OutageDriver(base, which) };
@@ -204,7 +237,7 @@ export async function harness(opts: { google?: FakeGoogle; clock?: Clock; env?: 
     }
     return app.request(`${ORIGIN}${path}`, { ...init, headers }, opts.env ? { ...env, ...opts.env } : env);
   };
-  return { clock, google, ledger, jwks, app, req };
+  return { clock, google, turnstile, ledger, jwks, app, req };
 }
 
 export function setCookies(res: Response): Record<string, { value: string; attrs: string }> {
@@ -221,7 +254,7 @@ export function setCookies(res: Response): Record<string, { value: string; attrs
 
 export async function seedParty(id = `p${newId().slice(0, 8)}`): Promise<string> {
   await env.DB.prepare(
-    "INSERT INTO parties (id, name, capacity, created_at, logged_rev) VALUES (?, ?, 300, ?, 1)",
+    "INSERT INTO parties (id, name, capacity, created_at, logged_rev, support_phone) VALUES (?, ?, 300, ?, 1, '+20 100 000 0001')",
   ).bind(id, `Party ${id}`, Date.now()).run();
   return id;
 }
@@ -333,4 +366,209 @@ export async function scan(h: Harness, sess: { token: string; csrf: string }, qr
   const r = await h.req("/api/scan", api(sess, { scan_id: scanId, qr }));
   if (r.status !== 200) return { verdict: `http_${r.status}` };
   return (await r.json()) as Verdict;
+}
+
+// ------------------------------------------------------------- guests
+
+/** Smallest byte strings the image check accepts (signatures only; nothing decodes them). */
+export const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4]);
+export const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 16, 0x4a, 0x46, 0x49, 0x46]);
+
+export interface SignupFields {
+  signup?: string;
+  name?: string;
+  email?: string;
+  people?: number | string;
+  answers?: unknown;
+  screenshot?: Uint8Array | null;
+  turnstile?: string | null;
+  /** The Terms box (default ticked) and the versions the form showed (default: current, no party rules, no email sentence). */
+  accept?: boolean;
+  terms?: string | null;
+  privacy?: string | null;
+  rules?: string | null;
+  /** An ID photo and an Instagram handle (as typed), when the party's form asks for them. */
+  idPhoto?: Uint8Array;
+  instagram?: string;
+  /** An order of several tickets (migrations/0022): how many, the friends' names, and each friend's ID photo. */
+  tickets?: number;
+  names?: string[];
+  friendIdPhotos?: (Uint8Array | null)[];
+}
+
+/** A guest sign-up request as the page sends it: multipart with a Content-Length. */
+export async function signupInit(f: SignupFields = {}): Promise<RequestInit> {
+  const fd = new FormData();
+  fd.set("signup", f.signup ?? newToken());
+  fd.set("name", f.name ?? "Guest Name");
+  fd.set("email", f.email ?? `guest-${newId().slice(0, 8)}@example.com`);
+  fd.set("people", String(f.people ?? 1));
+  if (f.answers !== undefined) fd.set("answers", JSON.stringify(f.answers));
+  const shot = f.screenshot === undefined ? PNG : f.screenshot;
+  if (shot) fd.set("screenshot", new File([shot], "shot.png", { type: "image/png" }));
+  if (f.turnstile !== null) fd.set("cf-turnstile-response", f.turnstile ?? TURNSTILE_TOKEN);
+  if (f.idPhoto) fd.set("id_photo", new File([f.idPhoto], "id.jpg", { type: "image/jpeg" }));
+  if (f.instagram !== undefined) fd.set("instagram", f.instagram);
+  if (f.tickets !== undefined) fd.set("tickets", String(f.tickets));
+  if (f.names) fd.set("names", JSON.stringify(f.names));
+  (f.friendIdPhotos ?? []).forEach((b, i) => { if (b) fd.set(`id_photo_${i + 1}`, new File([b], `id${i + 1}.jpg`, { type: "image/jpeg" })); });
+  if (f.accept !== false) fd.set("accept_terms", "yes");
+  if (f.terms !== null) fd.set("terms_version", f.terms ?? TERMS_VERSION);
+  if (f.privacy !== null) fd.set("privacy_version", f.privacy ?? PRIVACY_VERSION);
+  if (f.rules !== null) fd.set("rules_version", f.rules ?? "");
+  const r = new Request("https://x.invalid/", { method: "POST", body: fd });
+  const body = new Uint8Array(await r.arrayBuffer());
+  return {
+    method: "POST",
+    body,
+    headers: { origin: ORIGIN, "sec-fetch-site": "same-origin", "content-type": r.headers.get("content-type")!, "content-length": String(body.length) },
+  };
+}
+
+export async function signup(h: Harness, party: string, f: SignupFields = {}) {
+  const res = await h.req(`/api/guest/parties/${party}/signup`, await signupInit(f));
+  return { res, status: res.status, body: (await res.clone().json()) as { status?: string; ticket_id?: string; link?: string; error?: string } };
+}
+
+/** Party with chosen capacity and people per ticket, plus an owner session. */
+export async function guestParty(h: Harness, a: { capacity?: number; maxPeople?: number; form?: unknown } = {}) {
+  const party = `g${newId().slice(0, 8)}`;
+  await env.DB.prepare("INSERT INTO parties (id, name, capacity, max_people_per_ticket, created_at, logged_rev, guest_form, support_phone) VALUES (?, ?, ?, ?, ?, 1, ?, '+20 100 000 0001')")
+    .bind(party, `Party ${party}`, a.capacity ?? 300, a.maxPeople ?? 4, Date.now(), a.form === undefined ? null : JSON.stringify(a.form)).run();
+  const owner = await seedOwner(party);
+  const os = await seedSession(party, owner.id, "owner", h.clock);
+  return { party, owner, os };
+}
+
+export async function viewTicket(h: Harness, link: string) {
+  const token = link.replace(/^.*#t=/, "");
+  const r = await h.req("/api/guest/ticket", { headers: { "x-sahra-ticket": token } });
+  return { status: r.status, body: (await r.json()) as { ticket?: { status: string; qr: string | null; reject_reason: string | null; on_hold: boolean; guest_name: string }; party?: unknown; error?: string } };
+}
+
+// ------------------------------------------------------------- platform
+
+/** Full platform (admin/organiser) Google sign-in through the app. */
+export async function platformLogin(h: Harness, mutateBeforeCallback?: (ctx: { state: string; nonce: string; attempt: string; code: string }) => void | Promise<void>) {
+  const start = await h.req("/api/auth/platform/start", { method: "POST", headers: { origin: ORIGIN, "sec-fetch-site": "same-origin" } });
+  if (start.status !== 303) throw new Error(`platform start failed ${start.status}`);
+  const loc = new URL(start.headers.get("location")!);
+  const state = loc.searchParams.get("state")!;
+  const nonce = loc.searchParams.get("nonce")!;
+  const attempt = setCookies(start)["__Host-sahra_login"]!.value;
+  h.google.nonceFor = nonce;
+  const code = `code-${newId()}`;
+  h.google.codes.set(code, loc.searchParams.get("code_challenge")!);
+  const ctx = { state, nonce, attempt, code };
+  await mutateBeforeCallback?.(ctx);
+  const res = await h.req(`/api/auth/google/callback?state=${encodeURIComponent(ctx.state)}&code=${encodeURIComponent(ctx.code)}`, {
+    cookies: ctx.attempt ? { "__Host-sahra_login": ctx.attempt } : {},
+  });
+  return { res, cookies: setCookies(res), html: await res.clone().text() };
+}
+
+/** A linked, active site owner (the one allowed address, SITE_OWNER_EMAIL, unless `email` says otherwise). */
+export async function seedSiteOwner(sub = `pa-${newId()}`, email = SITE_OWNER_EMAIL) {
+  const id = newId();
+  await env.DB.prepare(
+    "INSERT INTO platform_admins (id, name, email, google_sub, invite_expires_at, created_at, logged_rev) VALUES (?, ?, ?, ?, 0, 0, 1)",
+  ).bind(id, `Admin ${id.slice(0, 4)}`, email, sub).run();
+  return { id, sub };
+}
+
+/** A linked, active organiser. */
+export async function seedOrganiser(sub = `org-${newId()}`) {
+  const id = newId();
+  await env.DB.prepare(
+    "INSERT INTO organisers (id, name, email, google_sub, created_at, logged_rev) VALUES (?, ?, ?, ?, 0, 1)",
+  ).bind(id, `Organiser ${id.slice(0, 4)}`, `${sub}@gmail.com`, sub).run();
+  return { id, sub };
+}
+
+/** A platform session row for a Google account; cookie + CSRF for API calls. */
+export async function seedPlatformSession(sub: string, clock: Clock, ttlMs = 3600_000) {
+  const token = newToken();
+  await env.DB.prepare("INSERT INTO platform_sessions (id_hash, google_sub, created_at, expires_at) VALUES (?, ?, ?, ?)")
+    .bind(await sha256hex(token), sub, clock.now(), clock.now() + ttlMs).run();
+  return { token, hash: await sha256hex(token), csrf: await csrfFor(parseToken(token)!) };
+}
+
+/** Like `api`, with the platform session cookie. */
+export function papi(sess: { token: string; csrf: string }, body?: unknown, method = "POST"): RequestInit & { cookies: Record<string, string> } {
+  const r = api(sess, body, method);
+  return { ...r, cookies: { "__Host-sahra_p": sess.token } };
+}
+
+// ------------------------------------------------------------- backup
+
+/** A GET signed with BACKUP_KEY, as the owner's Apps Script sends it (src/backup/auth.ts). */
+export async function backupGet(h: Harness, path: string, o: { key?: string; at?: number; headers?: Record<string, string> } = {}) {
+  const { signedHeaders } = await import("../src/backup/auth");
+  const headers = { ...(await signedHeaders(o.key ?? env.BACKUP_KEY!, "GET", `${ORIGIN}${path}`, o.at ?? h.clock.now())), ...o.headers };
+  return h.req(path, { headers });
+}
+
+/** A POST signed with BACKUP_KEY (the signature covers the body). */
+export async function backupPost(h: Harness, path: string, body: unknown, o: { key?: string; at?: number; contentType?: string } = {}) {
+  const { signedHeaders } = await import("../src/backup/auth");
+  const text = JSON.stringify(body);
+  const headers = { ...(await signedHeaders(o.key ?? env.BACKUP_KEY!, "POST", `${ORIGIN}${path}`, o.at ?? h.clock.now(), text)), "content-type": o.contentType ?? "application/json" };
+  return h.req(path, { method: "POST", body: text, headers });
+}
+
+type BackupRow = Record<string, unknown>;
+
+/**
+ * Walks the whole export like the Apps Script: manifest, every table page by
+ * page (ledger last), then every screenshot, checking each file's SHA-256 and
+ * size header against the bytes received. Returns an in-memory backup.
+ */
+export async function exportAll(h: Harness, limit = 200, o: { kind?: "nightly" | "hourly"; files?: boolean } = {}) {
+  const { sha256hexBytes } = await import("../src/backup/restore");
+  const m = await backupGet(h, o.kind === "hourly" ? "/api/backup/manifest?kind=hourly" : "/api/backup/manifest?counts=1");
+  if (m.status !== 200) throw new Error(`manifest ${m.status}`);
+  const manifest = (await m.json()) as { order: { db: string; table: string }[]; databases: Record<string, unknown> };
+  const tables = new Map<string, BackupRow[]>();
+  let requests = 1;
+  for (const t of manifest.order) {
+    const rows: BackupRow[] = [];
+    let after: string | null = null;
+    for (;;) {
+      const r = await backupGet(h, `/api/backup/rows/${t.db}/${t.table}?limit=${limit}${after ? `&after=${after}` : ""}`);
+      requests++;
+      if (r.status !== 200) throw new Error(`${t.db}.${t.table} ${r.status} ${await r.text()}`);
+      const page = (await r.json()) as { rows: BackupRow[]; next: string | null };
+      rows.push(...page.rows);
+      if (!page.next) break;
+      after = page.next;
+    }
+    tables.set(`${t.db}.${t.table}`, rows);
+  }
+  // Every files database's list; a purged screenshot is not downloaded (the Worker answers 410).
+  const files = new Map<string, { bytes: Uint8Array; sha256: string }>();
+  let purged = 0;
+  for (const t of manifest.order.filter((x) => x.table === "files")) {
+    for (const f of o.files === false ? [] : tables.get(`${t.db}.files`) ?? []) {
+      const r = await backupGet(h, `/api/backup/file/${t.db}/${f.id}`);
+      requests++;
+      if (f.purged_at != null) {
+        if (r.status !== 410) throw new Error(`file ${t.db}:${f.id}: purged but answered ${r.status}`);
+        purged++;
+        continue;
+      }
+      const bytes = new Uint8Array(await r.arrayBuffer());
+      const sha256 = await sha256hexBytes(bytes);
+      if (r.status !== 200 || sha256 !== r.headers.get("x-sahra-sha256") || bytes.length !== Number(r.headers.get("x-sahra-size")) || bytes.length !== f.size) {
+        throw new Error(`file ${t.db}:${f.id}: transfer check failed`);
+      }
+      files.set(`${t.db}:${f.id}`, { bytes, sha256 });
+    }
+  }
+  return {
+    manifest, tables, files, purged, requests,
+    source: {
+      rows: async (db: string, table: string) => tables.get(`${db}.${table}`) ?? [],
+      file: async (db: string, id: number) => files.get(`${db}:${id}`) ?? null,
+    },
+  };
 }

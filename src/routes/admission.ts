@@ -12,6 +12,8 @@ import { flushChangeLog } from "../changelog";
 import { json, readJson, requireAuth, type AppEnv } from "../context";
 import { TicketDb } from "../db/tickets";
 import { newId } from "../lib/crypto";
+import { PartyDb } from "../party/db";
+import type { Ctx } from "../context";
 
 export const admissionRoutes = new Hono<AppEnv>();
 
@@ -34,14 +36,13 @@ admissionRoutes.post("/", requireAuth(["owner", "admin"]), async (c) => {
   if (!party) return json(c, 404, { error: "not_found" });
 
   if (action === "pause") {
-    const pn = Math.max(control?.pause_number ?? 0, party.pause_number) + 1;
-    if (!(await c.var.ledger.setControl(sess.partyId, control?.rev ?? 0, { state: "paused", pause_number: pn }, now, a.info.staff_id))) {
-      return json(c, 409, { error: "changed_meanwhile_try_again" });
-    }
-    await tdb.setAdmission(sess, "paused", pn, now, a.info.staff_id, newId());
+    const pn = await pauseAdmission(c, sess, a.info.staff_id, now);
+    if (pn === null) return json(c, 409, { error: "changed_meanwhile_try_again" });
     await flushChangeLog(c.var.db, c.var.ledger, now);
     return json(c, 200, { state: "paused", pause_number: pn });
   }
+  // A cancelled party never opens again (migrations/0026).
+  if ((await new PartyDb(c.var.db.driver).get(sess.partyId))?.cancelled_at) return json(c, 409, { error: "party_cancelled" });
 
   const pn = control?.pause_number ?? party.pause_number;
   if (!(await tdb.setAdmission(sess, "open", pn, now, a.info.staff_id, newId()))) return json(c, 409, { error: "not_allowed" });
@@ -51,3 +52,18 @@ admissionRoutes.post("/", requireAuth(["owner", "admin"]), async (c) => {
   await flushChangeLog(c.var.db, c.var.ledger, now);
   return json(c, 200, { state: "open", pause_number: pn });
 });
+
+/**
+ * Pause: the control object first (paused, pause_number + 1; scanners stop at
+ * once), then the main database. Shared with cancelling a party. Returns the new
+ * pause_number, or null when the control object changed meanwhile.
+ */
+export async function pauseAdmission(c: Ctx, sess: { hash: string; partyId: string }, staffId: string, now: number): Promise<number | null> {
+  const tdb = new TicketDb(c.var.db.driver);
+  const control = await c.var.ledger.getControl(sess.partyId);
+  const party = await tdb.partyAdmission(sess.partyId);
+  const pn = Math.max(control?.pause_number ?? 0, party?.pause_number ?? 0) + 1;
+  if (!(await c.var.ledger.setControl(sess.partyId, control?.rev ?? 0, { state: "paused", pause_number: pn }, now, staffId))) return null;
+  await tdb.setAdmission(sess, "paused", pn, now, staffId, newId());
+  return pn;
+}

@@ -3,7 +3,8 @@
 // everything else is here. Safe to run again after a stop.
 
 import type { SqlDriver } from "../db/driver";
-import { applyHolds, flushAll, holdsFromIntents, pauseAll, replay, revokeAccess, syncPause, verify, type Hold } from "./index";
+import { sql } from "../db/sql";
+import { applyHolds, flushAll, holdsFromIntents, pauseAll, reopenedTickets, replay, revokeAccess, syncPause, verify, type Hold } from "./index";
 
 export interface RecoveryReport {
   paused: string[];
@@ -24,8 +25,12 @@ export async function recover(o: {
   main: SqlDriver;
   ledger: SqlDriver;
   now: () => number;
-  /** Restores the main database (owner's credential). Runs after the ledger is complete. */
-  restore: () => Promise<void>;
+  /**
+   * Restores the main database (owner's credential). Runs after the ledger is
+   * complete. Resolves to the restore point (ms) when known, so emails lost with
+   * the restore can be rebuilt (src/recovery/resync.ts).
+   */
+  restore: () => Promise<number | null | void>;
   log?: (line: string) => void;
 }): Promise<RecoveryReport> {
   const log = o.log ?? (() => {});
@@ -46,7 +51,7 @@ export async function recover(o: {
     mismatchesBefore = v.mismatches.length;
     mainChecked = v.ok;
     for (const m of v.mismatches) {
-      if (m.entity === "ticket" || m.entity === "staff") holds.set(`${m.entity}:${m.id}`, { ...m, reason: `change log ${m.problem} before restore` });
+      if (["ticket", "staff", "party", "organiser", "platform_admin"].includes(m.entity)) holds.set(`${m.entity}:${m.id}`, { ...m, reason: `change log ${m.problem} before restore` });
     }
     log(`2. main database reachable: ${flushedBefore} change(s) copied to the ledger; ${v.rows} rows checked, ${v.mismatches.length} mismatch(es)`);
   } catch (e) {
@@ -57,7 +62,7 @@ export async function recover(o: {
   }
 
   // 3. Restore (owner).
-  await o.restore();
+  const restoredTo = await o.restore();
   log("3. main database restored");
 
   // 4. Replay: newest rev per entity wins.
@@ -75,13 +80,36 @@ export async function recover(o: {
   const synced = await syncPause(o.main, o.ledger, o.now(), op);
   log(`6. ${synced} part${synced === 1 ? "y" : "ies"} set to the control object's pause_number (still paused; reopen from the dashboard)`);
 
-  // Record this procedure's own changes, then the final check.
-  const flushedAfter = await flushAll(o.main, o.ledger, o.now());
+  // Emails created after the restore point were lost with it: the health run
+  // rebuilds the "your ticket" email for tickets released after that point.
+  if (typeof restoredTo === "number") {
+    try {
+      await o.main.batch([sql`UPDATE health_state SET resync_after = ${restoredTo}, resync_cursor = NULL WHERE id = 'main'`]);
+      log(`   "your ticket" emails for tickets released after the restore point will be rebuilt by the next health run`);
+    } catch {
+      log(`   (could not schedule the email rebuild; guests whose email was lost can use "resend my ticket link")`);
+    }
+  }
+
+  // Record this procedure's own changes. Then replay once more: a request that was
+  // still running when maintenance began may have reached the ledger after the
+  // first replay; the newest state must still win.
+  let flushedAfter = await flushAll(o.main, o.ledger, o.now());
+  const late = await replay(o.main, o.ledger);
+  if (late.applied || late.holds.length) {
+    const lateHeld = await applyHolds(o.main, late.holds, o.now(), op);
+    flushedAfter += await flushAll(o.main, o.ledger, o.now());
+    log(`   late changes: ${late.applied} replayed, ${lateHeld} held`);
+    for (const h of late.holds) holds.set(`${h.entity}:${h.id}`, h);
+  }
   const final = await verify(o.main, o.ledger);
-  log(`final check: ${final.ok ? "OK, every row matches the change log" : `${final.mismatches.length} mismatch(es)`}`);
+  // Nothing reopens: every ticket the change log says is used is used in the database.
+  const reopened = await reopenedTickets(o.main, o.ledger);
+  const finalOk = final.ok && reopened.length === 0;
+  log(`final check: ${final.ok ? "every row matches the change log" : `${final.mismatches.length} mismatch(es)`}; ${reopened.length} ticket(s) reopened${finalOk ? " (OK)" : ""}`);
 
   return {
-    paused, mainChecked, flushedBefore, mismatchesBefore, replayed: r.applied, holds: list, held,
-    sessionsRevoked: revoked.sessions, invitesRevoked: revoked.invites, partiesSynced: synced, flushedAfter, finalOk: final.ok,
+    paused, mainChecked, flushedBefore, mismatchesBefore, replayed: r.applied, holds: [...holds.values()], held,
+    sessionsRevoked: revoked.sessions, invitesRevoked: revoked.invites, partiesSynced: synced, flushedAfter, finalOk,
   };
 }

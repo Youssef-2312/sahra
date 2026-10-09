@@ -14,18 +14,21 @@
 //   node scripts/ops.mjs secrets staging|prod
 //   node scripts/ops.mjs google-secret staging|prod
 //   node scripts/ops.mjs create-party
+//   node scripts/ops.mjs create-site-owner
 //   node scripts/ops.mjs checkpoint
 //   node scripts/ops.mjs verify-ledger          (read-only, staging)
 //   node scripts/ops.mjs measure-cpu            (staging)
 //   node scripts/ops.mjs revoke-door-staging    (staging)
+//   node scripts/ops.mjs load-test              (staging, about 45 minutes)
 
 import { spawn } from "node:child_process";
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { stdin, stdout } from "node:process";
+import { siteOwnerSql } from "./site-owner-sql.mjs";
 
 const WIN = process.platform === "win32";
 // `--env=` selects the top-level (production) config explicitly; it also avoids
@@ -102,6 +105,7 @@ const steps = {
     await confirmProd(name, "database migrations");
     await wrangler(["d1", "migrations", "apply", "DB", "--remote", ...e]);
     await wrangler(["d1", "migrations", "apply", "LEDGER", "--remote", ...e]);
+    await wrangler(["d1", "migrations", "apply", "FILES", "--remote", ...e]);
     if (name === "staging") {
       // Every staging-only SQL file, in name order; each is safe to run again.
       for (const [db, dir] of [["DB", "migrations-staging/main"], ["LEDGER", "migrations-staging/ledger"]]) {
@@ -116,7 +120,7 @@ const steps = {
   async status(only) {
     let pending = false;
     for (const name of only ? [only] : ["staging", "prod"]) {
-      for (const db of ["DB", "LEDGER"]) {
+      for (const db of ["DB", "LEDGER", "FILES"]) {
         console.log(`\n== ${name} ${db}`);
         const r = await wrangler(["d1", "migrations", "list", db, "--remote", ...ENVS[name]]);
         if (!/No migrations to apply/i.test(r.out)) pending = true;
@@ -157,6 +161,31 @@ const steps = {
       "--owner-email", await ask("Owner Gmail address: ")];
     await confirmProd(name, `create party ${id}`);
     await new Promise((ok, fail) => spawn(process.execPath, args, { stdio: "inherit" }).on("close", (c) => (c === 0 ? ok() : fail(new Error("create-party failed")))));
+  },
+
+  // Adds the first (or another) site owner by email. They then sign in at
+  // /platform with that Google account within 14 days; the first sign-in links it.
+  // Runs again safely: an existing site owner with that email is not duplicated (an
+  // unlinked one gets a fresh 14 days).
+  async "create-site-owner"() {
+    const name = (await ask("Environment (staging/prod): ")).toLowerCase();
+    const e = envArg(name);
+    const { email, statements } = siteOwnerSql({
+      name: await ask("Site owner name: "), email: await ask("Site owner Gmail (or Google Workspace) address: "),
+      id: randomUUID(), op: randomUUID(), now: Date.now(),
+    });
+    await confirmProd(name, `add site owner ${email}`);
+    const dir = mkdtempSync(join(tmpdir(), "sahra-"));
+    const file = join(dir, "site-owner.sql");
+    writeFileSync(file, statements.join("\n"));
+    try {
+      await wrangler(["d1", "execute", "DB", "--remote", ...e, "--file", file]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+    const r = await wrangler(["d1", "execute", "DB", "--remote", ...e, "--json", "--command",
+      `SELECT name, email, google_sub IS NOT NULL AS linked, invite_expires_at FROM platform_admins WHERE email = '${email.replace(/'/g, "''")}' AND disabled_at IS NULL`], { quiet: true });
+    console.log(/"email"/.test(r.stdout) ? `\nSite owner ${email} is set up on ${name}. Sign in at /platform with that Google account.` : "\nCould not confirm the row; run this step again.");
   },
 
   // Read-only: every admission in the main database (scan rows with outcome
@@ -269,6 +298,18 @@ const steps = {
   // Live CPU per endpoint, cold vs warm, on staging (wrangler tail + live-check traffic).
   async "measure-cpu"() {
     await new Promise((ok) => spawn(process.execPath, ["scripts/measure-cpu.mjs"], { stdio: "inherit" }).on("close", ok));
+  },
+
+  // Peak-load test (workstream H) run by the owner: the estimate first (nothing is
+  // sent), then the real run only after the owner types RUN. About 45 minutes; the
+  // report is printed and saved as load-test-report-<time>.json in this folder.
+  async "load-test"() {
+    const link = await ask("Door invitation link from STAGING (create one for 1 hour): ");
+    const run = (extra) => new Promise((ok) => spawn(process.execPath, ["scripts/load-test.mjs", "--invite", link, ...extra], { stdio: "inherit" }).on("close", ok));
+    await run([]);
+    const go = await ask("\nType RUN to start the test with these numbers (anything else cancels; Ctrl+C stops it cleanly later): ");
+    if (go !== "RUN") { console.log("Cancelled. Nothing was sent."); return; }
+    await run(["--yes", "--tail"]);
   },
 
   async checkpoint() {
