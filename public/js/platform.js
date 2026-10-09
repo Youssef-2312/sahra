@@ -174,14 +174,38 @@
     }));
   }
 
+  var disabling = {};
+  function disablePanel(p, key, path) {
+    var tk = p.tickets || {}, approved = Number(tk.approved || 0), pendingN = Number(tk.pending || 0);
+    var typed = el("input", { attrs: { type: "text", autocomplete: "off", dir: "auto", "aria-label": t("p_disable_type", { name: p.name }) } });
+    var go = el("button", { class: "btn no small-btn", text: t("p_disable_go"), attrs: { type: "button", disabled: true } });
+    typed.addEventListener("input", function () { go.disabled = typed.value.trim() !== String(p.name).trim(); });
+    go.addEventListener("click", async function () {
+      go.disabled = true;
+      await act(key, path + "/disable", {}, "parties", "p_party_disabled", null);
+      disabling[key] = false;
+      render();
+    });
+    return el("div", { class: "notice no s-disable" },
+      el("strong", { text: t("p_disable_title") }),
+      el("ul", null,
+        el("li", { text: t("p_disable_req") }),
+        el("li", { text: t("p_disable_adm", { n: approved }) }),
+        pendingN ? el("li", { text: t("p_disable_pending", { n: pendingN }) }) : null,
+        el("li", { text: t("p_disable_sessions", { n: Number(p.active_sessions || 0) }) })),
+      el("label", { class: "small", text: t("p_disable_type", { name: p.name }) }), typed,
+      el("div", { class: "g-actions" }, go, button("q_cancel", function () { disabling[key] = false; render(); }, "")));
+  }
+
   function partyRow(p, siteOwner) {
     var key = "party:" + p.id, path = "/api/platform/parties/" + encodeURIComponent(p.id);
     var acts = [];
     if (siteOwner) {
       if (!p.disabled_at) acts.push(action(key, path + "/manage", {}, null, null, null, "p_manage_party", "", "/dashboard"));
-      acts.push(action(key, path + (p.disabled_at ? "/enable" : "/disable"), {}, "parties",
-        p.disabled_at ? "p_party_enabled" : "p_party_disabled", p.disabled_at ? null : "p_confirm_party",
-        p.disabled_at ? "p_enable_party" : "p_disable_party", p.disabled_at ? "" : "no"));
+      // Brainstorm idea 19: disabling is a labelled, confirmed action that says what it does, in numbers,
+      // and asks for the party's name; turning it back on is one clear action with a short explanation.
+      if (p.disabled_at) acts.push(action(key, path + "/enable", {}, "parties", "p_party_enabled", "p_confirm_enable", "p_enable_party", ""));
+      else acts.push(button("p_disable_open", function () { disabling[key] = !disabling[key]; render(); }, "no"));
     }
     var li = el("li", { class: "g-row" },
       el("div", { class: "g-name-line" }, el("strong", { text: p.name, attrs: { dir: "auto" } }), pill(p.disabled_at ? "disabled" : p.admission_state)),
@@ -190,6 +214,7 @@
         siteOwner ? [detail("p_organiser", p.organiser_name || t("p_none")), detail("p_staff", p.staff), detail("p_sessions", p.active_sessions),
           detail("p_tickets", counts(p.tickets)), detail("p_emails", counts(p.outbox))] : null),
       acts.length ? el("div", { class: "g-actions" }, acts) : null, notice(key));
+    if (siteOwner && !p.disabled_at && disabling[key]) li.appendChild(disablePanel(p, key, path));
     if (siteOwner && p.no_active_owner) {
       li.appendChild(el("p", { class: "notice maybe", text: t("p_no_owner", { n: p.pending_owner_invites }) }));
       if (!p.disabled_at) li.appendChild(el("details", { class: "s-platform-details" }, el("summary", { text: t("p_invite_owner") }),

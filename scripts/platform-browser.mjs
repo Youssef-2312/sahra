@@ -100,14 +100,22 @@ try {
 
   const o = await fixture('owner');
   const party = o.page.locator('#parties .g-row').first();
-  o.page.once('dialog', d => d.dismiss());
-  await party.getByRole('button', { name: 'Disable party', exact: true }).click();
+  // Disabling (brainstorm idea 19): a panel with the effect in numbers; the party's name must be typed.
+  await party.getByRole('button', { name: 'Disable party...', exact: true }).click();
+  const confirmButton = party.getByRole('button', { name: 'Disable party', exact: true });
+  assert.equal(await confirmButton.isDisabled(), true);
+  assert.match(await party.locator('.s-disable').innerText(), /3 approved tickets cannot be used at the door/);
+  await party.locator('.s-disable input').fill('wrong name');
+  assert.equal(await confirmButton.isDisabled(), true);
+  await party.getByRole('button', { name: 'Cancel', exact: true }).click();
   assert.equal(o.posts.length, 0);
-  o.page.once('dialog', d => d.accept());
+  await party.getByRole('button', { name: 'Disable party...', exact: true }).click();
+  await party.locator('.s-disable input').fill(emptyParty.name);
   await party.getByRole('button', { name: 'Disable party', exact: true }).click();
   await party.getByRole('button', { name: 'Enable party', exact: true }).waitFor();
+  o.page.once('dialog', d => d.accept());
   await party.getByRole('button', { name: 'Enable party', exact: true }).click();
-  await party.getByRole('button', { name: 'Disable party', exact: true }).waitFor();
+  await party.getByRole('button', { name: 'Disable party...', exact: true }).waitFor();
   await party.locator('summary').click();
   await party.locator('[name=name]').fill('New local owner');
   await party.locator('[name=email]').fill('local.owner@gmail.com');
