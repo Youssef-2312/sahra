@@ -154,11 +154,13 @@
     } else if (row.price) {
       shot.appendChild(el("p", { class: "small muted", text: t("q_no_shot") }));
     }
-    if (row.has_id_photo) {
-      var ib = el("button", { class: "btn link", text: t("q_show_id"), attrs: { type: "button" } });
-      ib.addEventListener("click", function () { showShot(row.id, shot, ib, "id-photo"); });
+    // Each ticket's own ID photo; for an order, one button per ticket that has one (the friends' too).
+    var withId = (row.members || [row]).filter(function (m) { return m.has_id_photo; });
+    withId.forEach(function (m) {
+      var ib = el("button", { class: "btn link", text: withId.length > 1 || row.members ? t("q_show_id_of", { name: m.guest_name || "-" }) : t("q_show_id"), attrs: { type: "button" } });
+      ib.addEventListener("click", function () { showShot(m.id, shot, ib, "id-photo"); });
       shot.appendChild(ib);
-    }
+    });
 
     var answers = Object.keys(row.answers || {});
     var details = el("details", null, el("summary", { text: t("q_details") }),

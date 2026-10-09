@@ -91,6 +91,33 @@ describe("ID photos and Instagram on the request form", () => {
     expect((await ticket(r.body.ticket_id!)).instagram).toBeNull();
   });
 
+  it("an order: every friend's ticket has its own ID photo when the party requires one", async () => {
+    const h = await harness();
+    const { party, os } = await guestParty(h, asks("required", "none"));
+    await env.DB.prepare("UPDATE parties SET max_tickets_per_email = 5 WHERE id = ?").bind(party).run();
+    const A = new Uint8Array([...ID, 0xa1]), B = new Uint8Array([...ID, 0xb2]);
+    // A friend without a photo: refused, and it says which ticket.
+    const missing = await signup(h, party, { idPhoto: ID, tickets: 3, names: ["Rami", "Sara"], friendIdPhotos: [A, null] });
+    expect(missing.status).toBe(400);
+    expect(missing.body).toMatchObject({ error: "id_photo_required", ticket: 3 });
+    // A photo for a ticket that is not in the order: refused.
+    expect((await signup(h, party, { idPhoto: ID, tickets: 2, names: ["Rami"], friendIdPhotos: [A, B] })).status).toBe(400);
+
+    const ok = await signup(h, party, { idPhoto: ID, tickets: 3, names: ["Rami", "Sara"], friendIdPhotos: [A, B] });
+    expect(ok.status).toBe(201);
+    const tickets = (ok.body as unknown as { tickets: { ticket_id: string; name: string }[] }).tickets;
+    expect(tickets.map((x) => x.name)).toEqual(["Guest Name", "Rami", "Sara"]);
+    const photos = [ID, A, B];
+    for (let i = 0; i < 3; i++) {
+      const img = await idPhoto(h, os, tickets[i]!.ticket_id);
+      expect(img.status).toBe(200);
+      expect(new Uint8Array(await img.arrayBuffer())).toEqual(photos[i]);
+    }
+    // Not asked: a friend's photo is refused like the buyer's.
+    const { party: none } = await guestParty(h, asks("none", "none"));
+    expect((await signupAny(h, none, { tickets: 2, names: ["Rami"], friendIdPhotos: [A] })).body.error).toBe("id_photo_not_wanted");
+  });
+
   it("both are deleted 7 days after the party; the photo also 7 days after a rejection", async () => {
     const h = await harness();
     const { party, os } = await guestParty(h, asks("required", "required"));

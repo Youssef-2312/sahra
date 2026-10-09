@@ -390,6 +390,10 @@ export interface SignupFields {
   /** An ID photo and an Instagram handle (as typed), when the party's form asks for them. */
   idPhoto?: Uint8Array;
   instagram?: string;
+  /** An order of several tickets (migrations/0022): how many, the friends' names, and each friend's ID photo. */
+  tickets?: number;
+  names?: string[];
+  friendIdPhotos?: (Uint8Array | null)[];
 }
 
 /** A guest sign-up request as the page sends it: multipart with a Content-Length. */
@@ -405,6 +409,9 @@ export async function signupInit(f: SignupFields = {}): Promise<RequestInit> {
   if (f.turnstile !== null) fd.set("cf-turnstile-response", f.turnstile ?? TURNSTILE_TOKEN);
   if (f.idPhoto) fd.set("id_photo", new File([f.idPhoto], "id.jpg", { type: "image/jpeg" }));
   if (f.instagram !== undefined) fd.set("instagram", f.instagram);
+  if (f.tickets !== undefined) fd.set("tickets", String(f.tickets));
+  if (f.names) fd.set("names", JSON.stringify(f.names));
+  (f.friendIdPhotos ?? []).forEach((b, i) => { if (b) fd.set(`id_photo_${i + 1}`, new File([b], `id${i + 1}.jpg`, { type: "image/jpeg" })); });
   if (f.accept !== false) fd.set("accept_terms", "yes");
   if (f.terms !== null) fd.set("terms_version", f.terms ?? TERMS_VERSION);
   if (f.privacy !== null) fd.set("privacy_version", f.privacy ?? PRIVACY_VERSION);

@@ -391,16 +391,24 @@
     var ticketMax = data.max_tickets_per_email ? Math.min(MAX_TICKETS, data.max_tickets_per_email) : MAX_TICKETS;
     // The names on the other tickets (optional; empty = the guest's own).
     var namesBox = el("div", { class: "names-box" });
+    // When the party asks for an ID photo, each friend's ticket gets its own upload (kept across changes of the quantity).
+    var idAsk = data.form.id_photo || "none";
+    var friendUploads = {};
     function namesRefresh() {
       var n = Math.max(1, Number(count.value) || 1);
-      var have = namesBox.querySelectorAll("input");
+      var have = namesBox.querySelectorAll("input[data-friend]");
       var keep = [].map.call(have, function (x) { return x.value; });
       Sahra.clear(namesBox);
       if (n < 2) return;
       namesBox.appendChild(el("p", { class: "label", text: t("names_title") }));
       for (var i = 2; i <= n; i++) {
-        namesBox.appendChild(el("div", { class: "field" }, el("label", null, t("name_on_ticket", { n: i }),
+        var box = el("div", { class: "friend" }, el("div", { class: "field" }, el("label", null, t("name_on_ticket", { n: i }),
           el("input", { attrs: { type: "text", "data-friend": "", maxlength: 80, autocomplete: "off", dir: "auto", placeholder: t("name_optional"), value: keep[i - 2] || "" } }))));
+        if (idAsk !== "none") {
+          if (!friendUploads[i]) friendUploads[i] = uploadField(idAsk, { name: "id_photo_" + (i - 1), id: "id-file-" + i, label: t("id_label_n", { n: i }), hint: t("id_hint_friend") });
+          box.appendChild(friendUploads[i]);
+        }
+        namesBox.appendChild(box);
       }
       namesBox.appendChild(el("p", { class: "hint", text: t("names_hint") }));
     }
@@ -612,6 +620,14 @@
         var idSmall = await compress(idFile);
         fd.set("id_photo", idSmall, idSmall === idFile ? idFile.name : "id.jpg");
       }
+      // Each friend's ID photo (only for the tickets in the order).
+      var n = Math.max(1, Number(f.elements.tickets.value) || 1);
+      for (var k = 1; k < n; k++) {
+        var fi = f.elements["id_photo_" + k], ff = fi && fi.files && fi.files[0];
+        if (!ff) continue;
+        var small = await compress(ff);
+        fd.set("id_photo_" + k, small, small === ff ? ff.name : "id" + k + ".jpg");
+      }
     } catch (err) {
       btn.disabled = false;
       btn.textContent = t("request_ticket");
@@ -649,7 +665,8 @@
     }
     // "Pending": stored but not yet confirmed; the same token finishes it. Kept for every other answer too
     // (a retry with the same token can never make a second ticket).
-    say(r.body && r.body.status === "pending" ? "maybe" : "no", r.body && r.body.status === "pending" ? t("not_confirmed") : Sahra.errorText(r));
+    say(r.body && r.body.status === "pending" ? "maybe" : "no", r.body && r.body.status === "pending" ? t("not_confirmed")
+      : r.body && r.body.error === "id_photo_required" && r.body.ticket ? t("e_id_photo_required_n", { n: r.body.ticket }) : Sahra.errorText(r));
   }
 
   // ------------------------------------------------------------ start

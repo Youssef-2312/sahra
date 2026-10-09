@@ -678,3 +678,18 @@ covers it.
 
 All agreed brainstorm ideas (1 to 19, 21, 22, 24 to 28) are now built. Open ones:
 20 (look and feel words to confirm) and 23 (logo and favicon, decided later).
+
+### Friends' ID photos and a larger favicon (9 October 2026)
+
+Closes the known gap above. When the party asks for an ID photo, each friend's
+ticket on an order gets its own upload ("ID photo for ticket 2", ...), sent as
+`id_photo_1`..`id_photo_9` and stored on that friend's ticket, so the usual
+7-day purge (src/storage/) covers it. "Required" refuses an order with a
+missing friend photo and names the ticket ("Please add the ID photo for ticket
+3."); a photo for a ticket beyond the order, or any photo when the party asks
+for none, is refused. The signup body limit grows to fit one photo per ticket.
+Requests: a grouped card shows an ID button per person who has a photo.
+Test: `test/idphoto.test.ts` (friends case).
+
+Favicon: the same ticket mark, scaled up (0.2 to 0.25) so it fills a browser
+tab; favicon.ico (16/32/48) and apple-touch-icon.png (180) regenerated from it.

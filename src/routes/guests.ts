@@ -45,7 +45,8 @@ const PARTY_RE = /^[a-z0-9-]{3,24}$/;
 /** Separate tickets in one request (each its own QR code; migrations/0022). */
 export const MAX_ORDER_TICKETS = 10;
 // A payment screenshot and an ID photo, plus the form fields.
-const MAX_SIGNUP_BYTES = 2 * MAX_FILE_BYTES + 64 * 1024;
+// The proof of payment plus one ID photo per ticket of the largest order, plus the text fields.
+const MAX_SIGNUP_BYTES = (1 + MAX_ORDER_TICKETS) * MAX_FILE_BYTES + 64 * 1024;
 const MAX_ANSWERS_JSON = 16 * 1024;
 /** One "resend my link" email per address per party per window (see GuestDb.addLinkEmail). */
 const LINK_EMAIL_WINDOW_MS = 10 * 60_000;
@@ -82,6 +83,13 @@ async function signupIds(partyId: string, token: string) {
   let m = 0;
   for (const b of h2.subarray(0, 6)) m = m * 256 + b;
   return { ticketId: base32(h.subarray(0, 10), 16), fileId: n + 1, idFileId: m + 1 };
+}
+/** The file id of the ID photo of an order's i-th other ticket (1, 2...): from the same token, so a retry is the same file. */
+async function friendIdFileId(partyId: string, token: string, i: number) {
+  const h = await sha256(`sahra-idphoto-v1|${partyId}|${token}|${i}`);
+  let m = 0;
+  for (const b of h.subarray(0, 6)) m = m * 256 + b;
+  return m + 1;
 }
 /** The other tickets of an order (2nd, 3rd...): ids from the same token, so a retry is the same order. */
 async function orderIds(partyId: string, token: string, count: number) {
@@ -359,13 +367,21 @@ guestRoutes.post("/parties/:party/signup", async (c) => {
   const idOr = await image(form.get("id_photo"), "id_photo");
   if (idOr instanceof Response) return idOr;
   const shot = shotOr, idPhoto = idOr;
+  // One ID photo per friend's ticket of an order ("id_photo_1", "id_photo_2"...), when the party asks for ID.
+  const friendIds: (Image | null)[] = [];
+  for (let i = 1; i < MAX_ORDER_TICKETS; i++) {
+    const f = await image(form.get(`id_photo_${i}`), "id_photo");
+    if (f instanceof Response) return f;
+    friendIds.push(f);
+  }
   // The Instagram handle as typed ("@name", a profile link...), reduced to the handle.
   const instaField = form.get("instagram");
   const instaGiven = typeof instaField === "string" && instaField.trim() !== "";
   const instagram = instaGiven ? cleanInstagram(instaField) : null;
   if (instaGiven && !instagram) return json(c, 400, { error: "invalid_instagram" });
   // Fail closed: without the files database a screenshot or ID photo cannot be kept.
-  if ((shot || idPhoto) && !c.env.FILES) return json(c, 503, { error: "uploads_not_configured" });
+  const anyFriendId = friendIds.some((x) => x !== null);
+  if ((shot || idPhoto || anyFriendId) && !c.env.FILES) return json(c, 503, { error: "uploads_not_configured" });
 
   const bot = await verifyTurnstile(c.var.deps.fetch, c.env, form.get("cf-turnstile-response"), ip);
   if (bot !== "ok") return turnstileAnswer(c, bot);
@@ -407,7 +423,13 @@ guestRoutes.post("/parties/:party/signup", async (c) => {
   if (pf.screenshot === "required" && !shot) return json(c, 400, { error: "screenshot_required" });
   if (pf.screenshot === "none" && shot) return json(c, 400, { error: "screenshot_not_wanted" });
   if (pf.id_photo === "required" && !idPhoto) return json(c, 400, { error: "id_photo_required" });
-  if (pf.id_photo === "none" && idPhoto) return json(c, 400, { error: "id_photo_not_wanted" });
+  if (pf.id_photo === "none" && (idPhoto || anyFriendId)) return json(c, 400, { error: "id_photo_not_wanted" });
+  // Every friend's ticket needs its own ID photo when the party requires one; none beyond the order's tickets.
+  if (friendIds.slice(count - 1).some((x) => x !== null)) return json(c, 400, { error: "invalid_request" });
+  if (pf.id_photo === "required") {
+    const missing = friendIds.slice(0, count - 1).findIndex((x) => x === null);
+    if (missing >= 0) return json(c, 400, { error: "id_photo_required", ticket: missing + 2 });
+  }
   if (pf.instagram === "required" && !instagram) return json(c, 400, { error: "instagram_required" });
   // Early answers (the insert below re-checks every rule in the same statement).
   const reg = registration(party, now);
@@ -419,7 +441,7 @@ guestRoutes.post("/parties/:party/signup", async (c) => {
   if (party.type_left !== null && party.type_left < people * count) return refusal(c, "type_full");
   if (party.held + people * count > party.capacity) return json(c, 409, { error: "full", message: REFUSAL.full.message });
   // Every files database past 70% (or unreadable): no new screenshots (fail closed; health alerts the owner).
-  const target = shot || idPhoto ? await uploadTarget(c.env, now) : null;
+  const target = shot || idPhoto || anyFriendId ? await uploadTarget(c.env, now) : null;
   if (target && target.state !== "ok") {
     return json(c, 503, target.state === "full"
       ? { error: "uploads_full", message: "Screenshot uploads are paused for a moment. Please try again later." }
@@ -441,10 +463,18 @@ guestRoutes.post("/parties/:party/signup", async (c) => {
       id: idFileId, partyId, ticketId: idPhotoOwner(ticketId), type: idPhoto.type, bytes: idPhoto.bytes, now,
     });
   }
+  const others = await orderIds(partyId, token, count);
+  const friendKeys: (string | null)[] = [];
+  for (let i = 0; i < others.length; i++) {
+    const f = friendIds[i];
+    friendKeys.push(f ? await FileStore.for(c.env, target!.writable!)!.put({
+      id: await friendIdFileId(partyId, token, i + 1), partyId, ticketId: idPhotoOwner(others[i]!), type: f.type, bytes: f.bytes, now,
+    }) : null);
+  }
   const r = await gdb.signup({
     id: ticketId, partyId, people, name, email, answers: Object.keys(answers).length ? JSON.stringify(answers) : null,
     screenshotKey, idPhotoKey, instagram: pf.instagram === "none" ? null : instagram, typeId, now, op: crypto.randomUUID(),
-    more: (await orderIds(partyId, token, count)).map((id, i) => ({ id, name: otherNames[i]! })),
+    more: others.map((id, i) => ({ id, name: otherNames[i]!, idPhotoKey: friendKeys[i] ?? null })),
     rules: party.rules, cancellation: party.cancellation_policy, accepted: { terms: policy.terms_version, rules: policy.rules_version, privacy: policy.privacy_version },
   });
   // The rules were edited between the read above and the insert: show the new ones.

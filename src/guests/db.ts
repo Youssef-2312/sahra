@@ -152,13 +152,13 @@ export class GuestDb {
    * An order (`more`: the other tickets' ids and names, migrations/0022) is one
    * INSERT of every ticket, all or none, with the whole order counted against the
    * capacity, the type's places and the tickets-per-email limit. The payment proof,
-   * ID photo, answers and handle stay on the first ticket.
+   * answers and handle stay on the first ticket; each ticket keeps its own ID photo.
    */
   async signup(a: {
     id: string; partyId: string; people: number; name: string; email: string; answers: string | null;
     screenshotKey: string | null; idPhotoKey?: string | null; instagram?: string | null; typeId: string | null; now: number; op: string;
     rules: string | null; cancellation: string | null; accepted: { terms: string; rules: string | null; privacy: string };
-    more?: { id: string; name: string }[];
+    more?: { id: string; name: string; idPhotoKey?: string | null }[];
   }): Promise<"created" | "already" | SignupRefusal> {
     const more = a.more ?? [];
     const count = 1 + more.length;
@@ -167,15 +167,16 @@ export class GuestDb {
     const roomOk = sql`${held(sql`p.id`)} + ${a.people * count} <= p.capacity`;
     const rulesOk = sql`(p.rules IS ${a.rules} AND p.cancellation_policy IS ${a.cancellation})`;
     const orderId = count > 1 ? a.id : null;
-    const rows = join([sql`(0, ${a.id}, ${a.name})`, ...more.map((m, i) => sql`(${i + 1}, ${m.id}, ${m.name})`)], ", ");
+    // Each ticket's own ID photo (the buyer's, and each friend's when the party asks for ID).
+    const rows = join([sql`(0, ${a.id}, ${a.name}, ${a.idPhotoKey ?? null})`, ...more.map((m, i) => sql`(${i + 1}, ${m.id}, ${m.name}, ${m.idPhotoKey ?? null})`)], ", ");
     const ids = [a.id, ...more.map((m) => m.id)];
     const rs = await this.driver.batch([
-      sql`WITH o(i, id, nm) AS (VALUES ${rows})
+      sql`WITH o(i, id, nm, idk) AS (VALUES ${rows})
         INSERT INTO tickets (id, party_id, status, people, guest_name, guest_email, answers, screenshot_key, id_photo_key, instagram, type_id, price,
           order_id, terms_version, rules_version, privacy_version, terms_accepted_at, created_at, last_op, last_action)
         SELECT o.id, p.id, 'pending', ${a.people}, o.nm, ${a.email},
           CASE WHEN o.i = 0 THEN ${a.answers} END, CASE WHEN o.i = 0 THEN ${a.screenshotKey} END,
-          CASE WHEN o.i = 0 THEN ${a.idPhotoKey ?? null} END, CASE WHEN o.i = 0 THEN ${a.instagram ?? null} END, ${a.typeId}, ${ty.price},
+          o.idk, CASE WHEN o.i = 0 THEN ${a.instagram ?? null} END, ${a.typeId}, ${ty.price},
           ${orderId}, ${a.accepted.terms}, ${a.accepted.rules}, ${a.accepted.privacy}, ${a.now}, ${a.now}, ${a.op}, 'ticket_requested'
         FROM o, parties p
         WHERE p.id = ${a.partyId} AND ${peopleOk(a.typeId, a.people)} AND ${roomOk} AND ${rulesOk}

@@ -1040,3 +1040,4 @@ html[lang="ar"] .home-story h2, html[lang="ar"] .home-guide h2 { letter-spacing:
 #import .g-actions { position: relative; } #import .sr-file { inset-inline-start: 0; top: 0; }
 .s-disable ul { margin: 8px 0 12px; padding-inline-start: 20px; color: var(--text); } .s-disable input { width: 100%; margin: 6px 0 10px; } .s-disable .g-actions { margin-top: 4px; }
 .q-filters { margin: -4px 0 12px; }
+.names-box .friend { padding: 12px 0; border-top: 1px solid var(--line); } .names-box .friend:first-of-type { border-top: 0; }
