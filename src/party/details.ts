@@ -44,6 +44,8 @@ export interface PartyDetailsRow {
   support_phone?: string | null;
   support_email?: string | null;
   support_note?: string | null;
+  /** "Usually within 24 hours" (migrations/0025); NULL = not shown. */
+  review_time?: string | null;
 }
 
 /** The organiser's contact, as every view shows it (null when no number is set). */
@@ -84,6 +86,8 @@ export interface VisibleParty {
   reveal: null | { mode: AddressMode; at?: number; waiting_for: WaitingFor };
   /** The organiser's support contact; null when none is set. */
   support: { phone: string; email: string | null; note: string | null } | null;
+  /** How long a review usually takes, in the organiser's words; null when not set. */
+  review_time: string | null;
 }
 
 function mode(v: string): AddressMode {
@@ -133,6 +137,7 @@ export function visiblePartyDetails(party: PartyDetailsRow, viewer: Viewer, now:
     map_url: shown ? party.map_url : null,
     reveal,
     support: supportOf(party),
+    review_time: party.review_time ?? null,
   };
 }
 
@@ -158,6 +163,7 @@ export function staffView(p: PartyDetailsRow, now: number) {
     registration_opens_at: p.registration_opens_at ?? null, registration_closes_at: p.registration_closes_at ?? null,
     max_tickets_per_email: p.max_tickets_per_email ?? null,
     support_phone: p.support_phone ?? null, support_email: p.support_email ?? null, support_note: p.support_note ?? null,
+    review_time: p.review_time ?? null,
     emails: {
       ticket_subject: p.email_ticket_subject ?? null, ticket_body: p.email_ticket_body ?? null,
       link_subject: p.email_link_subject ?? null, link_body: p.email_link_body ?? null,

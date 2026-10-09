@@ -13,7 +13,7 @@ import { announceInsert, announceRecipients, type Audience, MAX_NOTICES_PER_EDIT
 const COLUMNS = `id, name, description, starts_at, ends_at, time_zone, venue_name, address, map_url, rules, cancellation_policy,
   payment_instructions, capacity, max_people_per_ticket, address_mode, reveal_at, revealed_at, address_locked_at,
   email_ticket_subject, email_ticket_body, email_link_subject, email_link_body,
-  registration_opens_at, registration_closes_at, max_tickets_per_email, support_phone, support_email, support_note, rev`;
+  registration_opens_at, registration_closes_at, max_tickets_per_email, support_phone, support_email, support_note, review_time, rev`;
 
 /** Places held: people on pending and approved tickets (used ones are approved too). */
 function heldPlaces(partyId: string): Sql {

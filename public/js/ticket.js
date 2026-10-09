@@ -90,6 +90,7 @@
     } else {
       var m = statusMessage(k);
       side.appendChild(el("p", { class: "notice " + m[0], text: m[1] }));
+      if (k.status === "pending" && p.review_time) side.appendChild(el("p", { class: "small", text: t("review_time_line", { text: p.review_time }), attrs: { dir: "auto" } }));
       if (k.status === "rejected" && k.reject_reason) side.appendChild(el("p", { class: "pre", text: t("reason", { text: k.reject_reason }), attrs: { dir: "auto" } }));
     }
 
@@ -98,7 +99,8 @@
         el("li", null, el("span", { class: "small muted", text: t("name_label") }), el("br"), el("strong", { text: k.guest_name || "", attrs: { dir: "auto" } })),
         el("li", null, el("span", { class: "small muted", text: t("ticket_label") }), el("br"),
           el("strong", { text: [k.type, k.people > 1 ? t("group_of", { n: k.people }) : t("one_person")].filter(Boolean).join(" · "), attrs: { dir: "auto" } })),
-        k.people > 1 ? el("li", { class: "small", text: t("group_note", { n: k.people }) }) : null)));
+        k.people > 1 ? el("li", { class: "small", text: t("group_note", { n: k.people }) }) : null,
+        k.reference ? el("li", null, el("span", { class: "small muted", text: t("ref_label") }), el("br"), el("strong", { text: k.reference, attrs: { dir: "ltr" } })) : null)));
 
     var timeLine = p.starts_at ? Sahra.when(p.starts_at, p.time_zone) + (p.ends_at ? " - " + Sahra.time(p.ends_at, p.time_zone) : "") : null;
     body.appendChild(el("section", { class: "card" },

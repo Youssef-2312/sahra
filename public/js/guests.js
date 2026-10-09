@@ -81,7 +81,7 @@
       el("div", { class: "g-who" },
         el("div", { class: "g-name-line" }, el("strong", { text: x.guest_name || t("g_no_name"), attrs: { dir: "auto" } }), el("span", { class: "pill " + st[0], text: st[1] })),
         el("span", { class: "muted small", text: meta, attrs: { dir: "auto" } }),
-        el("span", { class: "faint small mono", text: t("g_ticket_id", { id: x.id }) })),
+        el("span", { class: "faint small mono", text: Sahra.ref(x.id), attrs: { dir: "ltr" } })),
       actions);
     if (open[x.id] === "transfer") li.appendChild(transferForm(x));
     if (note) {

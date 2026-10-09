@@ -12,7 +12,7 @@ export const EDITABLE = [
   "payment_instructions", "capacity", "max_people_per_ticket", "address_mode", "reveal_at", "address_locked_at",
   "email_ticket_subject", "email_ticket_body", "email_link_subject", "email_link_body",
   "registration_opens_at", "registration_closes_at", "max_tickets_per_email",
-  "support_phone", "support_email", "support_note",
+  "support_phone", "support_email", "support_note", "review_time",
 ] as const;
 export type EditableField = (typeof EDITABLE)[number];
 export type EditValues = Partial<Record<EditableField, string | number | null>>;
@@ -122,6 +122,11 @@ export function parseEdit(b: Record<string, unknown>): ParsedEdit {
     const em = cleanContactEmail(b.support_email);
     if (em === undefined) return bad("support_email");
     values.support_email = em;
+  }
+  if ("review_time" in b) {
+    const rt = text(b.review_time, 80, false);
+    if (rt === undefined) return bad("review_time");
+    values.review_time = rt;
   }
   if ("support_note" in b) {
     const n = text(b.support_note, 120, false);

@@ -534,7 +534,9 @@ export class GuestDb {
    */
   async search(sess: SessionRef, q: string, now: number, limit = 20) {
     const like = q.replace(/[\\%_]/g, (m) => `\\${m}`);
-    const where = isBase32(q, 16) ? sql`t.id = ${q}`
+    // A request reference ("SAH-K7Q9XM", the ticket id's first 6 characters; it identifies, it never opens a ticket).
+    const ref = /^SAH-?([0-9A-Z]{6})$/i.exec(q);
+    const where = ref ? sql`substr(t.id, 1, 6) = ${ref[1]!.toUpperCase()}` : isBase32(q, 16) ? sql`t.id = ${q}`
       : q.includes("@") ? sql`t.guest_email LIKE ${`${like.toLowerCase()}%`} ESCAPE '\\'`
         : sql`t.guest_name LIKE ${`%${like}%`} ESCAPE '\\'`;
     const r = await this.driver.all(sql`SELECT t.id, t.status, t.people, t.guest_name, t.guest_email, t.created_at, t.approved_at,

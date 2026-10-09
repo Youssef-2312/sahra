@@ -611,3 +611,17 @@ cancelled), and "Admit by hand" for one that can enter, after a confirmation.
 - The QR scan path itself is unchanged in behaviour (its 25 tests pass); the
   green screen says "Admitted by hand" for a manual admit.
 - Tests: `test/manual-admit.test.ts` (4), plus the unauthenticated-route list.
+
+### Request reference and review time (9 October 2026)
+
+Brainstorm idea 15 (first part). Every request has a short reference, "SAH-" and
+the first 6 characters of the ticket id (`src/guests/reference.ts`), shown after
+asking (one per ticket of an order), on the guest's ticket page, on request cards
+and in staff search, which also finds a request by it ("SAH-K7Q9XM", any case,
+with or without the dash; party-scoped). It identifies; it never opens a ticket.
+Migration **0025** adds `parties.review_time` ("Usually within 24 hours"), set in
+Settings > Requests and shown after asking and on a waiting ticket's page.
+Tests: `test/reference.test.ts`.
+
+Not built from idea 15: the "edit email" action with a notice to the old address
+(the existing name transfer already changes the email and replaces the link).

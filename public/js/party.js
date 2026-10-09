@@ -203,12 +203,13 @@
       el("div", { class: "s-two" },
         S.field(t("s_opens"), S.input("registration_opens_at_local", "datetime-local", { value: S.local(p.registration_opens_at, tz) }), t("s_opens_h")),
         S.field(t("s_closes"), S.input("registration_closes_at_local", "datetime-local", { value: S.local(p.registration_closes_at, tz) }), t("s_closes_h"))),
+      S.field(t("s_review_time"), S.input("review_time", "text", { maxlength: 80, value: p.review_time || "", dir: "auto" }), t("s_review_time_h")),
       S.field(t("s_per_email"), S.input("max_tickets_per_email", "number", { min: 1, max: 100, value: p.max_tickets_per_email === null ? "" : p.max_tickets_per_email, placeholder: t("s_no_limit"), inputmode: "numeric" }), t("s_per_email_h")),
     ], function (f, box) {
       if (f.elements.capacity.value === "" || f.elements.max_people_per_ticket.value === "") { S.say(box, "no", t("s_numbers_needed")); return null; }
       return { time_zone: party.time_zone, capacity: num(f, "capacity"), max_people_per_ticket: num(f, "max_people_per_ticket"),
         registration_opens_at_local: localOrNull(f, "registration_opens_at_local"), registration_closes_at_local: localOrNull(f, "registration_closes_at_local"),
-        max_tickets_per_email: num(f, "max_tickets_per_email") };
+        max_tickets_per_email: num(f, "max_tickets_per_email"), review_time: textOrNull(f, "review_time") };
     });
   }
 

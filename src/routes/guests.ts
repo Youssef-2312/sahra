@@ -24,6 +24,7 @@ import { emailTemplates, findEmail, groupNote, linkEmail } from "../guests/email
 import { checkAnswers, cleanInstagram, storedForm } from "../guests/form";
 import { currentPolicy, samePolicy, shownPolicy, type Policy } from "../guests/policy";
 import { linkPath, signLink, verifyLink } from "../guests/link";
+import { referenceOf } from "../guests/reference";
 import { turnstileConfigured, verifyTurnstile } from "../guests/turnstile";
 import { isTypeId, TypeDb } from "../guests/types";
 import { base32, parseToken, sha256, sha256hex } from "../lib/crypto";
@@ -381,11 +382,11 @@ guestRoutes.post("/parties/:party/signup", async (c) => {
     const order = [...found].sort((a, b) => (pos.get(a.id) ?? found.length) - (pos.get(b.id) ?? found.length));
     await flushChangeLog(c.var.db, c.var.ledger, now, order.map((t) => t.id));
     const tickets = await Promise.all(order.map(async (t) => ({
-      ticket_id: t.id, name: t.guest_name, link: linkPath(await signLink(env, { partyId, ticketId: t.id, version: 1 })),
+      ticket_id: t.id, reference: referenceOf(t.id), name: t.guest_name, link: linkPath(await signLink(env, { partyId, ticketId: t.id, version: 1 })),
     })));
     // Duplicate warning: the address's other pending/approved requests for this party.
     const earlier = party.existing_party === null ? party.email_tickets : Math.max(0, party.email_tickets - order.length);
-    return json(c, status, { status: "requested", ticket_id: ticketId, link: tickets[0]!.link, tickets, earlier_requests: earlier,
+    return json(c, status, { status: "requested", ticket_id: ticketId, reference: referenceOf(ticketId), link: tickets[0]!.link, tickets, earlier_requests: earlier,
       ...(earlier > 0 ? { notice: `This email already has ${earlier} other request${earlier === 1 ? "" : "s"} for this party.` } : {}) });
   };
   // A retry of a sign-up that was already stored: finish its change log only.
@@ -562,6 +563,7 @@ guestRoutes.get("/ticket", async (c) => {
     party: visiblePartyDetails(party, { kind: "ticket", status: t.status, released: t.released_at != null, onHold: t.hold_at != null }, c.var.deps.now()),
     ticket: {
       id: t.id,
+      reference: referenceOf(t.id),
       status: released ? "released" : t.status,
       guest_name: t.guest_name,
       people: t.people,

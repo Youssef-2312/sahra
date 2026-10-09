@@ -490,12 +490,15 @@
       c.addEventListener("click", async function () { try { await navigator.clipboard.writeText(u); c.textContent = t("copied"); } catch (e) { /* shown below */ } });
       return el("li", null,
         el("span", { class: "tl-text" }, el("strong", { text: i === 0 ? t("ticket_yours") : t("ticket_n", { n: i + 1 }) }),
-          x.name ? el("span", { class: "muted", text: x.name, attrs: { dir: "auto" } }) : null),
+          x.name ? el("span", { class: "muted", text: x.name, attrs: { dir: "auto" } }) : null,
+          el("span", { class: "small faint mono", text: x.reference || Sahra.ref(x.ticket_id), attrs: { dir: "ltr" } })),
         el("span", { class: "tl-actions" }, el("a", { class: "btn small-btn", text: t("open_short"), attrs: { href: x.link } }), c));
     })) : null;
     return el("section", { class: "done-view" },
       el("h1", { text: t("done_title") }),
       el("p", { text: list ? t("done_text_n", { n: done.tickets.length }) : t("done_text") }),
+      el("p", { class: "done-ref" }, el("span", { class: "small muted", text: t("ref_label") + " " }), el("strong", { text: done.reference || Sahra.ref(done.ticket_id), attrs: { dir: "ltr" } })),
+      data && data.details && data.details.review_time ? el("p", { class: "small", text: t("review_time_line", { text: data.details.review_time }), attrs: { dir: "auto" } }) : null,
       done.earlier > 0 ? el("p", { class: "notice maybe", text: t("earlier_n", { n: done.earlier }) }) : null,
       list,
       list ? null : el("a", { class: "btn primary", text: t("open_ticket"), attrs: { href: done.link } }),
@@ -622,7 +625,7 @@
       try { sessionStorage.removeItem(draftKey); } catch (x) { /* nothing kept */ }
       var all = r.body.tickets && r.body.tickets.length ? r.body.tickets : [{ link: r.body.link, name: null }];
       all.slice().reverse().forEach(function (x) { remember(x.link); });
-      done = { link: r.body.link, tickets: all, earlier: r.body.earlier_requests || 0 };
+      done = { link: r.body.link, tickets: all, earlier: r.body.earlier_requests || 0, reference: r.body.reference, ticket_id: r.body.ticket_id };
       built = false;
       render();
       window.scrollTo(0, 0);

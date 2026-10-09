@@ -1025,3 +1025,4 @@ html[lang="ar"] .home-story h2, html[lang="ar"] .home-guide h2 { letter-spacing:
 .sc-find-who strong { overflow-wrap: anywhere; }
 .sc-find-list .btn { margin: 0; }
 .scan-wrap > .btn:not(.link):not(.primary) { margin-top: 12px; }
+.done-ref { margin: 4px 0 14px; } .done-ref strong { font-family: var(--font-mono); font-size: 18px; letter-spacing: 0.04em; }
