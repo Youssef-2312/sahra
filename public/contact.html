@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<title>Contact | Sahra</title>
+<link rel="stylesheet" href="/css/sahra.css">
+</head>
+<body>
+<!-- Contact (owner request), after Nova's contact page: the ways to reach us on
+     one side, a short form on the other. The form stores nothing: "Send on
+     WhatsApp" or "Send by email" opens that app with the message filled in
+     (js/contact.js). Contact details are Nova's (Sahra is built and run by Nova). -->
+<main class="page">
+<article data-lang="en" data-tab="Contact">
+  <div class="contact-wrap">
+    <section class="contact-intro">
+      <p class="label-line">Contact</p>
+      <h1>Host your party with Sahra.</h1>
+      <p class="lede">Planning a house party? Tell us the date, roughly how many guests and what you have in mind. We reply within a day.</p>
+      <ul class="contact-list">
+        <li><span class="label-line">WhatsApp</span><a href="https://wa.me/201119990639" target="_blank" rel="noopener" dir="ltr">+20 111 999 0639</a></li>
+        <li><span class="label-line">Email</span><a href="mailto:novadevco@icloud.com" dir="ltr">novadevco@icloud.com</a></li>
+        <li><span class="label-line">Instagram</span><a href="https://www.instagram.com/nova.dev26/" target="_blank" rel="noopener" dir="ltr">@nova.dev26</a></li>
+      </ul>
+    </section>
+    <form class="contact-form card" data-contact novalidate>
+      <div class="field"><label for="c-name-en">Your name</label><input id="c-name-en" name="name" type="text" autocomplete="name" required maxlength="80"></div>
+      <div class="field"><label for="c-email-en">Email or phone</label><input id="c-email-en" name="reach" type="text" autocomplete="email" required maxlength="120"></div>
+      <div class="two">
+        <div class="field"><label for="c-date-en">Party date</label><input id="c-date-en" name="date" type="text" placeholder="e.g. 31 October" maxlength="40"></div>
+        <div class="field"><label for="c-guests-en">Guests</label>
+          <select id="c-guests-en" name="guests"><option value="">Not sure yet</option><option>Up to 50</option><option>50 to 150</option><option>150 to 300</option><option>More than 300</option></select></div>
+      </div>
+      <div class="field"><label for="c-msg-en">Tell us about your party</label><textarea id="c-msg-en" name="message" required maxlength="1500"></textarea></div>
+      <p class="notice no" data-error hidden>Please add your name, how to reach you and a short message.</p>
+      <div class="ab-actions">
+        <button class="btn primary" type="submit" data-via="whatsapp">Send on WhatsApp</button>
+        <button class="btn" type="submit" data-via="email">Send by email</button>
+      </div>
+      <p class="small muted">Sending opens WhatsApp or your email app with your message filled in. Nothing is stored on Sahra.</p>
+    </form>
+  </div>
+</article>
+
+<article data-lang="ar" dir="rtl" lang="ar" data-tab="تواصل معنا" hidden>
+  <div class="contact-wrap">
+    <section class="contact-intro">
+      <p class="label-line">تواصل معنا</p>
+      <h1>نظّم حفلتك مع سهرة.</h1>
+      <p class="lede">تخطط لحفلة منزلية؟ أخبرنا بالتاريخ وعدد الضيوف تقريبًا وما تفكر فيه. نرد خلال يوم.</p>
+      <ul class="contact-list">
+        <li><span class="label-line">واتساب</span><a href="https://wa.me/201119990639" target="_blank" rel="noopener" dir="ltr">+20 111 999 0639</a></li>
+        <li><span class="label-line">البريد</span><a href="mailto:novadevco@icloud.com" dir="ltr">novadevco@icloud.com</a></li>
+        <li><span class="label-line">إنستغرام</span><a href="https://www.instagram.com/nova.dev26/" target="_blank" rel="noopener" dir="ltr">@nova.dev26</a></li>
+      </ul>
+    </section>
+    <form class="contact-form card" data-contact novalidate>
+      <div class="field"><label for="c-name-ar">اسمك</label><input id="c-name-ar" name="name" type="text" autocomplete="name" required maxlength="80" dir="auto"></div>
+      <div class="field"><label for="c-email-ar">البريد أو رقم الهاتف</label><input id="c-email-ar" name="reach" type="text" autocomplete="email" required maxlength="120" dir="auto"></div>
+      <div class="two">
+        <div class="field"><label for="c-date-ar">تاريخ الحفلة</label><input id="c-date-ar" name="date" type="text" placeholder="مثلًا 31 أكتوبر" maxlength="40" dir="auto"></div>
+        <div class="field"><label for="c-guests-ar">عدد الضيوف</label>
+          <select id="c-guests-ar" name="guests"><option value="">لست متأكدًا بعد</option><option>حتى 50</option><option>من 50 إلى 150</option><option>من 150 إلى 300</option><option>أكثر من 300</option></select></div>
+      </div>
+      <div class="field"><label for="c-msg-ar">أخبرنا عن حفلتك</label><textarea id="c-msg-ar" name="message" required maxlength="1500" dir="auto"></textarea></div>
+      <p class="notice no" data-error hidden>أضف اسمك وطريقة التواصل معك ورسالة قصيرة.</p>
+      <div class="ab-actions">
+        <button class="btn primary" type="submit" data-via="whatsapp">أرسل على واتساب</button>
+        <button class="btn" type="submit" data-via="email">أرسل بالبريد</button>
+      </div>
+      <p class="small muted">الإرسال يفتح واتساب أو تطبيق البريد ورسالتك جاهزة. لا يُحفظ شيء على سهرة.</p>
+    </form>
+  </div>
+</article>
+</main>
+<script src="/js/i18n.js"></script>
+<script src="/js/ui.js"></script>
+<script src="/js/doc.js"></script>
+<script src="/js/contact.js"></script>
+</body>
+</html>

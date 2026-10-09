@@ -78,7 +78,7 @@
     if (failed) { app.appendChild(el("p", { class: "notice no", text: failed })); return; }
     if (!data) { app.appendChild(el("p", { class: "muted", text: t("loading") })); return; }
     var k = data.ticket, p = data.party;
-    document.title = p.name + " - Sahra";
+    Sahra.title(p.name);
     var usable = !!k.qr && !k.used && !k.on_hold && k.status === "released";
 
     var side = el("div", { class: "side" }), body = el("div");

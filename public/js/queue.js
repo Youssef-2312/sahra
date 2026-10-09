@@ -210,7 +210,7 @@
 
   function render() {
     Sahra.clear(app);
-    document.title = t("q_title") + " - Sahra";
+    Sahra.title(t("q_title"));
     if (!me) { app.appendChild(el("p", { class: "notice maybe", text: t("d_sign_in") })); return; }
     app.appendChild(el("a", { class: "btn link", text: t("q_back"), attrs: { href: "/dashboard.html" } }));
     app.appendChild(el("div", { class: "row" }, el("h1", { text: t("q_title") }), el("span", { class: "small muted", text: me.party.name, attrs: { dir: "auto" } })));

@@ -6,6 +6,7 @@
 //   Sahra.api.get/post(path)    fetch JSON; { status, body, ok }; network errors -> status 0
 //   Sahra.money(n)              "EGP 250" / "250 ج.م."; Sahra.when(ms, tz), Sahra.rel(ms)
 //   Sahra.boot({ render, me })  top bar, language switch and site footer; render() runs again on a switch
+//   Sahra.title(page)           the browser tab: "Page | Sahra"
 //
 // Top bar (owner decision): "Sahra" (home) at the start; the language switch and
 // "Sign in" (or the signed-in person, linking to their dashboard) at the end,
@@ -16,9 +17,9 @@
 "use strict";
 var Sahra = (function () {
   var KEY = "sahra_lang";
-  var NOVA_URL = "https://bynova.vercel.app/";
+  var NOVA_URL = "https://novadev.co/";
   var NOVA_INSTAGRAM = "https://www.instagram.com/nova.dev26/";
-  // Nova's logo: a copy of https://bynova.vercel.app/favicon.svg kept in the project (nothing loads from Nova at run time).
+  // Nova's logo: a copy of Nova's favicon (novadev.co, formerly bynova.vercel.app) kept in the project (nothing loads from Nova at run time).
   var NOVA_LOGO = "/img/nova-logo.svg";
   var csrf = null;
   var renderFn = null;
@@ -124,6 +125,9 @@ var Sahra = (function () {
     return f.format(Math.max(1, Math.round(a / 60000)) * Math.sign(d || 1), "minute");
   }
 
+  /** The browser tab, Nova's way: "Page | Sahra"; the home page is "Sahra | Private party tickets". */
+  function title(page) { document.title = page ? page + " | Sahra" : "Sahra | " + t("tab_home"); }
+
   function applyLang() {
     document.documentElement.lang = lang();
     document.documentElement.dir = lang() === "ar" ? "rtl" : "ltr";
@@ -192,6 +196,8 @@ var Sahra = (function () {
     logo.addEventListener("error", function () { logo.remove(); });
     node.appendChild(el("div", null,
       el("div", { class: "links" },
+        el("a", { text: t("about"), attrs: { href: "/about.html" } }),
+        el("a", { text: t("contact"), attrs: { href: "/contact.html" } }),
         el("a", { text: t("privacy"), attrs: { href: "/privacy.html" } }),
         el("a", { text: t("terms"), attrs: { href: "/terms.html" } })),
       el("div", { text: "\u00a9 " + new Date().getFullYear() + " Sahra" })));
@@ -210,5 +216,5 @@ var Sahra = (function () {
   }
 
   return { t: t, el: el, clear: clear, api: api, errorText: errorText, money: money, amount: amount, when: when, time: time, rel: rel,
-    lang: lang, boot: boot, store: store, token: token };
+    lang: lang, boot: boot, store: store, token: token, title: title };
 })();

@@ -23,9 +23,9 @@
 
   function render() {
     Sahra.clear(app);
-    document.title = t("si_title") + " - Sahra";
+    Sahra.title(t("si_title"));
     app.appendChild(el("div", { class: "signin-wrap" },
-      el("div", { class: "signin-panel" }, photo(), el("span", { class: "kicker", text: t("si_title") }), el("h1", { text: t("si_head") }), el("p", { text: t("si_text") })),
+      el("div", { class: "signin-panel" }, photo(), el("p", { class: "label-line", text: t("si_title") }), el("h1", { text: t("si_head") }), el("p", { text: t("si_text") })),
       el("div", null,
         option(t("si_staff"), t("si_staff_hint"), "/api/auth/google/start"),
         option(t("si_org"), t("si_org_hint"), "/api/auth/platform/start"),

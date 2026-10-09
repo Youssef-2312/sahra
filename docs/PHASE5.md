@@ -257,6 +257,25 @@ the `staging` branch; a finished piece the owner should try is pushed there too.
   covered: measured 0% uncovered over the loop at 390 and 1440 px, English and
   Arabic); every other row is shifted half a photo so no grid lines run
   through. Still under "reduce motion".
+- Headline (owner: "something more related to Sahra"): "Every great *sahra*
+  starts here" / «كل سهرة حلوة تبدأ من هنا» (sahra means an evening out).
+- Browser tabs after Nova's ("About | Nova"): "Page | Sahra" everywhere, the
+  home page "Sahra | Private party tickets" (Sahra.title).
+- About page (about.html, after Nova's About): "Ever searched TikTok for a
+  party tonight?", true facts only (one scan per ticket, two languages, no app,
+  QR by email), why Sahra, what organisers get, how hosting works, built by
+  Nova, contact. Contact page (contact.html, after Nova's Contact): Nova's
+  WhatsApp +20 111 999 0639, novadevco@icloud.com and @nova.dev26, and a form
+  that stores nothing: it opens WhatsApp or the email app with the message
+  filled in (js/contact.js). Nova's own form posts to formsubmit.co; doing the
+  same would send visitors' details to that service and needs the page policy
+  changed, so it waits for the owner's decision. Footer links: About, Contact,
+  Privacy, Terms; the home page's organiser row has "Contact us" and "Sign in".
+- Flat everywhere (owner: "remove the glossy buttons on all pages"): primary
+  buttons are solid Nova blue with no gradient, inset highlight, glow or shine;
+  cards, tiles, request cards, the sign-in panel and the page background are
+  flat colours with no soft shadows; the unused blueprint grid is gone.
+- Nova's site is now https://novadev.co/ (footer credit and About page).
 - Hero photos: done. The owner uploaded seven photos (and a blank PNG, left
   out), then five more; all are resized to 1000 px at most, blurred a little,
   stripped of metadata (no location data) and saved as

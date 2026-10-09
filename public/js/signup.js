@@ -252,7 +252,7 @@
     }
     built = true;
     Sahra.clear(app);
-    document.title = data && data.party ? data.party.name + " - Sahra" : "Sahra";
+    Sahra.title(data && data.party ? data.party.name : null);
     if (loadError) { app.appendChild(el("p", { class: "notice no", text: loadError })); return; }
     if (done) { app.appendChild(doneView()); return; }
     // Phones: one column. Desktop: the party on the side, the form beside it.

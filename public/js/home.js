@@ -15,8 +15,8 @@
   var parties = null, failed = null;
   var mine = [];          // [{ link, status, party_id, party_name, starts_at, time_zone }]
   var heroBox = document.getElementById("hero");
-  // The owner's twelve photos (6 and 7 look alike when blurred, so they are kept apart).
-  var HERO = [1, 8, 2, 9, 3, 10, 4, 11, 6, 12, 5, 7];
+  // The owner's sixteen photos (6 and 7 look alike when blurred, so they are kept apart).
+  var HERO = [1, 13, 8, 2, 14, 9, 3, 15, 10, 4, 16, 11, 6, 12, 5, 7];
 
   function remembered() {
     try {
@@ -53,21 +53,23 @@
   // The moving collage (owner): every photo the same size, edge to edge, in rows
   // tilted on a diagonal; the whole sheet slides along the diagonal as one, so
   // the arrangement never changes and a photo never touches a copy of itself.
-  // Row r starts STEP photos further along,
+  // Row r starts step() photos further along,
   // and every other row is shifted half a photo. With 12 photos a full
   // screen still shows each a few times; more photos, fewer repeats.
   var LANES = 7;    // enough tilted rows to cover the corners of a wide screen
-  var STEP = 9;     // the row offset that keeps copies of a photo furthest apart (worked out for 12 photos)
+  // Row offsets that looked best for 16 photos (measured: no photo twice on screen at 1440 px with 6, at 390 px with 10).
+  function step() { return window.matchMedia && window.matchMedia("(min-width: 900px)").matches ? 6 : 10; }
   function collage() {
     var lanes = [];
     for (var r = 0; r < LANES; r++) {
-      var k = (r * STEP) % HERO.length;
+      var k = (r * step()) % HERO.length;
       var order = HERO.slice(k).concat(HERO.slice(0, k));
       // Three copies: the row moves by exactly one copy, so the screen is always covered and the loop has no seam.
       var tiles = order.concat(order, order).map(function (n, i) { return el("div", { class: "ph" }, photo(n, i < HERO.length * 2)); });
       lanes.push(el("div", { class: "lane" }, tiles));
     }
-    return el("div", { class: "hero-bg", attrs: { "aria-hidden": "true" } }, el("div", { class: "tilt" }, lanes));
+    // Decoration only: always laid out left to right, so Arabic gets the same no-repeat arrangement.
+    return el("div", { class: "hero-bg", attrs: { "aria-hidden": "true", dir: "ltr" } }, el("div", { class: "tilt" }, lanes));
   }
 
   function hero() {
@@ -215,12 +217,14 @@
       })),
       el("div", { class: "host" },
         el("div", null, el("h3", { text: t("h_host_t") }), el("p", { class: "muted", text: t("h_host_p") })),
-        el("a", { class: "btn", text: t("sign_in"), attrs: { href: "/signin.html" } })));
+        el("div", { class: "host-actions" },
+          el("a", { class: "btn primary", text: t("h_contact"), attrs: { href: "/contact.html" } }),
+          el("a", { class: "btn", text: t("sign_in"), attrs: { href: "/signin.html" } }))));
   }
 
   function render() {
     Sahra.clear(app);
-    document.title = "Sahra";
+    Sahra.title(null);
     Sahra.clear(heroBox).appendChild(hero());
     var m = mineSection();
     if (m) m.forEach(function (n) { app.appendChild(n); });
