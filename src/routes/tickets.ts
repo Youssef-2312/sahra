@@ -179,41 +179,92 @@ ticketRoutes.post("/types/:id", requireAuth(MANAGERS), async (c) => {
  */
 ticketRoutes.post("/issue", requireAuth(MANAGERS), async (c) => {
   const b = await readJson(c);
-  const name = typeof b?.name === "string" ? b.name.trim().replace(/\s+/g, " ") : "";
-  const email = b?.email === undefined || b?.email === null || b?.email === "" ? null : guestEmail(b.email);
-  const people = b?.people === undefined ? 1 : b.people;
-  const typeId = b?.type_id === undefined || b?.type_id === null ? null : b.type_id;
-  if (!b || !isUuid(b.op) || name.length < 1 || name.length > 80 || (b.email && !email)
-    || typeof people !== "number" || !Number.isInteger(people) || people < 1 || people > 100
-    || (typeId !== null && !isTypeId(typeId))
-    || (b.complimentary !== undefined && typeof b.complimentary !== "boolean") || (b.release !== undefined && typeof b.release !== "boolean")) {
+  const row = issueRow(b);
+  if (!b || !isUuid(b.op) || !row || (b.complimentary !== undefined && typeof b.complimentary !== "boolean")
+    || (b.release !== undefined && typeof b.release !== "boolean") || (b.cash !== undefined && typeof b.cash !== "boolean")) {
     return json(c, 400, { error: "invalid_request" });
   }
-  const { sess, actor, now } = sessOf(c);
+  const { sess } = sessOf(c);
   const id = base32((await sha256(`sahra-issue-v1|${sess.partyId}|${b.op}`)).subarray(0, 10), 16);
+  const r = await issueOne(c, { id, ...row, complimentary: b.complimentary === true && b.cash !== true, release: b.release === true, cash: b.cash === true });
+  if (r.refusal) return r.refusal;
+  await flushChangeLog(c.var.db, c.var.ledger, sessOf(c).now, [id]);
+  return json(c, r.status === "created" ? 201 : 200, { status: r.status, ticket_id: id, link: r.link });
+});
+
+/** One guest of an issue or import request, validated; null when a field is wrong. */
+function issueRow(b: Record<string, unknown> | null) {
+  if (!b) return null;
+  const name = typeof b.name === "string" ? b.name.trim().replace(/\s+/g, " ") : "";
+  const email = b.email === undefined || b.email === null || b.email === "" ? null : guestEmail(b.email);
+  const people = b.people === undefined ? 1 : b.people;
+  const typeId = b.type_id === undefined || b.type_id === null || b.type_id === "" ? null : b.type_id;
+  if (name.length < 1 || name.length > 80 || (b.email && !email) || typeof people !== "number" || !Number.isInteger(people)
+    || people < 1 || people > 100 || (typeId !== null && !isTypeId(typeId))) return null;
+  return { name, email, people, typeId: typeId as string | null };
+}
+
+/**
+ * Issues one approved ticket (staff-issued, or a cash guest): the same capacity,
+ * type and people rules as a guest request, inside the INSERT (GuestDb.issue).
+ * With `release`, the QR is sent (email in the same batch when there is an address).
+ */
+async function issueOne(c: Ctx, a: { id: string; name: string; email: string | null; people: number; typeId: string | null;
+  complimentary: boolean; release: boolean; cash: boolean }): Promise<{ status: "created" | "already" | string; link: string; refusal?: Response }> {
+  const { sess, actor, now } = sessOf(c);
   const gdb = new GuestDb(c.var.db.driver);
   const env = envRecord(c);
-  const already = await gdb.ticket(sess, id, now);
-  let status: "created" | "already";
-  if (already) {
-    status = "already";
-  } else {
-    const over = await chargeStaff(c, "issue", 1, MANAGERS);
-    if (over) return over;
-    const release = b.release === true;
-    let mail: OutboxRow | null = null;
-    if (release && email) {
-      const party = await new PartyDb(c.var.db.driver).get(sess.partyId);
-      const link = await signLink(env, { partyId: sess.partyId, ticketId: id, version: 1 });
-      mail = releasedEmail({ origin: c.env.PUBLIC_ORIGIN, partyId: sess.partyId, partyName: party?.name ?? "", ticketId: id, to: email,
-        guestName: name, people, link, now, actor, templates: await emailTemplates(c.var.db.driver, sess.partyId) });
-    }
-    const r = await gdb.issue(sess, { id, name, email, people, typeId, complimentary: b.complimentary === true, release, mail }, now, actor, newId());
-    if (r !== "created" && r !== "already") return json(c, r === "too_many_people" ? 400 : 409, { error: r === "refused" ? "not_allowed" : r });
-    status = r;
+  const link = linkPath(await signLink(env, { partyId: sess.partyId, ticketId: a.id, version: 1 }));
+  if (await gdb.ticket(sess, a.id, now)) return { status: "already", link };
+  const over = await chargeStaff(c, "issue", 1, MANAGERS);
+  if (over) return { status: "limited", link, refusal: over };
+  let mail: OutboxRow | null = null;
+  if (a.release && a.email) {
+    const party = await new PartyDb(c.var.db.driver).get(sess.partyId);
+    const signed = await signLink(env, { partyId: sess.partyId, ticketId: a.id, version: 1 });
+    mail = releasedEmail({ origin: c.env.PUBLIC_ORIGIN, partyId: sess.partyId, partyName: party?.name ?? "", ticketId: a.id, to: a.email,
+      guestName: a.name, people: a.people, link: signed, now, actor, templates: await emailTemplates(c.var.db.driver, sess.partyId) });
   }
-  await flushChangeLog(c.var.db, c.var.ledger, now, [id]);
-  return json(c, status === "created" ? 201 : 200, { status, ticket_id: id, link: linkPath(await signLink(env, { partyId: sess.partyId, ticketId: id, version: 1 })) });
+  const r = await gdb.issue(sess, { id: a.id, name: a.name, email: a.email, people: a.people, typeId: a.typeId, complimentary: a.complimentary,
+    release: a.release, mail, cash: a.cash }, now, actor, newId());
+  if (r === "created" || r === "already") return { status: r, link };
+  return { status: r === "refused" ? "not_allowed" : r, link,
+    refusal: json(c, r === "too_many_people" ? 400 : 409, { error: r === "refused" ? "not_allowed" : r }) };
+}
+
+/**
+ * Cash guests from a CSV file (brainstorm ideas 9 and 17), in chunks of at most
+ * IMPORT_CHUNK rows per request (each row is one guarded batch, like /issue). The
+ * page parses the file, shows the preview and the summary, and sends the rows
+ * only after "Confirm". Body: op (UUID for the whole file), start (the first row's
+ * index in the file), release (send QRs now, or add only), rows: [{ name, email,
+ * people, type_id }]. A retry of the same op and start creates nobody twice (the
+ * ticket id comes from op + row index). Answer: one result per row.
+ */
+// About 5 database queries per row (exists check, counter, party and email text when sending, the batch): 5 rows stay well under the free plan's 50 per request.
+export const IMPORT_CHUNK = 5;
+ticketRoutes.post("/import", requireAuth(MANAGERS), async (c) => {
+  const b = await readJson(c);
+  const rows = Array.isArray(b?.rows) ? (b!.rows as unknown[]) : null;
+  const start = b?.start;
+  if (!b || !isUuid(b.op) || typeof b.release !== "boolean" || !rows || rows.length < 1 || rows.length > IMPORT_CHUNK
+    || typeof start !== "number" || !Number.isInteger(start) || start < 0 || start > 5000) {
+    return json(c, 400, { error: "invalid_request", max_rows: IMPORT_CHUNK });
+  }
+  const { sess, now } = sessOf(c);
+  const results: { row: number; status: string; ticket_id?: string }[] = [];
+  const ids: string[] = [];
+  for (let i = 0; i < rows.length; i++) {
+    const row = issueRow(typeof rows[i] === "object" && rows[i] !== null ? (rows[i] as Record<string, unknown>) : null);
+    if (!row) { results.push({ row: start + i, status: "invalid" }); continue; }
+    const id = base32((await sha256(`sahra-import-v1|${sess.partyId}|${b.op}|${start + i}`)).subarray(0, 10), 16);
+    const r = await issueOne(c, { id, ...row, complimentary: false, release: b.release, cash: true });
+    if (r.status === "limited") { results.push({ row: start + i, status: "limited" }); break; }
+    results.push({ row: start + i, status: r.status, ticket_id: r.status === "created" || r.status === "already" ? id : undefined });
+    if (r.status === "created" || r.status === "already") ids.push(id);
+  }
+  if (ids.length) await flushChangeLog(c.var.db, c.var.ledger, now, ids);
+  return json(c, 200, { results });
 });
 
 /** Find a guest: `q` = ticket id, email (starts with) or name (contains). At most 20, newest first. */

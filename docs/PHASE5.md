@@ -638,3 +638,21 @@ Refunds lists due and done with totals; owners and admins tick "refunded"
 (audited). Guest pages say the party was cancelled, hide the QR, and show the
 refund state. Refunds are in the backup. Tests: `test/cancel.test.ts`.
 Checked in the browser at 390 px (cancel, refunds list, guest ticket page, admission refused to reopen); the refund totals were made smaller afterwards so "EGP 450" does not wrap on a phone (not yet re-checked in the browser).
+
+### Cash guests: one by one or from a CSV file (9 October 2026)
+
+Brainstorm ideas 9 and 17. Migration **0027** adds `tickets.payment` ('cash').
+- Guests > Issue a ticket: Payment "Paid in cash" (keeps the type's price) or
+  "Complimentary". `POST /api/tickets/issue` takes `cash: true`.
+- Guests > Import cash guests: a CSV (name, email, ticket type, people; template
+  to download; commas or semicolons; Excel's BOM handled) is read in the browser;
+  the preview flags a missing name, a bad email, a duplicate email, an unknown
+  ticket type, more than the tickets per email, and rows over the places left;
+  the summary says "Add N guests, paid in cash, and send their QR codes", with
+  "Send QRs now" (default) or "Add only, send later"; nothing is created before
+  Confirm. `POST /api/tickets/import` takes 5 rows per request (about 5 queries
+  per row), each through the same guarded INSERT as a staff-issued ticket
+  (capacity, type places, people per ticket, and the tickets-per-email limit for
+  cash), ids from the file's op and row index so a retry creates nobody twice.
+- The dashboard's money tile shows the cash part; the CSV download has "paid by".
+- Tests: `test/cash.test.ts`. Browser: 390 px, a 6-row file with 4 problem rows.

@@ -451,7 +451,7 @@ export class GuestDb {
     const r = await this.driver.all(sql`SELECT t.id, t.status, t.people, t.guest_name, t.guest_email, t.instagram, t.answers, t.created_at,
         t.approved_at, ap.name AS approved_by, t.rejected_at, rj.name AS rejected_by, t.reject_reason,
         t.released_at, rl.name AS released_by, t.used_at, us.name AS scanned_by, t.qr_version, t.hold_at,
-        ty.name AS type_name, t.price, t.price * t.people AS total_price
+        ty.name AS type_name, t.price, t.price * t.people AS total_price, t.payment
       FROM tickets t
         LEFT JOIN ticket_types ty ON ty.id = t.type_id
         LEFT JOIN staff ap ON ap.id = t.approved_by LEFT JOIN staff rj ON rj.id = t.rejected_by
@@ -495,7 +495,9 @@ export class GuestDb {
   async issue(sess: SessionRef, a: {
     id: string; name: string; email: string | null; people: number; typeId: string | null; complimentary: boolean;
     release: boolean; mail: OutboxRow | null;
-  }, now: number, actor: string, op: string): Promise<"created" | "already" | "type_unavailable" | "type_full" | "full" | "too_many_people" | "refused"> {
+    /** Paid in cash to the organiser (migrations/0027): the type's price is kept, and the per-email limit applies. */
+    cash?: boolean;
+  }, now: number, actor: string, op: string): Promise<"created" | "already" | "type_unavailable" | "type_full" | "full" | "too_many_people" | "email_limit" | "refused"> {
     const ok = sessionValid(sess, MANAGERS, now);
     const tt = sql`FROM ticket_types tt WHERE tt.id = ${a.typeId} AND tt.party_id = p.id`;
     const typeOk = a.typeId === null ? sql`1` : sql`EXISTS (SELECT 1 ${tt} AND tt.archived_at IS NULL)`;
@@ -504,22 +506,25 @@ export class GuestDb {
     const price = a.complimentary ? sql`0` : a.typeId === null ? sql`NULL` : sql`(SELECT tt.price ${tt})`;
     const roomOk = sql`${held(sql`p.id`)} + ${a.people} <= p.capacity`;
     const peopleFit = peopleOk(a.typeId, a.people);
+    // Cash guests follow the sign-up's tickets-per-email limit too (idea 9: "the same rules as a normal sign-up").
+    const emailOk = a.cash && a.email ? sql`(p.max_tickets_per_email IS NULL OR (SELECT COUNT(*) FROM tickets e WHERE e.party_id = p.id
+      AND e.guest_email = ${a.email} AND e.status IN ('pending', 'approved')) + 1 <= p.max_tickets_per_email)` : sql`1`;
     const rel = a.release ? now : null;
     const rs = await this.driver.batch([
       sql`INSERT INTO tickets (id, party_id, status, people, guest_name, guest_email, type_id, price, created_at,
-          approved_at, approved_by, released_at, released_by, last_op, last_action)
+          approved_at, approved_by, released_at, released_by, last_op, last_action, payment)
         SELECT ${a.id}, p.id, 'approved', ${a.people}, ${a.name}, ${a.email}, ${a.typeId}, ${price}, ${now},
-          ${now}, ${actor}, ${rel}, ${a.release ? actor : null}, ${op}, 'ticket_issued'
+          ${now}, ${actor}, ${rel}, ${a.release ? actor : null}, ${op}, 'ticket_issued', ${a.cash ? "cash" : null}
         FROM parties p
-        WHERE p.id = ${sess.partyId} AND ${ok} AND ${peopleFit} AND ${roomOk} AND ${typeOk} AND ${placesOk}
+        WHERE p.id = ${sess.partyId} AND ${ok} AND ${peopleFit} AND ${roomOk} AND ${typeOk} AND ${placesOk} AND ${emailOk}
           AND NOT EXISTS (SELECT 1 FROM tickets x WHERE x.id = ${a.id})`,
       audit(now, actor, "ticket_issued", "ticket", sql`SELECT party_id, id, rev FROM tickets WHERE id = ${a.id} AND last_op = ${op}`,
-        a.complimentary ? "complimentary" : null),
+        a.cash ? "paid in cash" : a.complimentary ? "complimentary" : null),
       ...(a.mail ? [outboxInsert(a.mail, sql`EXISTS (SELECT 1 FROM tickets WHERE id = ${a.id} AND party_id = ${sess.partyId}
         AND last_op = ${op} AND last_action = 'ticket_issued' AND released_at IS NOT NULL AND guest_email = ${a.mail.toEmail})`)] : []),
       sql`SELECT (SELECT party_id FROM tickets WHERE id = ${a.id}) AS existing_party, ${ok} AS session_ok,
           CASE WHEN NOT ${peopleFit} THEN 'too_many_people' WHEN NOT ${typeOk} THEN 'type_unavailable'
-            WHEN NOT ${placesOk} THEN 'type_full' WHEN NOT ${roomOk} THEN 'full' ELSE 'refused' END AS why
+            WHEN NOT ${placesOk} THEN 'type_full' WHEN NOT ${roomOk} THEN 'full' WHEN NOT ${emailOk} THEN 'email_limit' ELSE 'refused' END AS why
         FROM parties p WHERE p.id = ${sess.partyId}`,
     ]);
     if (rs[0]!.meta.changes === 1) return "created";
@@ -527,7 +532,7 @@ export class GuestDb {
     if (!d || !d.session_ok) return "refused";
     if (d.existing_party === sess.partyId) return "already";
     if (d.existing_party !== null) return "refused";
-    return d.why as "type_unavailable" | "type_full" | "full" | "too_many_people" | "refused";
+    return d.why as "type_unavailable" | "type_full" | "full" | "too_many_people" | "email_limit" | "refused";
   }
 
   /**
@@ -565,7 +570,8 @@ export class GuestDb {
           COALESCE(SUM(CASE WHEN t.used_at IS NOT NULL THEN t.people END), 0) AS admitted,
           COALESCE(SUM(CASE WHEN t.used_at IS NOT NULL THEN 1 END), 0) AS admitted_tickets,
           COALESCE(SUM(CASE WHEN t.status = 'approved' THEN COALESCE(t.price, 0) * t.people END), 0) AS money_approved,
-          COALESCE(SUM(CASE WHEN t.status = 'pending' THEN COALESCE(t.price, 0) * t.people END), 0) AS money_pending
+          COALESCE(SUM(CASE WHEN t.status = 'pending' THEN COALESCE(t.price, 0) * t.people END), 0) AS money_pending,
+          COALESCE(SUM(CASE WHEN t.status = 'approved' AND t.payment = 'cash' THEN COALESCE(t.price, 0) * t.people END), 0) AS money_cash
         FROM parties p LEFT JOIN tickets t ON t.party_id = p.id LEFT JOIN ticket_types ty ON ty.id = t.type_id
         WHERE p.id = ${sess.partyId} AND ${ok}
         GROUP BY t.type_id`,
@@ -582,7 +588,7 @@ export class GuestDb {
     return {
       byType: rs[0]!.results as { capacity: number; type_id: string | null; type_name: string | null; quantity: number | null;
         tickets: number; pending: number; pending_tickets: number; approved: number; released: number; admitted: number; admitted_tickets: number;
-        money_approved: number; money_pending: number }[],
+        money_approved: number; money_pending: number; money_cash: number }[],
       slots: rs[1]!.results as { slot: number; used_by: string | null; scanner: string | null; tickets: number; people: number }[],
       types: rs[2]!.results as { id: string; name: string; quantity: number | null; archived_at: number | null; staff_only: number }[],
       hours: rs[3]!.results as { hour: number; requests: number; people: number }[],

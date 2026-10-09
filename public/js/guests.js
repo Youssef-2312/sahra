@@ -164,7 +164,7 @@
       el("div", { class: "s-two" },
         S.field(t("g_people"), S.input("people", "number", { min: 1, max: 50, value: 1, inputmode: "numeric" })),
         types.length ? S.field(t("g_type"), S.select("type_id", typeOptions(false))) : null),
-      S.check("complimentary", t("g_comp"), true, t("g_comp_h")),
+      S.field(t("g_payment"), S.select("payment", [["cash", t("g_pay_cash")], ["free", t("g_pay_free")]], "cash"), t("g_payment_h")),
       S.check("release", t("g_release"), true, t("g_release_h")),
       el("div", { class: "s-save" }, el("button", { class: "btn primary small-btn", text: t("g_issue_go"), attrs: { type: "submit" } }), box),
       linkBox);
@@ -178,7 +178,7 @@
       S.say(box, "maybe", t("s_saving"));
       var r = await S.act("/api/tickets/issue", { op: opFor("issue"), name: name, email: f.elements.email.value.trim() || null,
         people: Number(f.elements.people.value || 1), type_id: f.elements.type_id ? f.elements.type_id.value || null : null,
-        complimentary: f.elements.complimentary.checked, release: f.elements.release.checked });
+        cash: f.elements.payment.value === "cash", complimentary: f.elements.payment.value === "free", release: f.elements.release.checked });
       btn.disabled = false;
       if (r.status !== 503) delete ops.issue;
       Sahra.clear(linkBox);
@@ -191,6 +191,160 @@
       loadStats();
     });
     return S.section("issue", t("g_issue"), t("g_issue_p"), f);
+  }
+
+  // ------------------------------------------------------------- cash guests from a CSV file
+  // Brainstorm ideas 9 and 17: the organiser's own file (name, email, ticket type, people),
+  // read here; a preview flags problems; nothing is created until "Confirm". Rows go to
+  // the server 5 at a time (POST /api/tickets/import), which applies every rule again.
+
+  var CHUNK = 5;
+  var imp = null;      // { rows, release, op, sent, results, busy }
+
+  /** CSV text to rows of cells (quotes, "" inside quotes, commas or semicolons, CRLF). */
+  function parseCsv(text) {
+    var first = text.split(/\r?\n/)[0] || "";
+    var sep = (first.match(/;/g) || []).length > (first.match(/,/g) || []).length ? ";" : ",";
+    var out = [], row = [], cell = "", q = false;
+    for (var i = 0; i < text.length; i++) {
+      var ch = text[i];
+      if (q) {
+        if (ch === '"' && text[i + 1] === '"') { cell += '"'; i++; }
+        else if (ch === '"') q = false;
+        else cell += ch;
+      } else if (ch === '"') q = true;
+      else if (ch === sep) { row.push(cell); cell = ""; }
+      else if (ch === "\n" || ch === "\r") {
+        if (ch === "\r" && text[i + 1] === "\n") i++;
+        row.push(cell); cell = "";
+        if (row.some(function (c) { return c.trim() !== ""; })) out.push(row);
+        row = [];
+      } else cell += ch;
+    }
+    row.push(cell);
+    if (row.some(function (c) { return c.trim() !== ""; })) out.push(row);
+    return out;
+  }
+
+  function prepare(text) {
+    var cells = parseCsv(text.replace(/^\ufeff/, ""));
+    if (!cells.length) return { error: t("g_imp_empty") };
+    var head = cells[0].map(function (h) { return h.trim().toLowerCase(); });
+    var col = function (names) { for (var i = 0; i < head.length; i++) if (names.indexOf(head[i]) >= 0) return i; return -1; };
+    var ci = { name: col(["name", "guest name", "الاسم"]), email: col(["email", "e-mail", "البريد", "البريد الإلكتروني"]),
+      type: col(["ticket type", "type", "ticket", "نوع التذكرة"]), people: col(["people", "guests", "الأشخاص"]) };
+    var body = cells.slice(1);
+    if (ci.name < 0) { ci = { name: 0, email: 1, type: 2, people: 3 }; body = cells; }
+    var open = types.filter(function (x) { return !x.archived; });
+    var max = party && party.max_tickets_per_email, left = stats ? stats.places_left : Infinity, used = 0, perEmail = {};
+    var rows = body.slice(0, 2000).map(function (c, i) {
+      var get = function (k) { return ci[k] >= 0 && c[ci[k]] !== undefined ? String(c[ci[k]]).trim() : ""; };
+      var r = { line: i + 1, name: get("name").replace(/\s+/g, " "), email: get("email").toLowerCase(), people: Number(get("people") || 1), typeName: get("type"), type_id: null, problems: [] };
+      if (!r.name) r.problems.push(t("g_imp_p_name"));
+      else if (r.name.length > 80) r.problems.push(t("g_imp_p_long"));
+      if (r.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(r.email)) r.problems.push(t("g_imp_p_email"));
+      if (!Number.isInteger(r.people) || r.people < 1 || r.people > 50) { r.problems.push(t("g_imp_p_people")); r.people = 1; }
+      if (open.length) {
+        var match = r.typeName ? open.filter(function (x) { return x.name.toLowerCase() === r.typeName.toLowerCase(); })[0] : (open.length === 1 ? open[0] : null);
+        if (match) r.type_id = match.id; else r.problems.push(r.typeName ? t("g_imp_p_type", { type: r.typeName }) : t("g_imp_p_type_needed"));
+      }
+      if (r.email) {
+        perEmail[r.email] = (perEmail[r.email] || 0) + 1;
+        if (perEmail[r.email] > 1) r.problems.push(t("g_imp_p_dup"));
+        else if (max && perEmail[r.email] > max) r.problems.push(t("g_imp_p_max", { n: max }));
+      }
+      if (!r.problems.length) { used += r.people; if (used > left) r.problems.push(t("g_imp_p_full")); }
+      return r;
+    });
+    if (body.length > 2000) return { error: t("g_imp_too_many") };
+    return { rows: rows };
+  }
+
+  function importCard() {
+    var box = S.sayBox();
+    var template = "name,email,ticket type,people\r\nMona Salem,mona@example.com," + (types[0] ? types[0].name : "") + ",1\r\n";
+    var dl = el("a", { class: "btn small-btn", text: t("g_imp_template"), attrs: { download: "sahra-guests.csv",
+      href: URL.createObjectURL(new Blob(["\ufeff" + template], { type: "text/csv" })) } });
+    var file = el("input", { attrs: { type: "file", accept: ".csv,text/csv", id: "imp-file" }, class: "sr-file" });
+    var pick = el("label", { class: "btn small-btn", text: t("g_imp_choose"), attrs: { for: "imp-file" } });
+    file.addEventListener("change", function () {
+      var f = file.files && file.files[0];
+      if (!f) return;
+      if (f.size > 512 * 1024) { S.say(box, "no", t("g_imp_too_big")); return; }
+      var reader = new FileReader();
+      reader.onload = function () {
+        var p = prepare(String(reader.result || ""));
+        if (p.error) { S.say(box, "no", p.error); return; }
+        imp = { rows: p.rows, release: true, op: crypto.randomUUID(), sent: 0, results: {}, busy: false, file: f.name };
+        redrawImport();
+      };
+      reader.readAsText(f);
+    });
+    var body;
+    if (!imp) {
+      body = [el("p", { class: "small muted", text: t("g_imp_how") }), el("div", { class: "g-actions" }, dl, file, pick), box];
+    } else {
+      var ok = imp.rows.filter(function (r) { return !r.problems.length; });
+      var bad = imp.rows.length - ok.length;
+      var done = imp.sent >= ok.length && imp.sent > 0;
+      var counts = {};
+      Object.keys(imp.results).forEach(function (k) { var st = imp.results[k]; counts[st] = (counts[st] || 0) + 1; });
+      var list = el("ul", { class: "s-list imp-list" }, imp.rows.slice(0, 300).map(function (r) {
+        var res = imp.results[r.line];
+        var pill = r.problems.length ? el("span", { class: "pill no", text: t("g_imp_skip") })
+          : res ? el("span", { class: "pill " + (res === "created" || res === "already" ? "yes" : "no"), text: t("g_imp_r_" + res) || res })
+            : el("span", { class: "pill", text: t("g_imp_ready") });
+        return el("li", { class: r.problems.length ? "off" : null },
+          el("div", { class: "s-type-text" }, el("strong", { text: (r.name || "-"), attrs: { dir: "auto" } }),
+            el("span", { class: "muted small", text: [r.email, r.typeName, S.tn("g_people_n", r.people)].filter(Boolean).join(" \u00b7 "), attrs: { dir: "auto" } }),
+            r.problems.length ? el("span", { class: "small say no", text: r.problems.join(" ") }) : null),
+          pill);
+      }));
+      var summary = el("p", { class: "imp-summary" }, el("strong", { text: imp.release ? t("g_imp_sum_send", { n: ok.length }) : t("g_imp_sum_add", { n: ok.length }) }),
+        bad ? el("span", { class: "muted small imp-skipped", text: S.tn("g_imp_skipped", bad) }) : null);
+      var choice = el("fieldset", { class: "s-modes" }, [["now", true], ["later", false]].map(function (o) {
+        var r = el("input", { attrs: { type: "radio", name: "imp-release", value: o[0], disabled: imp.busy || imp.sent > 0 } });
+        r.checked = imp.release === o[1];
+        r.addEventListener("change", function () { imp.release = o[1]; redrawImport(); });
+        return el("label", { class: "choice" }, r, el("span", { class: "grow" }, el("strong", { text: t("g_imp_" + o[0]) }), el("span", { class: "muted small", text: t("g_imp_" + o[0] + "_h") })));
+      }));
+      var go = el("button", { class: "btn primary small-btn", text: imp.busy ? t("g_imp_sending", { n: imp.sent, of: ok.length }) : t("g_imp_confirm"),
+        attrs: { type: "button", disabled: imp.busy || !ok.length || done } });
+      go.addEventListener("click", function () { runImport(ok); });
+      var again = el("button", { class: "btn link", text: t("g_imp_other"), attrs: { type: "button", disabled: imp.busy } });
+      again.addEventListener("click", function () { imp = null; redrawImport(); });
+      body = [el("p", { class: "small muted", text: t("g_imp_file", { name: imp.file, n: imp.rows.length }) }), list,
+        imp.rows.length > 300 ? el("p", { class: "small muted", text: t("g_imp_more", { n: imp.rows.length - 300 }) }) : null,
+        done ? el("p", { class: "notice yes", text: t("g_imp_done", { created: (counts.created || 0) + (counts.already || 0), refused: ok.length - (counts.created || 0) - (counts.already || 0) }) }) : [choice, summary],
+        imp.error ? el("p", { class: "notice no", text: imp.error }) : null,
+        el("div", { class: "s-save" }, done ? null : go, again)];
+    }
+    importNode = S.section("import", t("g_import"), t("g_import_p"), el("div", null, body));
+    return importNode;
+  }
+  var importNode = null;
+  function redrawImport() {
+    var old = importNode;
+    if (old && old.parentNode) old.parentNode.replaceChild(importCard(), old);
+  }
+
+  async function runImport(ok) {
+    if (imp.busy) return;
+    if (!window.confirm(imp.release ? t("g_imp_sum_send", { n: ok.length }) + "?" : t("g_imp_sum_add", { n: ok.length }) + "?")) return;
+    imp.busy = true; imp.error = null; redrawImport();
+    while (imp.sent < ok.length) {
+      var part = ok.slice(imp.sent, imp.sent + CHUNK);
+      var r = await S.act("/api/tickets/import", { op: imp.op, start: imp.sent, release: imp.release,
+        rows: part.map(function (x) { return { name: x.name, email: x.email || null, people: x.people, type_id: x.type_id }; }) });
+      if (!r.ok) { imp.error = S.why(r); break; }
+      r.body.results.forEach(function (x) { imp.results[part[x.row - imp.sent].line] = x.status; });
+      if (r.body.results.some(function (x) { return x.status === "limited"; })) { imp.error = t("e_party_limit"); break; }
+      imp.sent += part.length;
+      redrawImport();
+    }
+    imp.busy = false;
+    redrawImport();
+    loadStats();
   }
 
   // ------------------------------------------------------------- announcement
@@ -291,7 +445,7 @@
     if (tilesNode) app.appendChild(tilesNode);
     app.appendChild(el("div", { class: "g-cols" },
       el("div", { class: "g-main" }, refundsNode = refundsCard(), findCard(), scannersNode = scanners(), manualCard()),
-      el("div", { class: "g-side" }, issueCard(), announceCard())));
+      el("div", { class: "g-side" }, issueCard(), importCard(), announceCard())));
   }
 
   async function loadStats() {

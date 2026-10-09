@@ -335,11 +335,11 @@
     var keys = {};
     all.forEach(function (x) { Object.keys(x.answers || {}).forEach(function (k) { keys[k] = true; }); });
     var qs = Object.keys(keys);
-    var head = ["ticket", "status", "name", "email", "instagram", "people", "type", "price per person (EGP)", "total (EGP)", "requested", "approved", "approved by", "rejected", "rejected by",
+    var head = ["ticket", "status", "name", "email", "instagram", "people", "type", "price per person (EGP)", "total (EGP)", "paid by", "requested", "approved", "approved by", "rejected", "rejected by",
       "reason", "QR sent", "QR sent by", "scanned", "scanned by"].concat(qs);
     var lines = [head.map(csvCell).join(",")];
     all.forEach(function (x) {
-      lines.push([x.id, x.status, x.guest_name, x.guest_email, x.instagram ? "@" + x.instagram : "", x.people, x.type_name, x.price, x.total_price, iso(x.created_at), iso(x.approved_at), x.approved_by,
+      lines.push([x.id, x.status, x.guest_name, x.guest_email, x.instagram ? "@" + x.instagram : "", x.people, x.type_name, x.price, x.total_price, x.payment === "cash" ? "cash" : "", iso(x.created_at), iso(x.approved_at), x.approved_by,
         iso(x.rejected_at), x.rejected_by, x.reject_reason, iso(x.released_at), x.released_by, iso(x.used_at), x.scanned_by]
         .concat(qs.map(function (q) { return (x.answers || {})[q]; })).map(csvCell).join(","));
     });

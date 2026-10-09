@@ -62,6 +62,7 @@ const cases: Case[] = [
   ["role change, junk session", "POST", "/api/staff/:id/role", (h) => h.req(`/api/staff/${id}/role`, { method: "POST", headers: JSON_H, cookies: junkCookie, body: JSON.stringify({ role: "owner" }) })],
   ["disable, junk session", "POST", "/api/staff/:id/disable", (h) => h.req(`/api/staff/${id}/disable`, { method: "POST", headers: JSON_H, cookies: junkCookie })],
   ["scan, no session", "POST", "/api/scan", (h) => h.req("/api/scan", { method: "POST", headers: JSON_H, body: JSON.stringify({ scan_id: newId(), qr: "S1.X" }) })],
+  ["cash import, no session", "POST", "/api/tickets/import", (h) => h.req("/api/tickets/import", { method: "POST", headers: JSON_H, body: JSON.stringify({ op: newId(), start: 0, release: false, rows: [{ name: "A" }] }) })],
   ["cancel party, no session", "POST", "/api/party/cancel", (h) => h.req("/api/party/cancel", { method: "POST", headers: JSON_H, body: JSON.stringify({ op: newId(), reason: null, mark_refunds: true, email_guests: true }) })],
   ["refunds list, no session", "GET", "/api/party/refunds", (h) => h.req("/api/party/refunds")],
   ["refund state, no session", "POST", "/api/party/refunds/:ticket", (h) => h.req("/api/party/refunds/ZZZZZZZZZZZZZZZZ", { method: "POST", headers: JSON_H, body: JSON.stringify({ state: "done" }) })],

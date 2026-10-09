@@ -1032,3 +1032,9 @@ html[lang="ar"] .home-story h2, html[lang="ar"] .home-guide h2 { letter-spacing:
 @media (min-width: 900px) { .r-totals { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .r-totals .tile.stat .big { font-size: 26px; white-space: nowrap; }
 @media (min-width: 900px) { .r-totals .tile.stat .big { font-size: 32px; } }
+/* Cash import (Guests) */
+.imp-list { max-height: 420px; overflow-y: auto; }
+.imp-list .say { display: block; margin-top: 2px; }
+.imp-summary { margin: 14px 0 4px; }
+.imp-skipped { display: block; margin-top: 4px; }
+#import .g-actions { position: relative; } #import .sr-file { inset-inline-start: 0; top: 0; }

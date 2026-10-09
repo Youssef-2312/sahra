@@ -46,7 +46,8 @@
     return el("div", { class: "tiles stats" },
       tile(t("d_approved"), String(s.approved), t("d_of_capacity_pct", { cap: s.capacity, p: pct }), meter([{ value: s.approved }], s.capacity)),
       tile(t("d_waiting"), String(s.pending_requests), t("d_week_n", { n: weekTotal }), C ? C.spark(week, C.palette[0]) : null),
-      tile(t("d_money"), Sahra.amount(s.money_expected), s.money_pending ? t("d_money_pending", { amount: Sahra.amount(s.money_pending) }) : t("d_money_none"),
+      tile(t("d_money"), Sahra.amount(s.money_expected), [s.money_cash ? t("d_money_cash", { amount: Sahra.amount(s.money_cash) }) : null,
+          s.money_pending ? t("d_money_pending", { amount: Sahra.amount(s.money_pending) }) : (s.money_cash ? null : t("d_money_none"))].filter(Boolean).join(" \u00b7 "),
         money ? meter([{ value: s.money_expected }, { value: s.money_pending || 0, cls: "pending" }], money) : null),
       fourth);
   }
