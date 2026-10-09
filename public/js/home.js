@@ -233,7 +233,8 @@
   function mineSection() {
     var shown = mine.filter(function (m) { return m.status !== "invalid"; });
     if (!shown.length) return null;
-    return [el("div", { class: "section-head", attrs: { id: "mine" } }, el("h2", { text: t("h_your_tickets") })),
+    return [el("div", { class: "section-head", attrs: { id: "mine" } }, el("h2", { text: t("h_your_tickets") }),
+      el("a", { class: "why-more", text: t("find_tickets"), attrs: { href: "/find" } })),
       el("div", { class: "mine" }, shown.slice(0, 6).map(function (m) {
         return el("a", { attrs: { href: m.link } },
           el("span", null, el("strong", { text: m.party_name, attrs: { dir: "auto" } }), el("br"),

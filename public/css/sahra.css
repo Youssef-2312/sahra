@@ -989,3 +989,16 @@ html[lang="ar"] .home-story h2, html[lang="ar"] .home-guide h2 { letter-spacing:
   .home-guide { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 64px; padding-block: 48px; margin-block: 64px; }
   .home-guide-hosts { padding: 40px; gap: 56px; }
 }
+/* Find my tickets */
+.find-page { max-width: 34rem; }
+.find-head h1 { margin: 0 0 10px; font-size: 32px; line-height: 1.15; }
+.find-head .lede { margin: 0 0 20px; color: #b8bbc3; }
+.find-card { padding: 22px 20px; border-radius: 16px; }
+.find-card h2 { margin: 0 0 8px; font-size: 20px; }
+.find-card .field { margin-top: 0; }
+.find-check { min-height: 65px; margin: 4px 0 14px; }
+.find-foot { margin: 14px 0 0; font-size: 14px; line-height: 1.5; }
+.find-help { margin: 18px 4px; font-size: 14px; line-height: 1.5; }
+.find-points { margin: 12px 0 18px; padding-inline-start: 20px; color: #b8bbc3; }
+.find-points li { margin: 6px 0; }
+@media (min-width: 900px) { .find-page { padding-top: 56px; } .find-head h1 { font-size: 40px; } }

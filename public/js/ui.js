@@ -243,7 +243,7 @@ var Sahra = (function () {
       el("div", { class: "f-brand" },
         el("a", { class: "brand", attrs: { href: "/" } }, el("img", { attrs: { src: "/img/sahra-mark.svg", alt: "", width: 28, height: 28 } }), "Sahra"),
         el("p", { text: t("f_desc") })),
-      col(t("f_site"), [[t("tab_home"), "/"], [t("about"), "/about.html"], [t("contact"), "/contact.html"], [t("sign_in"), "/signin.html"]]),
+      col(t("f_site"), [[t("tab_home"), "/"], [t("about"), "/about.html"], [t("contact"), "/contact.html"], [t("find_tickets"), "/find"], [t("sign_in"), "/signin.html"]]),
       col(t("f_touch"), [[t("f_wa"), "https://wa.me/" + WHATSAPP, false, true], [t("email"), "mailto:" + EMAIL], [t("f_ig"), NOVA_INSTAGRAM, false, true]]),
       col(t("f_legal"), [[t("privacy"), "/privacy.html"], [t("terms"), "/terms.html"]])));
     node.appendChild(el("div", { class: "f-bottom" },

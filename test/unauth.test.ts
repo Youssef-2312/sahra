@@ -26,7 +26,7 @@ const junkPlatform = { "__Host-sahra_p": newToken() };
 const id = newId();
 
 // Read-only public pages that answer 200 without a session (still zero writes).
-const PUBLIC_READS = new Set(["public party page, existing party", "guest form", "home party list", "remembered ticket statuses"]);
+const PUBLIC_READS = new Set(["public party page, existing party", "guest form", "home party list", "remembered ticket statuses", "find my tickets, site key"]);
 const tid = "0123456789ABCDEF";
 // A party guests can sign up for (default form: screenshot required).
 const GP = "unauth-guests";
@@ -98,6 +98,9 @@ const cases: Case[] = [
   ["guest sign-up, wrong origin", "POST", "/api/guest/parties/:party/signup", async (h) => { const i = await signupInit(); return h.req(signupPath, { ...i, headers: { ...(i.headers as Record<string, string>), origin: "https://evil.example" } }); }],
   ["resend link, Turnstile fails", "POST", "/api/guest/parties/:party/resend", () => withEnv(failingBot, (h) => h.req(resendPath, { method: "POST", headers: JSON_H, body: JSON.stringify({ email: "a@example.com", turnstile: "XXXX.DUMMY.TOKEN.XXXX" }) }))],
   ["resend link, no Turnstile token", "POST", "/api/guest/parties/:party/resend", (h) => h.req(resendPath, { method: "POST", headers: JSON_H, body: JSON.stringify({ email: "a@example.com" }) })],
+  ["find my tickets, site key", "GET", "/api/guest/find", (h) => h.req("/api/guest/find")],
+  ["find my tickets, Turnstile fails", "POST", "/api/guest/find", () => withEnv(failingBot, (h) => h.req("/api/guest/find", { method: "POST", headers: JSON_H, body: JSON.stringify({ email: "a@example.com", turnstile: "XXXX.DUMMY.TOKEN.XXXX" }) }))],
+  ["find my tickets, no Turnstile token", "POST", "/api/guest/find", (h) => h.req("/api/guest/find", { method: "POST", headers: JSON_H, body: JSON.stringify({ email: "a@example.com" }) })],
   ["guest ticket page, forged link", "GET", "/api/guest/ticket", (h) => h.req("/api/guest/ticket", { headers: { "x-sahra-ticket": `T1.${GP.toUpperCase()}.1${tid}.1.${"A".repeat(26)}` } })],
   ["ticket list, junk session", "GET", "/api/tickets", (h) => h.req("/api/tickets", { cookies: junkCookie })],
   ["guest form get, junk session", "GET", "/api/tickets/form", (h) => h.req("/api/tickets/form", { cookies: junkCookie })],

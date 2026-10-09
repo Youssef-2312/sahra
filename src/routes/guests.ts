@@ -20,7 +20,7 @@ import { flushChangeLog } from "../changelog";
 import { json, readJson, type AppEnv, type Ctx } from "../context";
 import { D1Driver } from "../db/driver";
 import { GuestDb, type SignupParty, type SignupRefusal } from "../guests/db";
-import { emailTemplates, groupNote, linkEmail } from "../guests/emails";
+import { emailTemplates, findEmail, groupNote, linkEmail } from "../guests/emails";
 import { checkAnswers, cleanInstagram, storedForm } from "../guests/form";
 import { currentPolicy, samePolicy, shownPolicy, type Policy } from "../guests/policy";
 import { linkPath, signLink, verifyLink } from "../guests/link";
@@ -28,7 +28,7 @@ import { turnstileConfigured, verifyTurnstile } from "../guests/turnstile";
 import { isTypeId, TypeDb } from "../guests/types";
 import { base32, parseToken, sha256, sha256hex } from "../lib/crypto";
 import { clientIp, rateLimited, sameOrigin } from "../lib/http";
-import { chargeGuest } from "../limits";
+import { charge, chargeGuest, limited } from "../limits";
 import { PartyDb } from "../party/db";
 import { visiblePartyDetails } from "../party/details";
 import { FlyerDb, flyerUrl, isFlyerId } from "../party/flyers";
@@ -47,6 +47,8 @@ const MAX_SIGNUP_BYTES = 2 * MAX_FILE_BYTES + 64 * 1024;
 const MAX_ANSWERS_JSON = 16 * 1024;
 /** One "resend my link" email per address per party per window (see GuestDb.addLinkEmail). */
 const LINK_EMAIL_WINDOW_MS = 10 * 60_000;
+/** "Find my tickets": at most one email per address per hour. */
+const FIND_EMAIL_WINDOW_MS = 60 * 60_000;
 
 function envRecord(c: Ctx): Record<string, unknown> {
   return c.env as unknown as Record<string, unknown>;
@@ -487,6 +489,56 @@ guestRoutes.post("/parties/:party/resend", async (c) => {
   }
   return json(c, 200, { status: "ok", message: "If this address has a ticket for this party, its link is on the way." });
 });
+
+/**
+ * "Find my tickets" (brainstorm idea 4, owner decision): on another device, a
+ * guest types their email and gets ONE email with the links to all their tickets
+ * across parties. No accounts. The answer is the same whether or not the address
+ * has tickets; rate limited per IP and per address, at most one email per address
+ * per hour (checked by the outbox id), and a site-wide daily cap counted whether
+ * or not anything is sent. The email is filed under the soonest party, so it is
+ * erased with that party's guest details (src/guests/retention.ts).
+ */
+guestRoutes.get("/find", (c) => json(c, 200, { turnstile_site_key: turnstileConfigured(c.env) ? c.env.TURNSTILE_SITE_KEY : null }));
+
+guestRoutes.post("/find", async (c) => {
+  if (!sameOrigin(c, c.env.PUBLIC_ORIGIN)) return json(c, 403, { error: "bad_origin" });
+  const ip = clientIp(c);
+  if (await rateLimited(c.env.RL_AUTH, `find:${ip}`)) return json(c, 429, { error: "rate_limited" });
+  const b = await readJson(c);
+  const email = guestEmail(b?.email);
+  if (!email) return json(c, 400, { error: "invalid_request" });
+  if (await rateLimited(c.env.RL_AUTH, `find-email:${await sha256hex(email)}`)) return json(c, 429, { error: "rate_limited" });
+  const bot = await verifyTurnstile(c.var.deps.fetch, c.env, b?.turnstile, ip);
+  if (bot !== "ok") return turnstileAnswer(c, bot);
+  const now = c.var.deps.now();
+  const counted = await charge(c.var.db.driver, "_platform", "find_tickets", 1, now);
+  if (counted !== "ok") return limited(c, "find_tickets", counted);
+
+  const gdb = new GuestDb(c.var.db.driver);
+  const tickets = await gdb.ticketsAcrossParties(email, now);
+  if (tickets.length > 0) {
+    const env = envRecord(c);
+    const items = [];
+    for (const t of tickets) {
+      items.push({ partyName: t.party_name, when: t.starts_at === null ? null : dateIn(t.starts_at, t.time_zone),
+        link: await signLink(env, { partyId: t.party_id, ticketId: t.id, version: t.link_version }) });
+    }
+    const id = `find-${(await sha256hex(`${email}|${Math.floor(now / FIND_EMAIL_WINDOW_MS)}`)).slice(0, 32)}`;
+    await gdb.addFindEmail(findEmail({ id, origin: c.env.PUBLIC_ORIGIN, partyId: tickets[0]!.party_id, to: email, now, items }));
+  }
+  return json(c, 200, { status: "ok", message: "If this address has tickets, an email with their links is on the way." });
+});
+
+/** "Sat 31 Oct, 22:00" in the party's time zone (English: the email is in English). */
+function dateIn(ms: number, tz: string | null): string {
+  try {
+    return new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+      timeZone: tz ?? "Africa/Cairo" }).format(ms);
+  } catch {
+    return new Date(ms).toISOString().slice(0, 16).replace("T", " ") + " UTC";
+  }
+}
 
 /**
  * The guest's ticket page. The signed link comes in the x-sahra-ticket header (the

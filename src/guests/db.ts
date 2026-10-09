@@ -254,6 +254,30 @@ export class GuestDb {
   }
 
   /**
+   * "Find my tickets": this address's live tickets across parties that are not
+   * over (or ended less than a day ago), soonest party first, at most 20. Reads
+   * the parties table (small) and each party's (party_id, guest_email) index.
+   * Cancelled tickets and disabled or reserved parties are left out.
+   */
+  async ticketsAcrossParties(email: string, now: number) {
+    const r = await this.driver.all<{ id: string; link_version: number; party_id: string; party_name: string; starts_at: number | null; time_zone: string | null }>(
+      sql`SELECT t.id, t.link_version, t.party_id, p.name AS party_name, p.starts_at, p.time_zone
+        FROM tickets t JOIN parties p ON p.id = t.party_id
+        WHERE t.party_id IN (SELECT id FROM parties WHERE disabled_at IS NULL AND substr(id, 1, 1) != '_'
+            AND (starts_at IS NULL OR COALESCE(ends_at, starts_at + 43200000) > ${now - 86_400_000}))
+          AND t.guest_email = ${email} AND t.status IN ('pending', 'approved', 'rejected')
+        ORDER BY p.starts_at IS NULL, p.starts_at, t.created_at LIMIT 20`,
+    );
+    return r.results;
+  }
+
+  /** Adds a "Find my tickets" email unless one with the same id exists (one per address per window). */
+  async addFindEmail(row: OutboxRow): Promise<boolean> {
+    const r = await this.driver.all(outboxInsert(row, sql`NOT EXISTS (SELECT 1 FROM outbox WHERE id = ${row.id})`));
+    return r.meta.changes === 1;
+  }
+
+  /**
    * Adds a "ticket_link" email unless one with the same id exists. The id is
    * derived from party + email + 10-minute window, so at most one such email per
    * address per window, checked by primary key (no outbox index, no scan).

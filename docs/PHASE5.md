@@ -539,3 +539,27 @@ per language. Full-page screenshots were captured outside the repository.
 Pre-commit typecheck passed and all 488 tests in 33 files passed. The owner
 explicitly authorised deploying this frontend update to staging; production
 and database migrations are excluded.
+
+### Find my tickets (9 October 2026)
+
+Brainstorm idea 4 (owner decision "the middle"): on a device that does not
+remember a guest's tickets, `/find` takes an email and sends ONE email with the
+links to every live ticket of that address across parties (pending, approved or
+rejected; not cancelled; parties not disabled and not over by more than a day;
+soonest first, at most 20). No accounts.
+
+- `POST /api/guest/find` (`src/routes/guests.ts`): same origin, Turnstile, rate
+  limits per IP and per address, and a site-wide daily cap (`find_tickets`, 500,
+  counted under the reserved `_platform` row whether or not anything is sent).
+  The answer is the same whether or not the address has tickets. At most one
+  email per address per hour (the outbox id is derived from the address and the
+  hour). `GET /api/guest/find` gives the page its Turnstile site key.
+- The lookup reads the small parties table and each party's existing
+  `(party_id, guest_email)` index; no migration.
+- The email is Sahra's own plain text (party name, date in the party's time
+  zone, link), filed under the soonest party so it is erased with that party's
+  guest details 7 days after it.
+- Linked from every page footer (Site column), from "Your tickets" on the home
+  page, and from the ticket page's device note.
+- Tests: `test/find.test.ts` (4), plus the unauthenticated-route and page-header
+  tests. Browser: 390 and 1440 px, English and Arabic, zero overflow and errors.

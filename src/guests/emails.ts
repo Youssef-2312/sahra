@@ -79,3 +79,20 @@ export function linkEmail(a: { id: string; origin: string; partyId: string; part
     now: a.now, createdBy: a.createdBy, needsApproval: false,
   };
 }
+
+/**
+ * "Find my tickets": one email with the links to every ticket of this address
+ * across parties (brainstorm idea 4). Sahra's own text (no party templates: it
+ * covers several parties).
+ */
+export function findEmail(a: { id: string; origin: string; partyId: string; to: string; now: number;
+  items: { partyName: string; when: string | null; link: string }[] }): OutboxRow {
+  const blocks = a.items.map((i) => `${plain(i.partyName)}${i.when ? ` (${i.when})` : ""}\n${a.origin}${linkPath(i.link)}`).join("\n\n");
+  return {
+    id: a.id, partyId: a.partyId, kind: "ticket_link", toEmail: a.to, ticketId: null,
+    subject: a.items.length === 1 ? "Your Sahra ticket" : "Your Sahra tickets",
+    bodyText: `Hello,\n\nHere ${a.items.length === 1 ? "is the link to your ticket" : "are the links to your tickets"}:\n\n${blocks}\n\n` +
+      "Keep these links private: anyone with a link can see that ticket.\nIf you did not ask for this email, you can ignore it.\n",
+    now: a.now, createdBy: null, needsApproval: false,
+  };
+}

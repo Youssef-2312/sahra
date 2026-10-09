@@ -554,13 +554,12 @@ describe("rows read and written (local measurement)", () => {
 });
 
 describe("static page headers", () => {
-  it("only the sign-up page allows the Turnstile widget; every other page keeps the strict policy", () => {
+  it("only the sign-up and Find my tickets pages allow the Turnstile widget; every other page keeps the strict policy", () => {
     const h = env.TEST_ASSET_HEADERS;
     const rule = (path: string) => new RegExp(`^${path.replace(".", "\\.")}\\n  ! Content-Security-Policy\\n  Content-Security-Policy: [^\\n]*script-src 'self' https://challenges\\.cloudflare\\.com; frame-src https://challenges\\.cloudflare\\.com;`, "m");
-    expect(h).toMatch(rule("/signup"));
-    expect(h).toMatch(rule("/signup.html"));
-    // Two rules of two mentions each, plus the comment above them.
-    expect(h.match(/challenges\.cloudflare\.com/g)).toHaveLength(5);
+    for (const page of ["/signup", "/signup.html", "/find", "/find.html"]) expect(h).toMatch(rule(page));
+    // Four rules of two mentions each, plus the comment above the sign-up rules.
+    expect(h.match(/challenges\.cloudflare\.com/g)).toHaveLength(9);
     expect(h).toMatch(/^\/\*\n  Content-Security-Policy: default-src 'none'; script-src 'self'; /m);
   });
 });
