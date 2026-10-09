@@ -66,9 +66,10 @@ ticketRoutes.get("/", requireAuth(MANAGERS), async (c) => {
   const limit = intParam(c.req.query("limit"), 50, 100);
   const after = c.req.query("after");
   const m = after === undefined ? null : /^([0-9]{1,15})\.([0-9A-Z]{16})$/.exec(after);
-  if (!STATUSES.has(status) || !limit || (after !== undefined && !m)) return json(c, 400, { error: "invalid_request" });
+  const payment = c.req.query("payment");
+  if (!STATUSES.has(status) || !limit || (after !== undefined && !m) || (payment !== undefined && payment !== "cash")) return json(c, 400, { error: "invalid_request" });
   const { sess, now } = sessOf(c);
-  const rows = await new GuestDb(c.var.db.driver).list(sess, status, m ? { at: Number(m[1]), id: m[2]! } : null, limit, now);
+  const rows = await new GuestDb(c.var.db.driver).list(sess, status, m ? { at: Number(m[1]), id: m[2]! } : null, limit, now, payment === "cash");
   const last = rows.at(-1);
   return json(c, 200, {
     tickets: rows.map((r) => ({ ...r, answers: r.answers ? JSON.parse(String(r.answers)) : {}, has_screenshot: !!r.has_screenshot, has_id_photo: !!r.has_id_photo })),

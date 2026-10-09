@@ -463,6 +463,9 @@ Object.assign(SahraText.en, {
   e_party_cancelled: "This party is cancelled; admission cannot be opened again.",
 
   // Cash guests
+  q_cash_only: "Cash only",
+  q_paid_cash: "Paid in cash",
+  q_none_cash: "No cash guests here.",
   g_payment: "Payment",
   g_payment_h: "Paid in cash keeps the ticket type's price and counts in the cash total.",
   g_pay_cash: "Paid in cash",
@@ -985,6 +988,9 @@ Object.assign(SahraText.ar, {
   g_ref_none: "لا توجد استردادات مسجلة.",
   e_party_cancelled: "هذه الحفلة ملغاة؛ لا يمكن فتح الدخول مرة أخرى.",
 
+  q_cash_only: "النقد فقط",
+  q_paid_cash: "دُفع نقدًا",
+  q_none_cash: "لا يوجد ضيوف دفعوا نقدًا هنا.",
   g_payment: "الدفع",
   g_payment_h: "الدفع نقدًا يبقي سعر نوع التذكرة ويُحسب في إجمالي النقد.",
   g_pay_cash: "دُفع نقدًا",

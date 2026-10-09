@@ -654,7 +654,9 @@ Brainstorm ideas 9 and 17. Migration **0027** adds `tickets.payment` ('cash').
   per row), each through the same guarded INSERT as a staff-issued ticket
   (capacity, type places, people per ticket, and the tickets-per-email limit for
   cash), ids from the file's op and row index so a retry creates nobody twice.
-- The dashboard's money tile shows the cash part; the CSV download has "paid by".
+- The dashboard's money tile shows the cash part; the CSV download has "paid by";
+  Requests has a "Cash only" filter (`GET /api/tickets?payment=cash`) and cash
+  cards say "Paid in cash".
 - Tests: `test/cash.test.ts`. Browser: 390 px, a 6-row file with 4 problem rows.
 
 ### Change a guest's email, with a notice to the old address (9 October 2026)

@@ -14,7 +14,7 @@
   var app = document.getElementById("app");
   var MAX = 20;
   var TABS = [["pending", "q_waiting"], ["approved", "q_approved"], ["rejected", "q_rejected"]];
-  var me = null, tab = "pending", rows = null, next = null, failed = null;
+  var me = null, tab = "pending", rows = null, next = null, failed = null, cashOnly = false;
   var selected = {};              // id -> true
   var notes = {};                 // id -> { cls, text }: the answer shown on a card after an action
   var bulkNote = null;
@@ -204,6 +204,7 @@
             el("span", { class: "small faint mono", text: Sahra.ref(row.id), attrs: { dir: "ltr" } }))),
         status),
       row.price ? el("p", { class: "price", text: t("q_expected", { amount: Sahra.amount(row.price * row.people * ids.length) }) }) : null,
+      row.payment === "cash" ? el("p", null, el("span", { class: "pill", text: t("q_paid_cash") })) : null,
       row.same_email ? el("p", { class: "notice maybe small", text: t("q_same_email", { n: row.same_email }) }) : null,
       tab === "rejected" && row.reject_reason ? el("p", { class: "small muted", text: t("q_reason", { reason: row.reject_reason }), attrs: { dir: "auto" } }) : null,
       shot, details,
@@ -250,10 +251,14 @@
       return el("button", { text: t(x[1]), attrs: { type: "button", "aria-pressed": tab === x[0] ? "true" : "false" },
         on: { click: function () { if (tab !== x[0]) { tab = x[0]; load(false); } } } });
     })));
+    // Guests who paid the organiser in cash (brainstorm idea 9), on any tab.
+    var cashChip = el("button", { class: "chip", text: t("q_cash_only"), attrs: { type: "button", "aria-pressed": cashOnly ? "true" : "false" },
+      on: { click: function () { cashOnly = !cashOnly; load(false); } } });
+    app.appendChild(el("div", { class: "chips q-filters" }, cashChip));
     if (bulkNote) app.appendChild(el("p", { class: "notice " + bulkNote.cls, text: bulkNote.text }));
     if (failed) { app.appendChild(el("p", { class: "notice no", text: failed })); return; }
     if (!rows) { app.appendChild(el("p", { class: "muted", text: t("loading") })); return; }
-    if (!rows.length) app.appendChild(el("p", { class: "empty", text: t("q_none") }));
+    if (!rows.length) app.appendChild(el("p", { class: "empty", text: cashOnly ? t("q_none_cash") : t("q_none") }));
     else {
       var selectable = rows.filter(function (r) { return tab === "pending" ? !notes[r.id] || notes[r.id].cls === "no" : tab === "approved" && !r.released_at; });
       if (selectable.length > 1) {
@@ -307,7 +312,7 @@
 
   async function load(append) {
     if (!append) { rows = null; next = null; selected = {}; notes = {}; bulkNote = null; failed = null; render(); }
-    var r = await Sahra.api.get("/api/tickets?status=" + tab + (append && next ? "&after=" + encodeURIComponent(next) : ""));
+    var r = await Sahra.api.get("/api/tickets?status=" + tab + (cashOnly ? "&payment=cash" : "") + (append && next ? "&after=" + encodeURIComponent(next) : ""));
     if (!r.ok) { failed = Sahra.errorText(r); render(); return; }
     rows = (append && rows ? rows : []).concat(r.body.tickets);
     next = r.body.next;

@@ -316,15 +316,17 @@ export class GuestDb {
   }
 
   /** Approval queue and other lists: the party's tickets with one status, oldest first, paged by (created_at, id). */
-  async list(sess: SessionRef, status: string, after: { at: number; id: string } | null, limit: number, now: number) {
+  async list(sess: SessionRef, status: string, after: { at: number; id: string } | null, limit: number, now: number, cashOnly = false) {
     const cursor = after ? sql`AND (t.created_at > ${after.at} OR (t.created_at = ${after.at} AND t.id > ${after.id}))` : sql``;
+    // "Cash only" (brainstorm idea 9): guests who paid the organiser in cash (migrations/0027).
+    const cash = cashOnly ? sql`AND t.payment = 'cash'` : sql``;
     // same_email: the address's other pending/approved tickets (the duplicate warning; index tickets_party_email).
     const r = await this.driver.all(sql`SELECT t.id, t.status, t.people, t.guest_name, t.guest_email, t.answers,
         t.screenshot_key IS NOT NULL AS has_screenshot, t.id_photo_key IS NOT NULL AS has_id_photo, t.instagram, t.order_id, t.created_at, t.approved_at, t.released_at, t.reject_reason, t.hold_at,
-        t.used_at, t.qr_version, t.rev, t.type_id, (SELECT name FROM ticket_types WHERE id = t.type_id) AS type_name, t.price,
+        t.used_at, t.qr_version, t.rev, t.type_id, (SELECT name FROM ticket_types WHERE id = t.type_id) AS type_name, t.price, t.payment,
         CASE WHEN t.guest_email IS NULL THEN 0 ELSE (SELECT COUNT(*) FROM tickets d WHERE d.party_id = t.party_id
           AND d.guest_email = t.guest_email AND d.id != t.id AND d.status IN ('pending', 'approved')) END AS same_email
-      FROM tickets t WHERE t.party_id = ${sess.partyId} AND t.status = ${status} ${cursor}
+      FROM tickets t WHERE t.party_id = ${sess.partyId} AND t.status = ${status} ${cash} ${cursor}
         AND ${sessionValid(sess, MANAGERS, now)}
       ORDER BY t.created_at, t.id LIMIT ${limit}`);
     return r.results;

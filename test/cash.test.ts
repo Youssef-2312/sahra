@@ -63,6 +63,11 @@ describe("cash guests", () => {
     const exp = (await (await h.req("/api/tickets/export?limit=50", api(os, undefined, "GET"))).json()) as { tickets: { payment: string | null }[] };
     expect(exp.tickets.filter((x) => x.payment === "cash")).toHaveLength(3);
 
+    // The guest list's "Cash only" filter.
+    const cashList = (await (await h.req("/api/tickets?status=approved&payment=cash", api(os, undefined, "GET"))).json()) as { tickets: { payment: string }[] };
+    expect(cashList.tickets).toHaveLength(3);
+    expect(cashList.tickets.every((x) => x.payment === "cash")).toBe(true);
+    expect((await h.req("/api/tickets?status=approved&payment=card", api(os, undefined, "GET"))).status).toBe(400);
     // At most 5 rows per request; a single cash guest through /issue keeps the type price.
     expect((await importRows(h, os, crypto.randomUUID(), 0, Array.from({ length: 6 }, (_, i) => ({ name: `G${i}` })), false)).status).toBe(400);
     const one = await h.req("/api/tickets/issue", api(os, { op: crypto.randomUUID(), name: "Door Cash", people: 1, type_id: typeId, cash: true, release: false }));
