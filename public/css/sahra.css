@@ -545,3 +545,13 @@ main.legal { max-width: calc(680px + 40px); padding: 32px 20px 56px; }
   main.legal { padding-top: 56px; padding-inline: 24px; max-width: calc(680px + 48px); }
   .legal h1 { font-size: 30px; }
 }
+
+/* Ticket request form: the privacy notice and the Terms box (js/signup.js). Inline,
+   readable secondary text; links underlined; the whole label is the tap target. */
+.form-notice { margin: 20px 0 10px; font-size: 15px; line-height: 1.55; color: #c3c6cd; }
+.form-notice a, .check.accept a { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+.check.accept { padding: 10px 0; min-height: 44px; font-size: 15px; line-height: 1.5; color: var(--text); cursor: pointer; }
+.check.accept input:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.field-error { margin: 0 0 8px; color: var(--no); font-size: 15px; line-height: 1.45; }
+/* The "entry rules" link lands below the sticky top bar, not under it. */
+#party-rules { scroll-margin-top: 80px; }

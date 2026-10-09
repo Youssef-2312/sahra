@@ -4,6 +4,12 @@
 // confirmed, so a retry after "not confirmed yet" is the same request, never a
 // second ticket. A confirmed ticket link is remembered in this browser
 // (sahra_tickets) for the home page.
+//
+// Above the button: the privacy notice and the required Terms box (and the
+// party's entry rules when it has them). The box starts unticked and is never
+// remembered; the server checks it and records the versions the form showed
+// (data.policy). If they changed meanwhile, the form stays as typed and asks the
+// guest to review and tick again.
 "use strict";
 (function () {
   var t = Sahra.t, el = Sahra.el;
@@ -17,6 +23,8 @@
   var built = false;
   var widgets = {};
   var turnstileReady = false;
+  var policy = null;      // data.policy: the versions this form shows (src/guests/policy.ts)
+  var acceptEl = null;    // the notice and Terms box, see acceptBlock()
 
   // ------------------------------------------------------------ helpers
 
@@ -92,10 +100,51 @@
     return el("section", { class: "card" }, el("p", { class: "small muted", text: t("where") }), body);
   }
 
+  // Always in the page (hidden without rules), so new rules from a "terms changed" answer can be shown in place.
   function rulesCard() {
-    var d = data.details;
-    if (!d || !d.rules) return null;
-    return el("section", { class: "card" }, el("p", { class: "small muted", text: t("rules") }), el("p", { class: "pre", text: d.rules, attrs: { dir: "auto" } }));
+    var card = el("section", { class: "card", attrs: { id: "party-rules", tabindex: "-1" } });
+    rulesFill(card, data.details ? data.details.rules : null);
+    return card;
+  }
+  function rulesFill(card, rules) {
+    Sahra.clear(card);
+    card.hidden = !rules;
+    if (rules) card.append(el("p", { class: "small muted", text: t("rules") }), el("p", { class: "pre", text: rules, attrs: { dir: "auto" } }));
+  }
+
+  // The privacy notice (information, not a consent) and the Terms box, kept apart.
+  // Policy pages open in a new tab so nothing typed or chosen here is lost.
+  function newTab(text, href) { return el("a", { text: text, attrs: { href: href, target: "_blank", rel: "noopener" } }); }
+  function acceptBlock() {
+    var notice = el("p", { class: "form-notice", attrs: { id: "privacy-notice" } });
+    var box = el("input", { attrs: { type: "checkbox", name: "accept_terms", value: "yes", required: true, autocomplete: "off", "aria-describedby": "accept-error" } });
+    var text = el("span");
+    var err = el("p", { class: "field-error", attrs: { id: "accept-error", role: "alert" } });
+    err.hidden = true;
+    function validity() { box.setCustomValidity(box.checked ? "" : t("e_terms_not_accepted")); }
+    function fill() {
+      Sahra.clear(notice);
+      notice.append(t("pn_text") + (policy.email ? " " + t("pn_email") : "") + " " + t("pn_read"), newTab(t("pn_link"), "/privacy"), t("pn_end"));
+      Sahra.clear(text);
+      text.append(t("acc_a"), newTab(t("acc_terms"), "/terms"));
+      // Only rules the page actually shows; there is no cancellation policy to agree to.
+      if (policy.rules_version) text.append(t("acc_b"), el("a", { text: t("acc_rules"), attrs: { href: "#party-rules" } }));
+      text.append(t("acc_end"));
+      validity();
+    }
+    box.addEventListener("change", function () { validity(); if (box.checked) err.hidden = true; });
+    box.addEventListener("invalid", function () { err.textContent = t("e_terms_not_accepted"); err.hidden = false; });
+    fill();
+    var wrap = el("div", { class: "accept-block" }, notice, el("label", { class: "check accept" }, box, text), err);
+    // The server refused: untick, show what applies now and why.
+    wrap.refresh = function (msg) {
+      box.checked = false;
+      fill();
+      err.textContent = msg;
+      err.hidden = false;
+      box.focus();
+    };
+    return wrap;
   }
 
   function typeStatus(x) {
@@ -183,6 +232,7 @@
         el("div", { class: "field" }, el("label", null, t("screenshot") + (shot === "required" ? "" : " (" + t("optional") + ")"),
           el("input", { attrs: { type: "file", name: "screenshot", accept: "image/jpeg,image/png,image/webp", required: shot === "required" } }),
           el("span", { class: "hint", text: t("screenshot_hint") + " " + t("screenshot_size") })))),
+      acceptEl = acceptBlock(),
       el("div", { attrs: { id: "turnstile-signup" } }),
       el("div", { class: "spacer" }),
       el("button", { class: "btn primary", text: t("request_ticket"), attrs: { type: "submit" } }),
@@ -315,6 +365,10 @@
     var chosen = f.querySelector("input[name=type_id]:checked");
     if (chosen) fd.set("type_id", chosen.value);
     fd.set("answers", JSON.stringify(answers));
+    fd.set("accept_terms", f.elements.accept_terms.checked ? "yes" : "");
+    fd.set("terms_version", policy.terms_version);
+    fd.set("privacy_version", policy.privacy_version);
+    fd.set("rules_version", policy.rules_version || "");
     fd.set("cf-turnstile-response", window.turnstile ? window.turnstile.getResponse(widgets.signup) || "" : "");
     btn.disabled = true;
     btn.textContent = t("sending");
@@ -343,6 +397,19 @@
       window.scrollTo(0, 0);
       return;
     }
+    // Nothing stored; the form keeps what was typed and chosen.
+    if (r.body && r.body.error === "terms_changed" && r.body.policy) {
+      policy = r.body.policy;
+      rulesFill(document.getElementById("party-rules"), r.body.rules || null);
+      Sahra.clear(out);
+      acceptEl.refresh(t("e_terms_changed"));
+      return;
+    }
+    if (r.body && r.body.error === "terms_not_accepted") {
+      Sahra.clear(out);
+      acceptEl.refresh(t("e_terms_not_accepted"));
+      return;
+    }
     // "Pending": stored but not yet confirmed; the same token finishes it. Kept for every other answer too
     // (a retry with the same token can never make a second ticket).
     say(r.body && r.body.status === "pending" ? "maybe" : "no", r.body && r.body.status === "pending" ? t("not_confirmed") : Sahra.errorText(r));
@@ -356,8 +423,14 @@
       var r = await Sahra.api.get("/api/guest/parties/" + encodeURIComponent(party));
       if (r.status === 404) loadError = t("party_missing");
       else if (!r.ok) loadError = Sahra.errorText(r);
-      else data = r.body;
+      else {
+        data = r.body;
+        // An older server without versions: the request is then answered "terms_changed" with the current ones.
+        policy = data.policy || { terms_version: "", privacy_version: "", rules_version: null, email: false };
+      }
     }
+    // Leaving the page (a policy link opened in this tab, say) keeps what was typed for this tab.
+    window.addEventListener("pagehide", saveDraft);
     Sahra.boot({ render: render });
   })();
 })();

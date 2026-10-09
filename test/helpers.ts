@@ -1,3 +1,4 @@
+import { PRIVACY_VERSION, TERMS_VERSION } from "../src/guests/policy";
 import { env } from "cloudflare:test";
 import { createApp, type Deps } from "../src/app";
 import { GOOGLE_JWKS_URL, GOOGLE_TOKEN_URL, JwksCache } from "../src/auth/google";
@@ -380,6 +381,11 @@ export interface SignupFields {
   answers?: unknown;
   screenshot?: Uint8Array | null;
   turnstile?: string | null;
+  /** The Terms box (default ticked) and the versions the form showed (default: current, no party rules, no email sentence). */
+  accept?: boolean;
+  terms?: string | null;
+  privacy?: string | null;
+  rules?: string | null;
 }
 
 /** A guest sign-up request as the page sends it: multipart with a Content-Length. */
@@ -393,6 +399,10 @@ export async function signupInit(f: SignupFields = {}): Promise<RequestInit> {
   const shot = f.screenshot === undefined ? PNG : f.screenshot;
   if (shot) fd.set("screenshot", new File([shot], "shot.png", { type: "image/png" }));
   if (f.turnstile !== null) fd.set("cf-turnstile-response", f.turnstile ?? TURNSTILE_TOKEN);
+  if (f.accept !== false) fd.set("accept_terms", "yes");
+  if (f.terms !== null) fd.set("terms_version", f.terms ?? TERMS_VERSION);
+  if (f.privacy !== null) fd.set("privacy_version", f.privacy ?? PRIVACY_VERSION);
+  if (f.rules !== null) fd.set("rules_version", f.rules ?? "");
   const r = new Request("https://x.invalid/", { method: "POST", body: fd });
   const body = new Uint8Array(await r.arrayBuffer());
   return {

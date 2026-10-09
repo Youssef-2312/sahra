@@ -44,6 +44,8 @@ export interface SignupParty {
   /** 1 when the party has public ticket types: a request must then name one. */
   has_types: number;
   payment_instructions: string | null;
+  /** The party's entry rules now (what a guest accepts; src/guests/policy.ts). */
+  rules: string | null;
   /** For the chosen type (if any): 1 when on sale to guests now, and its places left (NULL = no limit of its own). */
   type_on_sale: number | null;
   type_left: number | null;
@@ -51,7 +53,7 @@ export interface SignupParty {
 
 /** Why a sign-up was not stored (the same rules as the insert, read in the same batch). */
 export type SignupRefusal = "registration_not_open" | "registration_closed" | "email_limit" | "type_required" | "type_unavailable"
-  | "type_full" | "full" | "refused";
+  | "type_full" | "full" | "terms_changed" | "refused";
 
 /** The registration rules of a party row aliased `p`, at `now`, for one email (all inside SQL). */
 function registrationRules(now: number, email: string) {
@@ -112,7 +114,7 @@ export class GuestDb {
     const tt = sql`FROM ticket_types tt WHERE tt.id = ${typeId} AND tt.party_id = p.id`;
     const r = await this.driver.all<SignupParty>(sql`SELECT p.id, p.name, p.capacity, p.max_people_per_ticket, p.guest_form,
         ${held(sql`p.id`)} AS held, (SELECT party_id FROM tickets WHERE id = ${ticketId}) AS existing_party,
-        p.registration_opens_at, p.registration_closes_at, p.max_tickets_per_email, p.payment_instructions,
+        p.registration_opens_at, p.registration_closes_at, p.max_tickets_per_email, p.payment_instructions, p.rules,
         ${email === null ? sql`0` : sql`(SELECT COUNT(*) FROM tickets e WHERE e.party_id = p.id AND e.guest_email = ${email} AND e.status IN ('pending', 'approved'))`} AS email_tickets,
         ${hasPublicTypes(sql`p.id`)} AS has_types,
         ${typeId === null ? sql`NULL` : sql`EXISTS (SELECT 1 ${tt} AND ${onSale(now)})`} AS type_on_sale,
@@ -124,28 +126,33 @@ export class GuestDb {
   /**
    * The sign-up batch: insert the pending ticket only if the party has room for
    * its people (same statement), audit it, and read back. A retry with the same
-   * ticket id inserts nothing and is recognized by the read-back.
+   * ticket id inserts nothing and is recognized by the read-back. The accepted
+   * versions are stored in the same row, and only while the party's rules are
+   * still the text the guest accepted (`rules`; NULL = none).
    */
   async signup(a: {
     id: string; partyId: string; people: number; name: string; email: string; answers: string | null;
     screenshotKey: string | null; typeId: string | null; now: number; op: string;
+    rules: string | null; accepted: { terms: string; rules: string | null; privacy: string };
   }): Promise<"created" | "already" | SignupRefusal> {
     const reg = registrationRules(a.now, a.email);
     const ty = typeRules(a.typeId, a.people, a.now);
     const roomOk = sql`${held(sql`p.id`)} + ${a.people} <= p.capacity`;
+    const rulesOk = sql`p.rules IS ${a.rules}`;
     const rs = await this.driver.batch([
       sql`INSERT INTO tickets (id, party_id, status, people, guest_name, guest_email, answers, screenshot_key, type_id, price,
-          created_at, last_op, last_action)
+          terms_version, rules_version, privacy_version, terms_accepted_at, created_at, last_op, last_action)
         SELECT ${a.id}, p.id, 'pending', ${a.people}, ${a.name}, ${a.email}, ${a.answers}, ${a.screenshotKey}, ${a.typeId}, ${ty.price},
-          ${a.now}, ${a.op}, 'ticket_requested'
+          ${a.accepted.terms}, ${a.accepted.rules}, ${a.accepted.privacy}, ${a.now}, ${a.now}, ${a.op}, 'ticket_requested'
         FROM parties p
-        WHERE p.id = ${a.partyId} AND ${a.people} <= p.max_people_per_ticket AND ${roomOk}
+        WHERE p.id = ${a.partyId} AND ${a.people} <= p.max_people_per_ticket AND ${roomOk} AND ${rulesOk}
           AND ${reg.opened} AND ${reg.notClosed} AND ${reg.emailOk} AND ${ty.chosenOk} AND ${ty.placesOk}
           AND NOT EXISTS (SELECT 1 FROM tickets x WHERE x.id = ${a.id})`,
       audit(a.now, null, "ticket_requested", "ticket", sql`SELECT party_id, id, rev FROM tickets WHERE id = ${a.id} AND last_op = ${a.op}`),
       // Why nothing was stored, from the same rules on the same state.
       sql`SELECT (SELECT party_id FROM tickets WHERE id = ${a.id}) AS existing_party,
           CASE
+            WHEN NOT ${rulesOk} THEN 'terms_changed'
             WHEN NOT ${reg.opened} THEN 'registration_not_open'
             WHEN NOT ${reg.notClosed} THEN 'registration_closed'
             WHEN NOT ${reg.emailOk} THEN 'email_limit'

@@ -267,9 +267,9 @@ the `staging` branch; a finished piece the owner should try is pushed there too.
   Nova, contact. Contact page (contact.html, after Nova's Contact): Nova's
   WhatsApp +20 111 999 0639, novadevco@icloud.com and @nova.dev26, and a form
   that stores nothing: it opens WhatsApp or the email app with the message
-  filled in (js/contact.js). Nova's own form posts to formsubmit.co; doing the
-  same would send visitors' details to that service and needs the page policy
-  changed, so it waits for the owner's decision. Footer links: About, Contact,
+  filled in (js/contact.js). Owner decision: keep FormSubmit; the form is
+  emailed through Nova's FormSubmit endpoint after a consent box, and only
+  /contact may connect to formsubmit.co (public/_headers). Footer links: About, Contact,
   Privacy, Terms; the home page's organiser row has "Contact us" and "Sign in".
 - Flat everywhere (owner: "remove the glossy buttons on all pages"): primary
   buttons are solid Nova blue with no gradient, inset highlight, glow or shine;
@@ -314,6 +314,33 @@ the `staging` branch; a finished piece the owner should try is pushed there too.
 - Ticket waves (asked 2026-10-08): not built. Ticket types have their own
   sales windows and places, but one does not open when the previous sells
   out. Offered: up to 5 waves that open in turn.
+- Privacy and Terms (owner spec, after Nova's privacy page): 680 px reading
+  column, title 30/26 px, section headings 17 px semibold, body 16 px / 1.6,
+  10 px under headings, 28 px between sections, 8 px between bullets, fixed
+  "Last updated: 9 October 2026". Terms are the owner's text with one change:
+  party pages show no refund or cancellation policy, so guests are told to ask
+  the organiser instead of to "check" one.
+- Signed in on public pages (owner: "keep the sign in session even if I press
+  home"): the session always stayed; the header just said "Sign in". Staff
+  pages that confirm a session now note its kind ("party" or "platform",
+  nothing else) in the browser, and public pages then show the signed-in name
+  linking back to the dashboard, scanner or platform page. Guests make no
+  extra request.
+- Terms acceptance on the ticket request form (migration 0017,
+  src/guests/policy.ts): above the button, a privacy notice ("Sahra and this
+  party's organiser use your details ...", the email sentence only when an
+  email provider is configured) linking the Privacy page, and a required,
+  unticked box "I agree to Sahra's Terms" plus "and this party's entry rules"
+  when the party has rules (linking the rules shown on the page). Links open in
+  a new tab; the box is never remembered. The server refuses a request without
+  the box (400 terms_not_accepted) and one whose form showed other versions
+  (409 terms_changed, with the current versions and rules; the form keeps what
+  was typed). The ticket row stores terms_version, rules_version (hash of the
+  rules text), privacy_version and terms_accepted_at, all chosen by the
+  server, in the same INSERT, which also requires the rules text to be
+  unchanged. Retries are the same row. Older requests and staff-issued tickets
+  stay NULL (unknown). No IP address is stored for it; it is not a marketing
+  opt-in. Tests: test/terms.test.ts.
 
 ## Next
 
