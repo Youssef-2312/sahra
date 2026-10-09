@@ -18,6 +18,8 @@ export default defineConfig(async () => {
           bindings: {
             TEST_MIGRATIONS: migrations,
             TEST_ASSET_HEADERS: readFileSync("./public/_headers", "utf8"),
+            // The site stylesheet, for the colour contrast test (a CSS ?raw import is empty here).
+            TEST_SITE_CSS: readFileSync("./public/css/sahra.css", "utf8"),
             TEST_LEDGER_MIGRATIONS: ledgerMigrations,
             TEST_STAGING_MAIN: stagingMain,
             TEST_STAGING_LEDGER: stagingLedger,
