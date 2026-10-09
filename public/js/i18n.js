@@ -7,7 +7,7 @@ var SahraText = {
   en: {
     lang_other: "العربية",
     sign_in: "Sign in",
-    tab_home: "Private party tickets",
+    tab_home: "Parties",
     about: "About",
     contact: "Contact",
     h_contact: "Contact us",
@@ -343,7 +343,7 @@ var SahraText = {
   ar: {
     lang_other: "English",
     sign_in: "تسجيل الدخول",
-    tab_home: "تذاكر الحفلات الخاصة",
+    tab_home: "الحفلات",
     about: "عن سهرة",
     contact: "تواصل معنا",
     h_contact: "تواصل معنا",
