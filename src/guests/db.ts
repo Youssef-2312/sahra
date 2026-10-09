@@ -428,7 +428,9 @@ export class GuestDb {
    * still the one the new link was signed for. The new holder's link email is
    * added in the same batch, guarded by this operation.
    */
-  async transfer(sess: SessionRef, a: { id: string; name: string; email: string | null; fromLinkVersion: number; linkEmail: OutboxRow | null },
+  async transfer(sess: SessionRef, a: { id: string; name: string; email: string | null; fromLinkVersion: number; linkEmail: OutboxRow | null;
+    /** A notice to the address the ticket had (brainstorm idea 15), when the email changes. */
+    oldNotice?: OutboxRow | null },
     now: number, actor: string, op: string): Promise<boolean> {
     const ok = sessionValid(sess, MANAGERS, now);
     const rs = await this.driver.batch([
@@ -439,6 +441,8 @@ export class GuestDb {
       audit(now, actor, "name_transferred", "ticket", sql`SELECT party_id, id, rev FROM tickets WHERE id = ${a.id} AND last_op = ${op}`),
       ...(a.linkEmail ? [outboxInsert(a.linkEmail, sql`EXISTS (SELECT 1 FROM tickets WHERE id = ${a.id} AND last_op = ${op}
         AND last_action = 'name_transferred' AND guest_email = ${a.linkEmail.toEmail})`)] : []),
+      ...(a.oldNotice ? [outboxInsert(a.oldNotice, sql`EXISTS (SELECT 1 FROM tickets WHERE id = ${a.id} AND last_op = ${op}
+        AND last_action = 'name_transferred' AND guest_email != ${a.oldNotice.toEmail})`)] : []),
     ]);
     return rs[0]!.meta.changes === 1;
   }

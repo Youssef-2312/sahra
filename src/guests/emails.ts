@@ -96,3 +96,20 @@ export function findEmail(a: { id: string; origin: string; partyId: string; to: 
     now: a.now, createdBy: null, needsApproval: false,
   };
 }
+
+/**
+ * To the address a ticket had, when staff change its email (brainstorm idea 15):
+ * the old link stops working; the new address is not shown. Sent without approval.
+ */
+export function emailChangedNotice(a: { id: string; partyId: string; partyName: string; to: string; ticketId: string; now: number;
+  createdBy: string | null; contact: string | null }): OutboxRow {
+  const party = plain(a.partyName);
+  return {
+    id: a.id, partyId: a.partyId, kind: "ticket_link", toEmail: a.to, ticketId: a.ticketId,
+    subject: `Your ticket for ${party} was moved to another email`,
+    bodyText: `Hello,\n\nThe organiser of ${party} changed the email address for your ticket. ` +
+      `The ticket link sent to this address no longer works; the new link went to the new address.\n\n` +
+      `If you did not ask for this, contact the organiser${a.contact ? ` (${a.contact})` : ""} and quote your request reference.\n`,
+    now: a.now, createdBy: a.createdBy, needsApproval: false,
+  };
+}

@@ -74,7 +74,8 @@
     var actions = el("div", { class: "g-actions" },
       live ? el("button", { class: "btn small-btn", text: t("g_resend"), attrs: { type: "button" }, on: { click: function () { run(x, "resend"); } } }) : null,
       x.status === "approved" && !x.used_at ? el("button", { class: "btn small-btn", text: t("g_reissue"), attrs: { type: "button" }, on: { click: function () { run(x, "reissue", null, t("g_reissue_confirm")); } } }) : null,
-      live && !x.used_at ? el("button", { class: "btn small-btn", text: t("g_transfer"), attrs: { type: "button", "aria-expanded": open[x.id] ? "true" : "false" }, on: { click: function () { open[x.id] = open[x.id] ? null : "transfer"; redrawFind(); } } }) : null,
+      live && !x.used_at ? el("button", { class: "btn small-btn", text: t("g_change_email"), attrs: { type: "button", "aria-expanded": open[x.id] === "email" ? "true" : "false" }, on: { click: function () { open[x.id] = open[x.id] === "email" ? null : "email"; redrawFind(); } } }) : null,
+      live && !x.used_at ? el("button", { class: "btn small-btn", text: t("g_transfer"), attrs: { type: "button", "aria-expanded": open[x.id] === "transfer" ? "true" : "false" }, on: { click: function () { open[x.id] = open[x.id] === "transfer" ? null : "transfer"; redrawFind(); } } }) : null,
       live && !x.used_at ? el("button", { class: "btn no small-btn", text: t("g_cancel"), attrs: { type: "button" }, on: { click: function () { run(x, "cancel", null, t("g_cancel_confirm", { name: x.guest_name || x.id })); } } }) : null);
     var note = notes[x.id];
     var li = el("li", { class: "g-row" },
@@ -84,12 +85,29 @@
         el("span", { class: "faint small mono", text: Sahra.ref(x.id), attrs: { dir: "ltr" } })),
       actions);
     if (open[x.id] === "transfer") li.appendChild(transferForm(x));
+    if (open[x.id] === "email") li.appendChild(emailForm(x));
     if (note) {
       var box = S.sayBox();
       S.say(box, note[0], note[1]);
       li.appendChild(el("div", { class: "g-note" }, box, note[2] ? el("div", { class: "g-link" }, el("code", { text: note[2], attrs: { dir: "ltr" } }), S.copyButton(note[2], t("g_copy_link"))) : null));
     }
     return li;
+  }
+
+  // Change the email only (brainstorm idea 15): a transfer with the same name. The old link and QR stop
+  // working, the new link goes to the new address, and the old address gets a notice (from the server).
+  function emailForm(x) {
+    var f = el("form", { class: "s-editor g-transfer", attrs: { novalidate: true } },
+      el("p", { class: "small muted", text: t("g_change_email_h") }),
+      S.field(t("g_new_email"), S.input("email", "email", { required: true, placeholder: x.guest_email || "", dir: "ltr" })),
+      el("div", { class: "s-save" }, el("button", { class: "btn primary small-btn", text: t("g_change_email_go"), attrs: { type: "submit" } })));
+    f.addEventListener("submit", function (e) {
+      e.preventDefault();
+      var email = f.elements.email.value.trim();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { f.elements.email.focus(); return; }
+      run(x, "transfer", { name: x.guest_name || t("g_no_name"), email: email }, t("g_change_email_confirm", { email: email }));
+    });
+    return f;
   }
 
   function transferForm(x) {

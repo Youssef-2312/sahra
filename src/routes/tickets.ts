@@ -19,7 +19,7 @@ import { D1Driver } from "../db/driver";
 import { TicketDb } from "../db/tickets";
 import { GuestDb, MAX_BULK } from "../guests/db";
 import { isTypeId, parseType, TypeDb, typeIdFor } from "../guests/types";
-import { emailTemplates, linkEmail, releasedEmail } from "../guests/emails";
+import { emailChangedNotice, emailTemplates, linkEmail, releasedEmail } from "../guests/emails";
 import { parseForm, storedForm } from "../guests/form";
 import { linkPath, signLink } from "../guests/link";
 import { base32, isBase32, isUuid, newId, sha256, sha256hex } from "../lib/crypto";
@@ -454,8 +454,12 @@ ticketRoutes.post("/:id/transfer", requireAuth(MANAGERS), async (c) => {
     const to = email ?? t.guest_email;
     const mail = to ? linkEmail({ id: newId(), origin: c.env.PUBLIC_ORIGIN, partyId: sess.partyId, partyName: t.party_name, to,
       links: [link], ticketId: id, now, createdBy: actor, templates: await emailTemplates(c.var.db.driver, sess.partyId) }) : null;
+    // A changed address: the old one is told (its link stops working), without showing the new one.
+    const oldNotice = email && t.guest_email && email !== t.guest_email ? emailChangedNotice({ id: newId(), partyId: sess.partyId,
+      partyName: t.party_name, to: t.guest_email, ticketId: id, now, createdBy: actor,
+      contact: (await new PartyDb(c.var.db.driver).get(sess.partyId))?.support_phone ?? null }) : null;
     await recordIntent(c.var.ledger, op, sess.partyId, "name_transferred", [{ entity: "ticket", id }], now);
-    if (!(await gdb.transfer(sess, { id, name, email, fromLinkVersion: t.link_version, linkEmail: mail }, now, actor, op))) {
+    if (!(await gdb.transfer(sess, { id, name, email, fromLinkVersion: t.link_version, linkEmail: mail, oldNotice }, now, actor, op))) {
       return json(c, 409, { error: "not_allowed" });
     }
     status = "done";

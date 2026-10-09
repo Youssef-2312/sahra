@@ -656,3 +656,23 @@ Brainstorm ideas 9 and 17. Migration **0027** adds `tickets.payment` ('cash').
   cash), ids from the file's op and row index so a retry creates nobody twice.
 - The dashboard's money tile shows the cash part; the CSV download has "paid by".
 - Tests: `test/cash.test.ts`. Browser: 390 px, a 6-row file with 4 problem rows.
+
+### Change a guest's email, with a notice to the old address (9 October 2026)
+
+Brainstorm idea 15 (the rest). Guests > a guest > "Change email": a transfer
+with the same name. The old link and QR stop working, the new link goes to the
+new address, and the OLD address gets a notice in the same batch ("moved to
+another email", the organiser's contact, quote your reference), without the new
+address. A name-only transfer or the same address sends no notice. Tests:
+`test/email-change.test.ts`.
+
+### Disabling a party from the site-owner panel (9 October 2026)
+
+Brainstorm idea 19: "Disable party..." opens a panel with the effect in numbers
+(requests stop, admission pauses with the approved tickets affected, staff
+sessions and invitations end); the button works only once the party's name is
+typed. "Enable party" is one confirmed action. `scripts/platform-browser.mjs`
+covers it.
+
+All agreed brainstorm ideas (1 to 19, 21, 22, 24 to 28) are now built. Open ones:
+20 (look and feel words to confirm) and 23 (logo and favicon, decided later).
