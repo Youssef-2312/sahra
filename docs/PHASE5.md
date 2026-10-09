@@ -771,3 +771,12 @@ are free text). Test: `test/email-sender.test.ts` (three accounts).
   or production and confirms. One `wrangler secret bulk` call sets all six secrets;
   slots not in the list are deleted. Passwords are never printed; the temporary JSON
   file is mode 600 and removed right after. Checked with a stand-in for Wrangler.
+
+### Door scanner browser check (10 October 2026)
+
+`scripts/scan-browser.mjs` (local server only): makes its own door invitation and
+a fresh released ticket (no email address, so nothing is sent), opens admission,
+turns the ticket page's real QR into fake camera video (ffmpeg), joins as door
+staff and scans. Passes only if the first read is admitted and every later read of
+the same code is "used". Replaces an old scratch script that no longer matched the
+rebuilt join page.
