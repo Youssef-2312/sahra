@@ -6,6 +6,7 @@
 import { env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { D1Driver } from "../src/db/driver";
+import { schedule } from "../src/backup/export";
 import { eraseGuestDetails, GUEST_RETENTION } from "../src/guests/retention";
 import { newId } from "../src/lib/crypto";
 import { sameState } from "../src/recovery/index";
@@ -88,6 +89,8 @@ describe("guest details, 7 days after the party", () => {
     expect(await ticket(c.body.ticket_id!)).toMatchObject({ guest_name: "Kept Guest", guest_email: "kept@example.com" });
     expect((await entries(c.body.ticket_id!))[0]!.state.guest_name).toBe("Kept Guest");
 
+    // The backup script learns when, to replace older backups that still hold these details.
+    expect((await schedule(main(), now)).guests_erased_at).toBe(now);
     // A second run does nothing; a day later the other party is due too.
     expect(await eraseGuestDetails(main(), ledger(), now)).toMatchObject({ parties: 0, tickets: 0 });
     expect(await eraseGuestDetails(main(), ledger(), now + 2 * DAY)).toMatchObject({ parties: 1, tickets: 1 });

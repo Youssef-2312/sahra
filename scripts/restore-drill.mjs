@@ -77,6 +77,8 @@ function backupSource(folder, shotsDir) {
   }
   const cache = new Map();
   const index = existsSync(join(folder, "files.index.json")) ? JSON.parse(readFileSync(join(folder, "files.index.json"), "utf8")).files : {};
+  // Screenshots the backup script deleted from Drive on purpose (retention): Drive's own index.
+  const removed = existsSync(join(shotsDir, "index.json")) ? (JSON.parse(readFileSync(join(shotsDir, "index.json"), "utf8")).removed ?? {}) : {};
   return {
     tables: [...parts.keys()],
     async rows(db, table) {
@@ -93,6 +95,9 @@ function backupSource(folder, shotsDir) {
       const p = join(shotsDir, e.name);
       if (!existsSync(p)) return null;
       return { bytes: new Uint8Array(readFileSync(p)), sha256: e.sha256 };
+    },
+    async removed(db, id) {
+      return removed[shotKey(db, id)] ?? null;
     },
   };
 }

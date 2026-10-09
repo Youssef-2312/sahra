@@ -259,7 +259,7 @@ export const RECENT_MS = 24 * HOUR;
  * is neither switched off nor over. Also reads health_state (one row) for the
  * daily budget.
  */
-export async function schedule(d: SqlDriver, now: number): Promise<{ frequency: Frequency; reasons: string[]; budget_ok: boolean }> {
+export async function schedule(d: SqlDriver, now: number): Promise<{ frequency: Frequency; reasons: string[]; budget_ok: boolean; guests_erased_at: number | null }> {
   const parties = (await d.all<{ id: string; admission_state: string; starts_at: number | null; ends_at: number | null; disabled_at: number | null }>(
     sql`SELECT id, admission_state, starts_at, ends_at, disabled_at FROM parties`)).results;
   const last = (await d.all<{ at: number }>(sql`SELECT at FROM audit ORDER BY id DESC LIMIT 1`)).results[0]?.at ?? null;
@@ -279,5 +279,10 @@ export async function schedule(d: SqlDriver, now: number): Promise<{ frequency: 
   // written, non-essential work stops. Hourly backups are skipped then; the
   // nightly one never is.
   const budget = (await d.all<{ ok: number }>(sql`SELECT ${budgetOk(now)} AS ok`)).results[0];
-  return { frequency: reasons.length ? "hourly" : "nightly", reasons: reasons.slice(0, 20), budget_ok: Number(budget?.ok ?? 0) === 1 };
+  // When guest details were last deleted 7 days after a party (src/guests/retention.ts): every
+  // backup that started before this holds details that must go too (owner decision). The
+  // script then makes a fresh full backup and deletes the older ones (backup/apps-script).
+  const erased = (await d.all<{ at: number | null }>(sql`SELECT MAX(done_at) AS at FROM guest_erasures`)).results[0];
+  return { frequency: reasons.length ? "hourly" : "nightly", reasons: reasons.slice(0, 20), budget_ok: Number(budget?.ok ?? 0) === 1,
+    guests_erased_at: erased?.at == null ? null : Number(erased.at) };
 }

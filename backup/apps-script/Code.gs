@@ -131,6 +131,12 @@ function isDue_(cfg, props, now) {
   var lastAny = Number(props.getProperty('LAST_SUCCESS_AT') || 0);
   var lastFull = Number(props.getProperty('LAST_FULL_AT') || 0);
   var H = 3600 * 1000;
+  // Guest details deleted in Sahra 7 days after a party (owner decision): every backup
+  // that started before then still holds them. A fresh full backup is made now; once it
+  // succeeds, prune_ deletes the older ones for good.
+  var erasedAt = Number(s.guests_erased_at || 0);
+  if (erasedAt) props.setProperty('GUESTS_ERASED_AT', String(erasedAt));
+  if (erasedAt && minuteOf_(lastFull) < erasedAt) { log_('guest details were deleted in Sahra: a fresh full backup replaces the older ones'); return { due: true, kind: 'nightly' }; }
   // Tell the owner when backups stopped succeeding.
   if (lastFull && now - lastFull > 30 * H) {
     alert_(props, 'stale', 'Sahra backup: no full backup for ' + Math.round((now - lastFull) / H) + ' hours',
@@ -207,7 +213,8 @@ function work_(cfg, props, state, started) {
 
   // 2. Screenshots of every files database: only the ones not already in Drive, each
   // checked by size and SHA-256. A screenshot the retention purge emptied is not
-  // downloaded (and not a failure); a copy made before the purge stays in Drive.
+  // downloaded (and not a failure), and a copy made before the purge is deleted from
+  // Drive for good (screenshots go 7 days after the party, owner decision).
   if (state.phase === 'files') {
     var shots = screenshotsFolder_(cfg);
     var index = readIndex_(shots);
@@ -220,15 +227,17 @@ function work_(cfg, props, state, started) {
         if (!timeLeft()) { saveIndex_(shots, index); save(); return false; }
         var f = rows[state.fileRow];
         var have = index.files[shotKey_(db, f.id)];
-        if (have && have.size === f.size) {
-          state.files.alreadyCopied++;
-        } else if (f.purged_at != null) {
+        if (f.purged_at != null) {
+          if (have) { removeScreenshot_(shots, index, shotKey_(db, f.id), f.purged_reason); state.files.removed = (state.files.removed || 0) + 1; sinceSave++; }
           state.files.purged++;
+        } else if (have && have.size === f.size) {
+          state.files.alreadyCopied++;
         } else {
           var problem = copyScreenshot_(cfg, shots, db, f, index);
           state.requests++;
           if (problem === PURGED) {
             state.files.purged++;
+            if (index.files[shotKey_(db, f.id)]) removeScreenshot_(shots, index, shotKey_(db, f.id), 'deleted by retention');
           } else if (problem) {
             state.files.failed++;
             // Only the first 50 are kept (Script Properties hold at most 9 KB per value).
@@ -446,7 +455,13 @@ function readGz_(folder, name) {
   return Utilities.ungzip(it.next().getBlob()).getDataAsString();
 }
 
-/** Keeps every backup from the last 48 hours, then the newest nightly of each day for 30 days. Screenshots are never deleted. */
+/**
+ * Keeps every backup from the last 48 hours, then the newest nightly of each day for
+ * 30 days. Except: once guest details were deleted in Sahra (GUESTS_ERASED_AT), every
+ * backup that started before that is deleted, as soon as a complete full backup from
+ * after it exists (so there is always one to restore from). Deleted for good, not
+ * moved to the trash (destroy_).
+ */
 function prune_(cfg, now) {
   var root = DriveApp.getFolderById(cfg.folderId);
   var it = root.getFolders();
@@ -460,13 +475,45 @@ function prune_(cfg, now) {
     list.push({ folder: f, at: at, day: m[2] + m[3] + m[4], full: m[1] === 'backup', incomplete: f.getName().indexOf(INCOMPLETE) === 0 });
   }
   list.sort(function (a, b) { return b.at - a.at; });
+  var erasedAt = Number(PropertiesService.getScriptProperties().getProperty('GUESTS_ERASED_AT') || 0);
+  var clean = erasedAt && list.some(function (x) { return x.full && !x.incomplete && x.at >= erasedAt; });
   list.forEach(function (x) {
+    if (clean && x.at < erasedAt) { destroy_(x.folder); return; }
     var age = now - x.at;
     if (age < KEEP_ALL_HOURS * 3600 * 1000) return;
     if (x.full && !x.incomplete && age < KEEP_DAYS * 24 * 3600 * 1000 && !byDay[x.day]) { byDay[x.day] = true; return; }
-    x.folder.setTrashed(true);
+    destroy_(x.folder);
   });
 }
+
+/**
+ * Deletes a Drive file or folder for good. The trash would keep it 30 more days, and
+ * guest details must not outlive 7 days after their party. Needs the Drive advanced
+ * service (appsscript.json); without it the item goes to the trash and the owner is told.
+ */
+function destroy_(item) {
+  if (typeof Drive !== 'undefined' && Drive.Files && Drive.Files.remove) { Drive.Files.remove(item.getId()); return; }
+  item.setTrashed(true);
+  alert_(PropertiesService.getScriptProperties(), 'trash', 'Sahra backup: Drive service not enabled',
+    'Old backups were moved to the Drive trash instead of being deleted for good. Enable the Drive service for this script (see README) or empty the trash.');
+}
+
+/**
+ * Deletes the Drive copy of a screenshot that Sahra deleted, and notes it in the
+ * index ("removed"), so a restore of an older backup that still lists it knows the
+ * bytes are gone on purpose and restores it as deleted (not as a missing file).
+ */
+function removeScreenshot_(shots, index, key, reason) {
+  var entry = index.files[key];
+  var it = shots.getFilesByName(entry.name);
+  while (it.hasNext()) destroy_(it.next());
+  delete index.files[key];
+  if (!index.removed) index.removed = {};
+  index.removed[key] = { removed_at: Date.now(), reason: String(reason || 'deleted by retention').slice(0, 200) };
+}
+
+/** A Drive folder name has the backup's start to the minute. */
+function minuteOf_(ms) { return Math.floor(ms / 60000) * 60000; }
 
 // ------------------------------------------------------------------ failures, alerts, budget
 
@@ -539,7 +586,8 @@ function summaryText_(s) {
   ];
   Object.keys(s.rows).forEach(function (k) { lines.push('  ' + k + ': ' + s.rows[k]); });
   lines.push('Screenshots: ' + s.screenshots.listed + ' listed, ' + s.screenshots.copied + ' copied and verified this time (' + mb_(s.screenshots.bytesCopied)
-    + '), ' + s.screenshots.alreadyCopied + ' already in Drive, ' + (s.screenshots.purged || 0) + ' purged by retention and never copied, '
+    + '), ' + s.screenshots.alreadyCopied + ' already in Drive, ' + (s.screenshots.purged || 0) + ' purged by retention ('
+    + (s.screenshots.removed || 0) + ' earlier copies deleted from Drive), '
     + s.screenshots.failed + ' problem(s)');
   lines.push(s.ok ? 'Result: OK' : 'Result: PROBLEMS (see summary.json)');
   return lines.join('\n') + '\n';

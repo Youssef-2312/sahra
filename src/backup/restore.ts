@@ -21,6 +21,8 @@ export interface BackupSource {
   rows(db: BackupDb, table: string): Promise<Row[]>;
   /** A screenshot's bytes and the SHA-256 checked when it was copied, or null if it is not in the backup. */
   file(db: FilesDb, id: number): Promise<{ bytes: Uint8Array; sha256: string } | null>;
+  /** A screenshot whose Drive copy the backup script deleted on purpose (retention), or null. */
+  removed?(db: FilesDb, id: number): Promise<{ removed_at: number; reason: string } | null>;
 }
 
 export interface Targets {
@@ -119,6 +121,7 @@ async function loadFiles(d: SqlDriver, db: FilesDb, spec: TableSpec, rows: Row[]
   for (const r of rows) {
     const id = Number(r.id);
     const purged = r.purged_at != null;
+    let removed: { removed_at: number; reason: string } | null = null;
     const f = await src.file(db, id);
     let problem: string | null = null;
     if (!f) problem = "bytes missing from the backup";
@@ -131,11 +134,13 @@ async function loadFiles(d: SqlDriver, db: FilesDb, spec: TableSpec, rows: Row[]
       rep.files++;
       rep.file_bytes += f!.bytes.length;
       if (purged) rep.purged_restored++;
-    } else if (purged && !f) {
-      // Purged before any backup copied it: restored as purged, like the live database.
+    } else if (!f && (purged || (removed = (await src.removed?.(db, id)) ?? null))) {
+      // Purged before any backup copied it, or its copy deleted later by the retention
+      // rules (an older backup still lists it): restored as purged, like the live database.
+      const at = purged ? r.purged_at : removed!.removed_at, why = purged ? r.purged_reason : removed!.reason;
       await d.batch([
         insert("files", { ...row, bytes: new Uint8Array() }),
-        sql`INSERT INTO file_tombstones (id, party_id, ticket_id, deleted_at, reason) VALUES (${id}, ${r.party_id}, ${r.ticket_id}, ${r.purged_at}, ${r.purged_reason})`,
+        sql`INSERT INTO file_tombstones (id, party_id, ticket_id, deleted_at, reason) VALUES (${id}, ${r.party_id}, ${r.ticket_id}, ${at}, ${why})`,
       ]);
       rep.purged_without_bytes++;
     } else {

@@ -360,7 +360,7 @@ describe("schedule", () => {
   const now = Date.UTC(2026, 9, 10, 12);
   const fake = (parties: Record<string, unknown>[], lastAudit: number | null): SqlDriver => ({
     usage: { rows_read: 0, rows_written: 0, queries: 0 },
-    all: async (q) => ({ results: (q.text.includes("health_state") ? [{ ok: 1 }] : q.text.includes("FROM parties") ? parties : lastAudit === null ? [] : [{ at: lastAudit }]) as never[], meta: { changes: 0, rows_read: 0, rows_written: 0 } }),
+    all: async (q) => ({ results: (q.text.includes("health_state") ? [{ ok: 1 }] : q.text.includes("guest_erasures") ? [{ at: null }] : q.text.includes("FROM parties") ? parties : lastAudit === null ? [] : [{ at: lastAudit }]) as never[], meta: { changes: 0, rows_read: 0, rows_written: 0 } }),
     batch: async () => { throw new Error("read-only"); },
   });
   const party = (o: Record<string, unknown> = {}) => ({ id: "p", admission_state: "paused", starts_at: null, ends_at: null, disabled_at: null, ...o });
@@ -374,19 +374,20 @@ describe("schedule", () => {
     expect((await schedule(fake([party({ starts_at: now + 13 * HOUR })], now - 30 * HOUR), now)).frequency).toBe("nightly");
     // Selling: a party that is not over, and a change in the last 24 hours.
     const s = await schedule(fake([party({ starts_at: now + 10 * 24 * HOUR })], now - 2 * HOUR), now);
-    expect(s).toEqual({ frequency: "hourly", reasons: ["selling: changes in the last 24 hours"], budget_ok: true });
+    expect(s).toEqual({ frequency: "hourly", reasons: ["selling: changes in the last 24 hours"], budget_ok: true, guests_erased_at: null });
     expect((await schedule(fake([party({ starts_at: now - 10 * 24 * HOUR })], now - 2 * HOUR), now)).frequency).toBe("nightly");
     // A switched-off party never makes it hourly.
     expect((await schedule(fake([party({ admission_state: "open", disabled_at: 1 })], now - HOUR), now)).frequency).toBe("nightly");
   });
 
-  it("the endpoint reads the parties, one audit row and the health row", async () => {
+  it("the endpoint reads the parties, one audit row, the health row and the finished guest deletions", async () => {
     logs = [];
     const r = (await (await backupGet(h, "/api/backup/schedule")).json()) as { frequency: string; reasons: string[] };
     expect(r.frequency).toBe("hourly");
     expect(r.reasons.some((x) => x.startsWith("admission open"))).toBe(true);
     const parties = Number(await env.DB.prepare("SELECT COUNT(*) AS n FROM parties").first("n"));
-    expect(Number(parsed("backup").at(-1)!.main_rows_read)).toBeLessThanOrEqual(parties + 2);
+    const erasures = Number(await env.DB.prepare("SELECT COUNT(*) AS n FROM guest_erasures").first("n"));
+    expect(Number(parsed("backup").at(-1)!.main_rows_read)).toBeLessThanOrEqual(parties + 2 + Math.max(1, erasures));
   });
 
   it("says when workstream F's daily budget stops non-essential work (the script then skips hourly backups)", async () => {

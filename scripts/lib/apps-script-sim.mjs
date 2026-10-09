@@ -10,7 +10,7 @@
 // UrlFetch and Drive limits) or real timings.
 
 import { createHash, createHmac } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { runInContext, createContext } from "node:vm";
 import { MessageChannel, receiveMessageOnPort, Worker } from "node:worker_threads";
@@ -67,6 +67,7 @@ class Drive {
     this.paths = new Map([["root", rootDir]]);
     this.names = new Map();
     this.n = 0;
+    this.removed = [];
   }
   idFor(path, name) {
     for (const [id, p] of this.paths) if (p === path) return id;
@@ -81,6 +82,14 @@ class Drive {
     let p = join(dir, name);
     for (let i = 2; existsSync(p); i++) p = join(dir, `${name}~${i}`);
     return p;
+  }
+  /** The Drive advanced service's Files.remove: gone for good (not in the trash). */
+  remove(id) {
+    const p = this.paths.get(id);
+    if (!p || !existsSync(p)) throw new Error(`File not found: ${id}`);
+    rmSync(p, { recursive: true, force: true });
+    this.paths.delete(id);
+    this.removed.push(id);
   }
   trash(id) {
     const p = this.paths.get(id);
@@ -170,6 +179,7 @@ export function loadAppsScript(o) {
       formatDate,
       sleep: () => {},
     },
+    Drive: { Files: { remove: (id) => drive.remove(id) } },
     DriveApp: { getFolderById: (id) => { if (!drive.paths.has(id)) throw new Error(`No item with the given ID could be found: ${id}`); return drive.folder(id); } },
     PropertiesService: {
       getScriptProperties: () => ({

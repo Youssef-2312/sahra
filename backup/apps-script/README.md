@@ -33,15 +33,26 @@ while the site runs; a restore goes into new databases with
   `files_N-<id>`. Each new one is downloaded, its SHA-256 compared with the
   Worker's, its size with the list, then saved to Drive, read back from Drive and
   checked again. Screenshots the site's retention already deleted are listed as
-  "purged": not downloaded and not a failure; a copy made before the deletion stays
-  in Drive. Progress is saved
+  "purged": not downloaded and not a failure; a copy made before the deletion is
+  deleted from Drive for good by the next backup and noted in `screenshots/index.json`
+  ("removed"), so restoring an older backup gives it back as deleted, not as missing.
+  Progress is saved
   in Script Properties every 20 files; a run stops after 5 minutes (Apps Script
   stops at 6) and a one-off trigger continues one minute later.
 - `summary.json` and `SUMMARY.txt` in each backup folder: rows per table,
   screenshots copied / already there / purged / failed, the measured database sizes (D1's
   own `size_after`), time taken.
 - Keeps every backup for 48 hours, then the newest nightly of each day for 30
-  days (hourly ones are deleted after 48 hours). Screenshots are never deleted.
+  days (hourly ones are deleted after 48 hours).
+- **Guest details go after 7 days here too** (owner decision). When Sahra has deleted
+  guest details 7 days after a party (the Worker's `guests_erased_at`), the script
+  makes a fresh full backup at once and, as soon as it succeeds, deletes every
+  backup that started before the deletion. Screenshots Sahra deleted are removed
+  from `screenshots/` as above.
+- Everything the script deletes is deleted for good with the Drive service, not
+  moved to the Drive trash (which would keep it 30 more days). The service is
+  switched on by `appsscript.json`; if it is missing, items go to the trash and
+  the owner gets an email.
 - Email to the owner (from this account to itself, or `ALERT_EMAIL`), at most one
   per problem per 6 hours: a backup could not start; failed 3 runs in a row
   (abandoned, the next hour starts a new one); a screenshot failed its check; no
@@ -74,7 +85,8 @@ while the site runs; a restore goes into new databases with
    project, name it `Sahra backup (staging)`. Replace `Code.gs` with this
    folder's `Code.gs`. Project Settings: tick "Show appsscript.json manifest
    file in editor", then replace `appsscript.json` with this folder's file (set
-   `timeZone` to your own if it is not Cairo).
+   `timeZone` to your own if it is not Cairo). The file turns on the Drive service
+   ("Services" in the editor shows "Drive API"), used to delete old copies for good.
 4. **Script Properties** (Project Settings -> Script Properties):
    - `BACKUP_URL` = `https://sahra-staging.<your-account>.workers.dev`
    - `BACKUP_KEY` = the value from step 1

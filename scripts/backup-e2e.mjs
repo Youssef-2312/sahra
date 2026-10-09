@@ -25,7 +25,7 @@
 //   node scripts/backup-e2e.mjs [--keep]
 
 import { execFileSync } from "node:child_process";
-import { cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -120,6 +120,12 @@ async function main() {
       fd.set("people", "1");
       fd.set("screenshot", new File([shot], "shot.jpg", { type: "image/jpeg" }));
       fd.set("cf-turnstile-response", "XXXX.DUMMY.TOKEN.XXXX");
+      // The Terms box, with the versions the party's form shows (src/guests/policy.ts).
+      const policy = (await call("/api/guest/parties/drill-party", { method: "GET" })).body.policy;
+      fd.set("accept_terms", "yes");
+      fd.set("terms_version", policy.terms_version);
+      fd.set("privacy_version", policy.privacy_version);
+      fd.set("rules_version", policy.rules_version ?? "");
       const req = new Request(`${ORIGIN}/x`, { method: "POST", body: fd });
       const body = new Uint8Array(await req.arrayBuffer());
       const r = await call("/api/guest/parties/drill-party/signup", { method: "POST", body, headers: { origin: ORIGIN, "content-type": req.headers.get("content-type"), "content-length": String(body.length) } });
@@ -216,7 +222,7 @@ async function main() {
     check((await owner(`/api/tickets/${made.body.tickets[6].id}/cancel`, { op: crypto.randomUUID() })).status === 200, "a ticket cancelled after the nightly");
     const newShot = await signupOne(90_000);
     check((await owner("/api/tickets/approve", { ids: [newShot.id] })).status === 200, "a new sign-up approved after the nightly");
-    // Purged AFTER the nightly copied it: the copy stays in Drive.
+    // Purged AFTER the nightly copied it: the next backup deletes the copy from Drive for good.
     check((await owner(`/api/tickets/${shots[0].id}/cancel`, { op: crypto.randomUUID() })).status === 200, "a ticket with a backed-up screenshot cancelled");
     const purge2 = await eng.purgeOldScreenshots({ FILES, FILES_2 }, new eng.D1Driver(DB), Date.now() + 31 * 86_400_000);
     check(purge2.databases[0].deleted.cancelled === 1, "its screenshot purged after the nightly backup");
@@ -228,9 +234,13 @@ async function main() {
     check(Boolean(hourlyName) && !readdirSync(drive).some((n) => n.startsWith("INCOMPLETE")), `hourly backup complete: ${hourlyName}`);
     const sum2 = JSON.parse(readFileSync(join(drive, hourlyName, "summary.json"), "utf8"));
     check(sum2.kind === "hourly" && Object.keys(sum2.rows).every((k) => !k.startsWith("main.")), `only the ledger and the screenshot list (${Object.keys(sum2.rows).join(", ")})`);
-    check(sum2.screenshots.copied === 1 && sum2.screenshots.alreadyCopied === 4 && sum2.screenshots.purged === 2 && sum2.ok,
-      `only the new screenshot copied; the one purged after the nightly counts as already in Drive (${runs2} runs, ${sim.fetches - fetchesBefore} requests)`);
-    check(sha(readFileSync(join(drive, "screenshots", index.files[await keyIn(shots[0].id)].name))) === shots[0].sha, "the purged screenshot's copy is still in Drive");
+    check(sum2.screenshots.copied === 1 && sum2.screenshots.alreadyCopied === 3 && sum2.screenshots.purged === 3 && sum2.screenshots.removed === 1 && sum2.ok,
+      `only the new screenshot copied; the one purged after the nightly is deleted from Drive (${runs2} runs, ${sim.fetches - fetchesBefore} requests)`);
+    const purgedName = index.files[await keyIn(shots[0].id)].name;
+    const index2 = JSON.parse(readFileSync(join(drive, "screenshots", "index.json"), "utf8"));
+    check(!existsSync(join(drive, "screenshots", purgedName)) && !readdirSync(join(drive, ".trash")).some((n) => n.startsWith(purgedName))
+      && !index2.files[await keyIn(shots[0].id)] && index2.removed[await keyIn(shots[0].id)]?.reason?.includes("cancelled"),
+      "the purged screenshot's copy is deleted for good (not in the trash) and noted as removed in the index");
     const h2 = await health();
     check(h2.last_backup_at > h1.last_backup_at - 3600_000 && h2.last_backup_note.startsWith(`hourly ${hourlyName.replace(/~\d+$/, "")}:`), "hourly backup reported");
 
@@ -251,8 +261,8 @@ async function main() {
     check(both.code === 0, "restore drill on nightly + hourly passed");
     const dj = JSON.parse(readFileSync(outJson, "utf8"));
     check(dj.applied >= 4 && dj.holds === 0 && dj.verify_after_ok, `the replay applied ${dj.applied} change(s) made after the nightly, 0 holds, every row matches the change log`);
-    check(JSON.stringify(dj.files_dbs) === '["files","files_2"]' && dj.purged_restored === 1 && dj.purged_without_bytes === 2,
-      "each files database restored into its own database; 1 purged screenshot restored from Drive, 2 restored as purged");
+    check(JSON.stringify(dj.files_dbs) === '["files","files_2"]' && dj.purged_restored === 0 && dj.purged_without_bytes === 3,
+      "each files database restored into its own database; the 3 purged screenshots restored as purged (no bytes kept anywhere)");
     const kept = /kept: (.*)/.exec(both.out)[1].trim();
     const { openLocalD1 } = await import(pathToFileURL(join(ROOT, "scripts", "lib", "local-d1.mjs")).href);
     const restored = await openLocalD1(ROOT, join(kept, "state"), ["DB", "LEDGER", "FILES", "FILES_2"]);
@@ -266,7 +276,9 @@ async function main() {
       const id2 = Number((await keyIn(shots2[0].id)).split(":")[1]);
       check(sha(Buffer.from(await restored.FILES_2.prepare("SELECT bytes FROM files WHERE id = ?").bind(id2).first("bytes"))) === shots2[0].sha, "FILES_2 screenshot restored byte-identical into its own database");
       const id0 = Number(await keyIn(shots[0].id));
-      check(sha(Buffer.from(await restored.FILES.prepare("SELECT bytes FROM files WHERE id = ?").bind(id0).first("bytes"))) === shots[0].sha, "screenshot purged after the nightly restored with its bytes from Drive");
+      check(Buffer.from(await restored.FILES.prepare("SELECT bytes FROM files WHERE id = ?").bind(id0).first("bytes")).length === 0
+        && (await restored.FILES.prepare("SELECT reason FROM file_tombstones WHERE id = ?").bind(id0).first("reason"))?.includes("cancelled"),
+        "screenshot purged after the nightly restored as purged: its Drive copy was deleted");
       const id3 = Number((await keyIn(shots2[1].id)).split(":")[1]);
       check((await restored.FILES_2.prepare("SELECT reason FROM file_tombstones WHERE id = ?").bind(id3).first("reason"))?.includes("cancelled"), "screenshot purged before any backup restored as purged (tombstone)");
     } finally {
@@ -297,7 +309,32 @@ async function main() {
       "the nightly backup still runs past the budget");
     await DB.prepare("UPDATE health_state SET usage_day = 0, usage_est = 0 WHERE id = 'main'").run();
 
-    console.log("9. a wrong key: the run fails and the owner is alerted");
+    console.log("9. guest details deleted in Sahra: a fresh full backup, then every older backup deleted for good");
+    // Every test backup started within the last minutes: age them by 3 hours on disk so
+    // the deletion time sits clearly between them and the fresh backup.
+    const shift = (n) => n.replace(/(\d{4})-(\d{2})-(\d{2})T(\d{2})(\d{2})Z/, (_m, y, mo, d, h, mi) => {
+      const t = new Date(Date.UTC(+y, +mo - 1, +d, +h, +mi) - 3 * 3600_000).toISOString();
+      return `${t.slice(0, 10)}T${t.slice(11, 13)}${t.slice(14, 16)}Z`;
+    });
+    const backups = () => readdirSync(drive).filter((n) => /^sahra-(backup|ledger)-/.test(n));
+    const older = backups();
+    for (const n of older) renameSync(join(drive, n), join(drive, shift(n)));
+    const olderNames = older.map(shift);
+    sim.props.set("LAST_FULL_AT", String(Date.now() - 3 * 3600_000));
+    sim.props.set("LAST_SUCCESS_AT", String(Date.now() - 3 * 3600_000));
+    await DB.prepare("INSERT INTO guest_erasures (party_id, done_at) VALUES (?, ?)").bind("e2e-party", Date.now() - 3600_000).run();
+    const removedBefore = sim.drive.removed.length;
+    check(runAll("hourly") >= 1, "a backup run after the deletion");
+    const after = backups();
+    const fresh = after.filter((n) => !olderNames.includes(n));
+    check(fresh.length === 1 && fresh[0].startsWith("sahra-backup-") && JSON.parse(readFileSync(join(drive, fresh[0], "summary.json"), "utf8")).ok,
+      `a fresh full backup was made at once: ${fresh[0]}`);
+    check(olderNames.every((n) => !after.includes(n)) && !readdirSync(join(drive, ".trash")).some((n) => olderNames.includes(n))
+      && sim.drive.removed.length - removedBefore >= olderNames.length,
+      `the ${olderNames.length} older backup folders (nightly and hourly) are deleted for good, not moved to the trash`);
+    check(existsSync(join(drive, "screenshots", "index.json")), "the screenshots folder stays");
+
+    console.log("10. a wrong key: the run fails and the owner is alerted");
     sim.props.set("BACKUP_KEY", b64(32));
     sim.props.set("LAST_SUCCESS_AT", "0");
     const r = sim.call("hourly");

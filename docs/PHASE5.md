@@ -370,6 +370,14 @@ the `staging` branch; a finished piece the owner should try is pushed there too.
   after a rejection or cancellation. Party pictures stay at 30 days. Tests:
   test/retention.test.ts.
 
+- Backups follow the same 7 days (owner decision): `/api/backup/schedule` returns
+  `guests_erased_at` (latest finished guest deletion). The Apps Script then makes a
+  fresh full backup at once and, after it succeeds, deletes every older backup
+  folder; screenshots Sahra deleted are removed from Drive and noted in
+  `screenshots/index.json` ("removed"), which the restore treats as deleted, not
+  missing. Deletions are permanent (Drive advanced service, not the trash).
+  Checked by `node scripts/backup-e2e.mjs` (all steps OK, local simulation only).
+
 ## Next
 
 Piece 8: party settings (details, ticket types, sign-up questions).
