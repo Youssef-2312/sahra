@@ -31,7 +31,7 @@
       panel.appendChild(el("ul", { class: "j-points" }, ["j_p1", "j_p2", "j_p3"].map(function (k) { return el("li", { text: t(k) }); })));
       panel.appendChild(el("button", { class: "btn primary wide-btn", text: busy ? t("j_joining") : t("j_join"), attrs: { type: "button", disabled: busy || done }, on: { click: function () { attempt(0); } } }));
     }
-    if (msg) panel.appendChild(el("p", { class: "notice " + msg[0], text: msg[1], attrs: { role: "status" } }));
+    if (msg) panel.appendChild(el("p", { class: "notice " + msg[0], text: t(msg[1], msg[2]), attrs: { role: "status" } }));
     app.appendChild(panel);
   }
 
@@ -44,14 +44,14 @@
         body: JSON.stringify({ token: state.t, session: state.v }) });
     } catch (e) {
       if (n < 5) return setTimeout(function () { attempt(n + 1); }, 1500);
-      busy = false; msg = ["no", t("error_network")]; render(); return;
+      busy = false; msg = ["no", "error_network"]; render(); return;
     }
     var j = await r.json().catch(function () { return {}; });
     if (r.status === 200) {
       Sahra.store.del("sahra_join");
       Sahra.store.set(Sahra.SESSION_KEY, "party");
       busy = false; done = true;
-      msg = ["yes", t("j_joined", { name: j.staff_name })];
+      msg = ["yes", "j_joined", { name: j.staff_name }];
       render();
       setTimeout(function () { location.href = "/scan.html"; }, 900);
       return;
@@ -59,7 +59,7 @@
     if (r.status === 503 && j.retry && n < 5) return setTimeout(function () { attempt(n + 1); }, 1500);
     busy = false;
     var k = "j_e_" + (j.error || "");
-    msg = ["no", SahraText.en[k] ? t(k) : t("error_generic")];
+    msg = ["no", SahraText.en[k] ? k : "error_generic"];
     if (r.status !== 503 && r.status !== 429) { done = true; Sahra.store.del("sahra_join"); }
     render();
   }

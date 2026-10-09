@@ -1,52 +1,22 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48"><title>Site owner | Sahra</title></head>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<meta name="referrer" content="no-referrer">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<title>Organiser | Sahra</title>
+<link rel="stylesheet" href="/css/sahra.css">
+</head>
 <body>
-<header><span id="account"><a href="/platform">Platform sign-in</a></span> | <a href="https://nova.example/" id="nova" rel="noopener">Made by Nova</a></header>
-<main>
-<h1>Platform (Phase 4 test page)</h1>
-<p>For site owners and organisers. Party staff sign in at <a href="/">the staff sign-in page</a>.</p>
-<section id="signin" hidden>
-<form method="post" action="/api/auth/platform/start"><button type="submit">Sign in with Google (platform)</button></form>
-</section>
-<section id="signedin" hidden>
-<pre id="me"></pre>
-<button id="logout" type="button">Sign out</button>
-</section>
-
-<section id="site_owner" hidden>
-<h2>Site owner</h2>
-<h3>Health checks</h3>
-<p>Run automatically every 15 minutes. Problems are emailed to every site owner (at most once per problem every 6 hours, and once when resolved), plus a short daily summary. Party owners are never emailed by this. Rows written today is the app's own estimate; the exact figures are in the Cloudflare dashboard.</p>
-<pre id="health"></pre>
-<button id="health-refresh" type="button">Refresh health</button>
-<h3>Organisers</h3>
-<pre id="organisers"></pre>
-<form id="invite"><input name="name" placeholder="Name" required> <input name="email" type="email" placeholder="Gmail address" required> <button>Invite organiser</button></form>
-<form id="disable-org"><input name="id" placeholder="organiser id" required> <button>Disable organiser</button></form>
-<form id="limit"><input name="id" placeholder="organiser id" required> <input name="limit" type="number" min="1" max="20" value="1" required> <button>Set party limit (active parties)</button></form>
-<h3>Parties (counts only, no guest data)</h3>
-<pre id="parties"></pre>
-<form id="disable-party"><input name="id" placeholder="party id" required> <button>Disable party</button></form>
-<form id="manage-party"><input name="id" placeholder="party id" required> <button>Manage this party (opens its dashboard as owner)</button></form>
-<p>Parties with "no_active_owner": true need a new owner (for example after their organiser was switched off):</p>
-<form id="owner-invite"><input name="id" placeholder="party id" required> <input name="name" placeholder="New owner name" required> <input name="email" type="email" placeholder="Gmail address" required> <button>Invite new party owner</button></form>
-<form id="enable-party"><input name="id" placeholder="party id" required> <button>Turn party back on (stays paused)</button></form>
-<h3>Site owners</h3>
-<pre id="owners"></pre>
-<form id="remove-owner"><input name="id" placeholder="site owner id" required> <button>Remove site owner</button></form>
-</section>
-
-<section id="organiser" hidden>
-<h2>Organiser</h2>
-<h3>My parties</h3>
-<pre id="myparties"></pre>
-<form id="create"><input name="id" placeholder="party id (a-z, 0-9, -)" required pattern="[a-z0-9][a-z0-9-]{1,22}[a-z0-9]">
-<input name="name" placeholder="Party name" required> <input name="capacity" type="number" min="1" max="100000" value="100" required> <button>Create party</button></form>
-<p>After creating a party, sign in to it on <a href="/">the staff sign-in page</a> with the same Google account.</p>
-</section>
-<pre id="out" role="status"></pre>
-</main>
+<main id="app" class="page staff"><p class="muted">Loading...</p></main>
+<script src="/js/i18n.js"></script>
+<script src="/js/i18n-staff.js"></script>
+<script src="/js/ui.js"></script>
+<script src="/js/staff.js"></script>
 <script src="/js/platform.js"></script>
 </body>
 </html>

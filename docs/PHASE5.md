@@ -5,7 +5,7 @@ update this file, so a new session can continue from the "Next" line without
 re-reading the whole code base.
 
 Branch: `claude/p5-frontend` (from `claude/p4-integration`). Staging deploys from
-the `staging` branch; a finished piece the owner should try is pushed there too.
+the `staging` branch; push there only after the owner explicitly approves, because it auto-deploys.
 
 ## Rules for every screen (owner decisions, docs/DECISIONS.md)
 
@@ -138,9 +138,9 @@ the `staging` branch; a finished piece the owner should try is pushed there too.
 | 5 | Door scanner: camera, full-screen verdicts, sound and vibration | done (first version) |
 | 6 | Organiser dashboard: top numbers and big buttons | done (first version) |
 | 7 | Approval queue: one card per request, "Approve and send QR" | done |
-| 8 | Party settings: details, ticket types, sign-up questions | |
-| 9 | Guests: find, resend, add a cash guest, CSV import (needs backend) | |
-| 10 | Site-owner panel: needs attention, parties, organisers | |
+| 8 | Party settings: details, ticket types, sign-up questions | done |
+| 9 | Guests: find, resend, issue tickets, message guests | done; CSV import still needs backend |
+| 10 | Site-owner panel: needs attention, parties, organisers | done |
 | 11 | Backend items from the brainstorm (docs/IDEAS.md on claude/brainstorm): support phone, refund policy and tracking, request reference, manual admit, one-tap approve+send, find my tickets | |
 
 ## Done so far
@@ -408,6 +408,70 @@ the `staging` branch; a finished piece the owner should try is pushed there too.
 - Dashboard redesign, Quantity selector, Nova-style footer, wording pass ("Time",
   "Location", a professional tone), home tab "Sahra | Parties".
 
+## Staff pages redesign (2026-10-09)
+
+- Shared staff layout and bilingual wording now cover Overview, Requests,
+  Settings, Guests, Emails and Team. Settings saves each section separately;
+  Guests includes ticket help and issuing; Emails includes approval and
+  cancellation; Team includes Google invitations and one-time door links.
+- Join uses the shared shell. Browser-tested against local D1 in English and
+  Arabic using invitations created on Team: joining creates a door session and
+  opens the scanner; opening a used link in another browser shows the used-link
+  message. That message now changes language when the language switch is used.
+- Rebuilt `platform.html` / `js/platform.js` with the shared dark styles, named
+  lists and contextual forms. **Health and administration are site-owner only**:
+  the backend still restricts that role to `youssefwaelkabbeel@gmail.com`.
+  Organisers see only their own parties and the create-party form. Their browser
+  makes no health request; the local API also rejects organiser health access
+  with 403. No server authorization rules were changed.
+- The site-owner view includes the six health checks, status pills, daily usage,
+  Discord delivery status, recent alerts and per-party counters; organiser
+  invitations, disabling and party limits; counts-only party lists, disable /
+  enable / manage, replacement-owner invitations; and the site-owner list.
+  Health labels and explanations are bilingual. Original server-authored
+  diagnostic reports and alert subjects remain verbatim, behind labelled details
+  where appropriate, so specific failure information is retained.
+- Platform sign-in and CSRF remain separate from party staff sign-in. Existing
+  disable-organiser, disable-party and remove-site-owner confirmation dialogs
+  are retained. Complete request bodies and generated invitation / staff UUIDs
+  survive automatic and manual pending retries; forms lock while the outcome is
+  uncertain. The create-party address pattern works with modern browser
+  validation. No ID text boxes are needed to target existing people or parties.
+
+Validation:
+
+- Local Worker / D1 browser checks passed for organiser invitation, party-limit
+  change, organiser disable (including cancelling confirmation), party creation,
+  disable and re-enable (admission stays paused), manage-party navigation with a
+  real owner session, and replacement-owner invitation. All data and keys were
+  synthetic and local; no email provider or real account action was used.
+- Chromium: **54 page / language / width combinations**, covering Overview,
+  Requests, Guests, Settings, Emails, Team, Join, Scanner and the site-owner
+  panel at **390, 768 and 1440 px**, in **English and Arabic**. Every result:
+  `document.documentElement.scrollWidth - innerWidth === 0`, with **zero console
+  errors**. Populated local records and expanded secondary sections were checked.
+  A stopped local Wrangler process interrupted the first attempt; the complete
+  matrix was rerun successfully after restart.
+- `scripts/platform-browser.mjs` adds repeatable browser regression checks with
+  intercepted API fixtures: **18 role / language / width combinations** (site
+  owner, organiser, signed out), role separation, platform CSRF, pending retries
+  with identical bodies and UUIDs across a language switch, party disable /
+  enable, owner invitation and site-owner removal confirmations. It refuses
+  non-local origins. Run with local Wrangler and an external Playwright install
+  as documented at the top of the script; project dependencies are unchanged.
+- Staff dictionaries have **548 English and 548 Arabic keys**, with matching key
+  sets. `npx tsc --noEmit -p .` passed; `npx vitest run` passed **488 tests
+  in 33 files**.
+
 ## Next
 
-Piece 8: party settings (details, ticket types, sign-up questions).
+- Owner review on staging after explicit approval to push `staging`; no staging
+  push or production deployment was performed for this change.
+- If not already applied, the owner applies migrations **0020, 0021 and 0022**
+  on staging: pull `claude/p5-frontend`, then run
+  `npx wrangler d1 migrations apply sahra-staging --remote --env staging`.
+  This frontend change adds no migrations.
+- Real-phone scanner / two-phone rehearsal and optional ticket-page polish.
+  Scanner verdict logic was not changed.
+- Known gaps: ID photos are collected from the buyer only, not friends on a
+  multi-ticket order; Drive backup is not active; Find my tickets is not built.

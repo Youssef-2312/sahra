@@ -903,3 +903,18 @@ main.staff { padding-top: 16px; }
 .j-panel h1 { margin: 0 0 10px; font-size: 28px; line-height: 1.2; }
 .j-points { margin: 16px 0 22px; padding-inline-start: 20px; }
 .j-points li { margin: 6px 0; }
+/* Organiser and site-owner panel */
+.s-platform-form fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+.s-platform-form fieldset:disabled { opacity: 0.7; }
+.s-platform-details { margin-top: 14px; }
+.s-platform-details > summary { cursor: pointer; min-height: 44px; padding-block: 10px; color: var(--accent); }
+.s-platform-details > p, .s-platform-wrap { overflow-wrap: anywhere; }
+.s-platform-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin: 16px 0; }
+.s-platform-facts dt { color: var(--muted); font-size: 14px; }
+.s-platform-facts dd { margin: 4px 0 0; overflow-wrap: anywhere; }
+.s-health-grid { display: grid; gap: 12px; }
+.s-health-grid > li { margin: 0; }
+.s-health-grid p { margin: 10px 0 0; }
+.s-card .g-row > .muted { overflow-wrap: anywhere; }
+@media (min-width: 768px) { .s-health-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 1100px) { .s-health-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
