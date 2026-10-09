@@ -244,7 +244,8 @@
   function render() {
     Sahra.clear(app);
     Sahra.title(t("q_title"));
-    if (!me) { app.appendChild(el("p", { class: "notice maybe", text: t("d_sign_in") })); return; }
+    if (!me) { app.appendChild(Sahra.problem({ kicker: t("nt_kicker_signin"), title: t("nt_staff_t"), text: t("d_sign_in"),
+      actions: [[t("sign_in"), "/signin", true], [t("nt_home"), "/"]], hint: t("nt_guest_hint") })); return; }
     app.classList.add("staff");
     app.appendChild(SahraStaff.nav("queue", me.staff.role));
     app.appendChild(el("header", { class: "staff-head" }, el("div", null,

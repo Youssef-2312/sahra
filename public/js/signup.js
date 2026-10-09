@@ -529,6 +529,12 @@
     built = true;
     Sahra.clear(app);
     Sahra.title(data && data.party ? data.party.name : null);
+    if (loadError === "missing") {
+      Sahra.title(t("nt_party_t"));
+      app.appendChild(Sahra.problem({ kicker: t("nt_kicker_party"), title: t("nt_party_t"), text: t("party_missing"),
+        actions: [[t("nt_home"), "/", true], [t("nt_find"), "/find"]] }));
+      return;
+    }
     if (loadError) { app.appendChild(el("p", { class: "notice no", text: loadError })); return; }
     if (done) { app.appendChild(doneView()); return; }
     // The party across the top; below it the form and, beside it on desktops, the
@@ -672,10 +678,10 @@
   // ------------------------------------------------------------ start
 
   (async function () {
-    if (!/^[a-z0-9-]{3,24}$/.test(party)) loadError = t("party_missing");
+    if (!/^[a-z0-9-]{3,24}$/.test(party)) loadError = "missing";
     else {
       var r = await Sahra.api.get("/api/guest/parties/" + encodeURIComponent(party));
-      if (r.status === 404) loadError = t("party_missing");
+      if (r.status === 404) loadError = "missing";
       else if (!r.ok) loadError = Sahra.errorText(r);
       else {
         data = r.body;

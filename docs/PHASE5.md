@@ -693,3 +693,25 @@ Test: `test/idphoto.test.ts` (friends case).
 
 Favicon: the same ticket mark, scaled up (0.2 to 0.25) so it fills a browser
 tab; favicon.ico (16/32/48) and apple-touch-icon.png (180) regenerated from it.
+
+### Sign-in results, page not found and broken links in the site's look (9 October 2026)
+
+Before, the server's own pages were bare HTML (sign-in failed, no access, choose a
+party) and a mistyped address answered `{"error":"not_found"}`. Now:
+
+- `src/auth/notices.ts` + `page()` in `src/lib/http.ts`: every page the Worker
+  answers itself uses the shared stylesheet and `public/js/notice.js`, which shows
+  it in English or Arabic with the top bar and footer: a photo panel with the
+  message, the ways forward beside it (back to sign in, the parties, Find my
+  tickets), Google's reason code small when there is one. Status codes and cookies
+  are unchanged; the English text stays in the HTML (shown before the script runs).
+- The sign-in buttons' form posts (wrong origin, too many attempts) and the party
+  choice answer pages, not JSON. The party choice shows each party with its role.
+- A page address that is not a file answers an HTML 404 ("Page not found");
+  `/api/...` and non-GET requests keep JSON.
+- The Worker's security policy gains `font-src 'self'` (the same as the static
+  pages), so these pages use the site's own fonts. Nothing else is allowed.
+- Broken links on the static pages use the same layout (`Sahra.problem` in
+  ui.js): a ticket link that is not valid, a party that does not exist, and staff
+  pages opened while signed out. The door scanner keeps its minimal screen.
+- Test: `test/notice.test.ts`.

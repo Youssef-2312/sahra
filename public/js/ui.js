@@ -132,6 +132,28 @@ var Sahra = (function () {
   }
 
   /** The browser tab, Nova's way: "Page | Sahra"; the home page is "Sahra | Private party tickets". */
+  /**
+   * A page that cannot go on (page not found, a ticket link that is not valid, a
+   * party that does not exist, a sign-in that failed or is needed): the sign-in
+   * page's layout, a photo panel with the message and the ways forward beside it.
+   * o: { kicker, title, text, big?, actions: [[label, href, primary?]], extra?, hint?, code?, photo? }
+   */
+  function problem(o) {
+    var img = el("img", { attrs: { src: o.photo || "/img/hero/hero-3.jpg", alt: "", decoding: "async" } });
+    img.addEventListener("error", function () { img.remove(); });
+    var panel = el("div", { class: "signin-panel notice-panel" }, img,
+      el("p", { class: "label-line", text: o.kicker }),
+      o.big ? el("p", { class: "notice-big", attrs: { "aria-hidden": "true" }, text: o.big }) : null,
+      el("h1", { text: o.title }),
+      el("p", { text: o.text }));
+    var side = el("div", { class: "notice-side" }, o.extra || null, (o.actions || []).map(function (a) {
+      return el("a", { class: "btn" + (a[2] ? " primary" : ""), attrs: { href: a[1] }, text: a[0] });
+    }));
+    if (o.code) side.appendChild(el("p", { class: "small muted notice-code", text: t("nt_code", { code: o.code }) }));
+    if (o.hint) side.appendChild(el("p", { class: "small muted", text: o.hint }));
+    return el("div", { class: "signin-wrap notice-wrap" }, panel, side);
+  }
+
   function title(page) { document.title = page ? page + " | Sahra" : "Sahra | " + t("tab_home"); }
 
   function applyLang() {
@@ -282,5 +304,5 @@ var Sahra = (function () {
   }
 
   return { t: t, el: el, clear: clear, api: api, errorText: errorText, money: money, amount: amount, when: when, time: time, rel: rel,
-    lang: lang, boot: boot, store: store, SESSION_KEY: SESSION_KEY, token: token, title: title, contactCard: contactCard, ref: function (id) { return id ? "SAH-" + String(id).slice(0, 6) : ""; } };
+    lang: lang, boot: boot, store: store, SESSION_KEY: SESSION_KEY, token: token, title: title, problem: problem, contactCard: contactCard, ref: function (id) { return id ? "SAH-" + String(id).slice(0, 6) : ""; } };
 })();

@@ -78,8 +78,8 @@ var SahraStaff = (function () {
       app.classList.add("staff");
       Sahra.title(t(opts.title));
       if (!me) {
-        app.appendChild(el("div", { class: "notice maybe" }, el("p", { text: t("d_sign_in") }),
-          el("a", { class: "btn small-btn", text: t("sign_in"), attrs: { href: "/signin.html" } })));
+        app.appendChild(Sahra.problem({ kicker: t("nt_kicker_signin"), title: t("nt_staff_t"), text: t("d_sign_in"),
+          actions: [[t("sign_in"), "/signin", true], [t("nt_home"), "/"]], hint: t("nt_guest_hint") }));
         return;
       }
       var menu = nav(opts.page, me.staff.role);

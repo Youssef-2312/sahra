@@ -1041,3 +1041,18 @@ html[lang="ar"] .home-story h2, html[lang="ar"] .home-guide h2 { letter-spacing:
 .s-disable ul { margin: 8px 0 12px; padding-inline-start: 20px; color: var(--text); } .s-disable input { width: 100%; margin: 6px 0 10px; } .s-disable .g-actions { margin-top: 4px; }
 .q-filters { margin: -4px 0 12px; }
 .names-box .friend { padding: 12px 0; border-top: 1px solid var(--line); } .names-box .friend:first-of-type { border-top: 0; }
+
+/* Pages the server answers itself (public/js/notice.js): sign-in results and page not found.
+   The sign-in page's layout: the photo panel with the message, the actions beside it. */
+.notice-page .notice-card { max-width: 560px; margin: 40px auto; }
+.notice-side { display: flex; flex-direction: column; gap: 10px; }
+.notice-side .btn + .btn { margin-top: 0; }
+.notice-side p { margin: 4px 0 0; }
+.signin-panel .notice-big { font-family: var(--font-head); font-weight: 700; font-size: 5.5rem; line-height: 0.95; letter-spacing: -0.04em; margin: 0 0 6px; color: var(--text); }
+.notice-picks { display: flex; flex-direction: column; gap: 10px; }
+.notice-picks form, .notice-picks p { margin: 0; }
+.notice-picks .btn { justify-content: space-between; gap: 14px; text-align: start; }
+.pick-name { font-weight: 600; overflow-wrap: anywhere; }
+.pick-role { flex: none; font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+.notice-code { font-family: var(--font-mono); overflow-wrap: anywhere; }
+@media (min-width: 900px) { .signin-panel .notice-big { font-size: 8rem; } }

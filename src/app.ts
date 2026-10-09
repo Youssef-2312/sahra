@@ -6,6 +6,7 @@ import { D1Driver } from "./db/driver";
 import { Db } from "./db";
 import { MissingSecretError, csrfFor } from "./lib/crypto";
 import { SECURITY_HEADERS } from "./lib/http";
+import { noticeResponse } from "./auth/notices";
 import { D1Ledger } from "./ledger";
 import { authRoutes } from "./routes/auth";
 import { inviteRoutes } from "./routes/invites";
@@ -144,6 +145,11 @@ export function createApp(deps: Deps) {
     });
   });
 
-  app.notFound((c) => json(c, 404, { error: "not_found" }));
+  // API calls get JSON; a page address that is not a file (a mistyped or old link) gets the site's "page not found".
+  app.notFound((c) => {
+    const path = new URL(c.req.url).pathname;
+    if (path.startsWith("/api/") || (c.req.method !== "GET" && c.req.method !== "HEAD")) return json(c, 404, { error: "not_found" });
+    return noticeResponse(c, 404, "not_found", { back: "/", backLabel: "Go to the parties" });
+  });
   return app;
 }
