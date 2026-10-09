@@ -15,6 +15,7 @@
   var parties = null, failed = null;
   var mine = [];          // [{ link, status, party_id, party_name, starts_at, time_zone }]
   var heroBox = document.getElementById("hero");
+  var filter = "all";     // the chips above the parties (this page only, not remembered)
   // The owner's sixteen photos (6 and 7 look alike when blurred, so they are kept apart).
   var HERO = [1, 13, 8, 2, 14, 9, 3, 15, 10, 4, 16, 11, 6, 12, 5, 7];
 
@@ -87,16 +88,31 @@
   }
 
   // A party card (owner spec): the party's own artwork on top (16:9, cropped to
-  // fill), then date and time, name (three lines at most here; the full name is
-  // on the party's page), price, availability, action. No artwork: a compact
-  // text-only card, never borrowed photos or an empty frame.
+  // fill) with the date on it, then date and time, name (three lines at most
+  // here; the full name is on the party's page), price, availability, action.
+  // No artwork (or it fails to load): a poster made of the date itself, never a
+  // borrowed photo or an empty frame (owner: the page looked bland).
+  function dateBadge(p, big) {
+    return el("span", { class: "date-badge" + (big ? " big" : ""), attrs: { "aria-hidden": "true" } },
+      el("span", { class: "d", text: datePart(p.starts_at, p.time_zone, { day: "numeric" }) }),
+      el("span", { class: "m", text: datePart(p.starts_at, p.time_zone, { month: "short" }) }));
+  }
+  function poster(p) {
+    return el("div", { class: "cover poster", attrs: { "aria-hidden": "true" } },
+      dateBadge(p, true),
+      el("span", { class: "wd", text: datePart(p.starts_at, p.time_zone, { weekday: "long" }) }),
+      el("img", { class: "mark", attrs: { src: "/img/sahra-mark.svg", alt: "" } }));
+  }
   function cover(p) {
     var f = (p.flyers || [])[0];
-    if (!f) return null;
+    var few = p.state === "open" && p.places_left > 0 && p.places_left <= 20
+      ? el("span", { class: "few", text: t("left_n", { n: p.places_left }) }) : null;
+    if (!f) { var po = poster(p); if (few) po.appendChild(few); return po; }
     var box = el("div", { class: "cover" });
     var img = el("img", { attrs: { src: f.url, alt: t("h_flyer_alt", { name: p.name }), loading: "lazy", decoding: "async" } });
-    img.addEventListener("error", function () { box.remove(); });
-    box.appendChild(img);
+    img.addEventListener("error", function () { var po = poster(p); if (few) po.appendChild(few); box.replaceWith(po); });
+    box.append(img, dateBadge(p, false));
+    if (few) box.appendChild(few);
     return box;
   }
 
@@ -123,7 +139,7 @@
     var price = priceText(p);
     var action = my ? t("h_view_ticket") : p.state === "open" ? t("h_request") : t("h_details");
     var art = cover(p);
-    return el("a", { class: "party-card" + (art ? "" : " text-only"), attrs: { href: href } },
+    return el("a", { class: "party-card", attrs: { href: href } },
       art,
       el("div", { class: "info" },
         el("span", { class: "when", text: Sahra.when(p.starts_at, p.time_zone) }),
@@ -134,15 +150,56 @@
   }
 
   // Parties as one wrapping grid (owner): 3 columns on wide screens, 2 where
-  // they fit, 1 on phones. Nothing to page through.
+  // they fit, 1 on phones. Nothing to page through. Chips above it narrow the
+  // list (only the ones that match something are shown).
+  var FILTERS = {
+    all: function () { return true; },
+    week: function (p) { return p.starts_at - Date.now() < 7 * 86400000; },
+    free: function (p) { return p.from_price === 0; },
+    open: function (p) { return p.state === "open"; },
+  };
   function partiesSection() {
-    var list = [el("div", { class: "section-head", attrs: { id: "parties" } }, el("h2", { text: t("h_upcoming") }))];
+    var head = el("div", { class: "section-head", attrs: { id: "parties" } }, el("h2", { text: t("h_upcoming") }));
+    var list = [head];
     if (failed) list.push(el("p", { class: "notice no", text: failed }));
     else if (!parties) list.push(el("p", { class: "muted", text: t("loading") }));
     else if (!parties.length) list.push(el("div", { class: "empty-note" },
       el("p", { class: "lead", text: t("h_none_t") }), el("p", { class: "muted", text: t("h_none_p") })));
-    else list.push(el("div", { class: "parties-grid" }, parties.map(card)));
+    else {
+      var grid = el("div", { class: "parties-grid" });
+      var count = el("span", { class: "count", attrs: { "aria-live": "polite" } });
+      var chips = el("div", { class: "chips", attrs: { role: "group", "aria-label": t("h_filter_label") } });
+      var keys = Object.keys(FILTERS).filter(function (k) { return k === "all" || parties.some(FILTERS[k]); });
+      if (!keys.some(function (k) { return k === filter; })) filter = "all";
+      var fill = function () {
+        var shown = parties.filter(FILTERS[filter]);
+        Sahra.clear(grid);
+        if (shown.length) shown.forEach(function (p) { grid.appendChild(card(p)); });
+        else grid.appendChild(el("p", { class: "muted none", text: t("h_filter_none") }));
+        count.textContent = shown.length === 1 ? t("h_count_one") : t("h_count", { n: shown.length });
+        chips.querySelectorAll("button").forEach(function (b) { b.setAttribute("aria-pressed", b.dataset.f === filter ? "true" : "false"); });
+      };
+      if (keys.length > 1) keys.forEach(function (k) {
+        var b = el("button", { class: "chip", text: t("h_filter_" + k), attrs: { type: "button" } });
+        b.dataset.f = k;
+        b.addEventListener("click", function () { filter = k; fill(); });
+        chips.appendChild(b);
+      });
+      head.appendChild(el("div", { class: "head-tools" }, keys.length > 1 ? chips : null, count));
+      fill();
+      list.push(grid);
+    }
     return list;
+  }
+
+  // Why Sahra: four true facts (the About page's), in a band of tiles.
+  function why() {
+    return el("section", { class: "why" },
+      el("div", { class: "why-head" }, el("p", { class: "label-line", text: t("h_why_label") }), el("h2", { text: t("h_why_title") })),
+      el("div", { class: "why-tiles" }, [1, 2, 3, 4].map(function (n) {
+        return el("div", { class: "why-tile" }, el("strong", { text: t("h_fact" + n + "_t") }), el("span", { text: t("h_fact" + n + "_p") }));
+      })),
+      el("a", { class: "why-more", text: t("h_why_more"), attrs: { href: "/about" } }));
   }
 
   function mineSection() {
@@ -171,14 +228,19 @@
     return el("section", { class: "how", attrs: { id: "how" } },
       el("div", { class: "section-head" }, el("h2", { text: t("h_how_title") })),
       el("div", { class: "steps" }, [1, 2, 3].map(function (n) {
-        return el("div", { class: "step" },
+        return el("div", { class: "step step-card" },
           el("span", { class: "num", text: "0" + n }),
           el("h3", { text: t("h_step" + n + "_t") }),
           el("p", { text: t("h_step" + n + "_p") }));
       })),
       faq(),
-      el("div", { class: "host" },
-        el("div", null, el("h3", { text: t("h_host_t") }), el("p", { class: "muted", text: t("h_host_p") })),
+      // For organisers: a panel over one of the party photos (darkened, flat; no gradient).
+      el("div", { class: "host host-panel" },
+        photo(5, false),
+        el("div", { class: "shade", attrs: { "aria-hidden": "true" } }),
+        el("div", { class: "host-copy" },
+          el("p", { class: "label-line", text: t("h_host_label") }),
+          el("h3", { text: t("h_host_t") }), el("p", { text: t("h_host_p") })),
         el("div", { class: "host-actions" },
           el("a", { class: "btn primary", text: t("h_contact"), attrs: { href: "/contact.html" } }),
           el("a", { class: "btn", text: t("sign_in"), attrs: { href: "/signin.html" } }))));
@@ -191,6 +253,7 @@
     var m = mineSection();
     if (m) m.forEach(function (n) { app.appendChild(n); });
     app.appendChild(el("div", { class: "parties-section" }, partiesSection()));
+    app.appendChild(why());
     app.appendChild(how());
   }
 

@@ -578,8 +578,8 @@ main.buy { padding-top: 20px; }
 .buy-head .desc { color: #c3c6cd; font-size: 16px; line-height: 1.6; margin: 0; }
 .buy-cols { display: grid; gap: 24px; }
 .buy-form { counter-reset: step; background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 4px 18px 20px; }
-.step { counter-increment: step; padding: 20px 0 4px; border-top: 1px solid var(--line); }
-.step:first-child { border-top: 0; }
+.buy-form .step { counter-increment: step; padding: 20px 0 4px; border-top: 1px solid var(--line); }
+.buy-form .step:first-child { border-top: 0; }
 .step-title { display: flex; align-items: center; gap: 12px; font-size: 19px; line-height: 1.3; margin: 0 0 16px; }
 .step-title .num { flex: none; width: 30px; height: 30px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font-family: var(--font-head); font-size: 15px; font-weight: 700; display: inline-grid; place-items: center; }
 .step-title .num::before { content: counter(step); }
@@ -624,3 +624,53 @@ main.buy { padding-top: 20px; }
 /* The side cards' titles read as headings here, not as small labels. */
 .summary .card > .small.muted:first-child { font-family: var(--font-head); text-transform: none; letter-spacing: 0; font-size: 16px; font-weight: 600; color: var(--text); margin-bottom: 8px; }
 .summary .card p.pre { color: #c9ccd3; line-height: 1.55; }
+
+/* Home additions (owner: "still looks bland, add more"): filter chips, the date on
+   every card, a date poster for parties without a picture, a few-left badge, a
+   "Why Sahra" band, step cards, and the organiser panel over a darkened photo.
+   Flat colours only (no gradients, glow or gloss). */
+.parties-section .section-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 20px; }
+.head-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { min-height: 44px; padding: 8px 16px; border-radius: 999px; border: 1px solid var(--line-strong); background: transparent; color: var(--text); font: inherit; font-size: 15px; font-weight: 500; cursor: pointer; }
+.chip:hover { border-color: rgba(255, 255, 255, 0.32); }
+.chip[aria-pressed="true"] { background: var(--text); color: var(--bg); border-color: var(--text); }
+.chip:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.parties-section .count { color: var(--muted); font-size: 15px; }
+.parties-grid .none { grid-column: 1 / -1; margin: 8px 0; }
+.party-card .cover { position: relative; }
+.date-badge { position: absolute; top: 12px; inset-inline-start: 12px; display: flex; flex-direction: column; align-items: center; min-width: 52px; padding: 6px 8px; border-radius: 12px; background: rgba(12, 13, 16, 0.86); border: 1px solid rgba(255, 255, 255, 0.12); line-height: 1.05; }
+.date-badge .d { font-family: var(--font-head); font-weight: 700; font-size: 22px; }
+.date-badge .m { margin-top: 2px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: #c9ccd3; }
+html[lang="ar"] .date-badge .m { text-transform: none; letter-spacing: 0; }
+.party-card .few { position: absolute; top: 12px; inset-inline-end: 12px; padding: 5px 10px; border-radius: 999px; background: var(--maybe); color: #1d1300; font-size: 13px; font-weight: 700; }
+.cover.poster { display: flex; flex-direction: column; align-items: flex-start; justify-content: flex-end; padding: 18px 20px; background: #161925; }
+.poster .date-badge.big { position: static; align-items: flex-start; background: none; border: 0; padding: 0; min-width: 0; }
+.poster .date-badge.big .d { font-size: 56px; line-height: 0.95; letter-spacing: -0.03em; }
+.poster .date-badge.big .m { font-size: 15px; color: var(--accent); margin-top: 6px; }
+.poster .wd { margin-top: 4px; color: var(--muted); font-size: 14px; }
+.party-card .cover.poster .mark { position: absolute; bottom: 18px; inset-inline-end: 20px; width: 46px; height: 46px; object-fit: contain; opacity: 0.2; }
+.home .why { margin-top: 40px; }
+.why-head h2 { margin: 0 0 20px; font-size: 24px; line-height: 1.25; }
+.why-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
+.why-tile { display: flex; flex-direction: column; gap: 6px; padding: 22px 20px; background: var(--surface); }
+.why-tile strong { font-family: var(--font-head); font-size: 26px; line-height: 1.1; letter-spacing: -0.01em; }
+.why-tile span { color: #b3b6be; font-size: 15px; line-height: 1.45; }
+.why-more { display: inline-flex; align-items: center; min-height: 44px; margin-top: 8px; color: var(--accent); font-weight: 600; text-decoration: none; }
+.why-more:hover { text-decoration: underline; text-underline-offset: 4px; }
+.step-card { padding: 22px 20px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); }
+.home .step-card .num, .step-card .num { font-family: var(--font-head); font-size: 34px; font-weight: 700; letter-spacing: -0.02em; color: var(--accent); }
+.host.host-panel { position: relative; overflow: hidden; padding: 28px 22px; border: 1px solid var(--line); border-radius: 20px; min-height: 240px; align-content: end; }
+.host-panel > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.host-panel .shade { position: absolute; inset: 0; background: rgba(10, 11, 14, 0.76); }
+.host-panel .host-copy, .host-panel .host-actions { position: relative; }
+.host-panel .host-copy h3 { font-size: 24px; margin: 0 0 6px; }
+.host-panel .host-copy p:not(.label-line) { color: #d4d6dc; max-width: 36rem; }
+@media (min-width: 900px) {
+  .why-tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .why-tile { padding: 26px 24px; }
+  .why-tile strong { font-size: 32px; }
+  .why-head h2 { font-size: 30px; }
+  .host.host-panel { padding: 40px; min-height: 280px; }
+  .host-panel .host-copy h3 { font-size: 30px; }
+}
