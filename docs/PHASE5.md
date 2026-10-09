@@ -740,3 +740,16 @@ the site everyone who runs parties is a party owner; guests read "the host".
   used it); About, Privacy and Terms say "host" (same meaning, same version date).
 - Contact page: "Date of party", "continue on WhatsApp or by Email"; the Settings
   example phone number is a made-up one (+20 100 000 0000).
+
+### Spelling pass, and the last feature without a page (9 October 2026)
+
+- Spelling: every English string (wording files, pages, server pages) checked with a
+  dictionary and for repeated words, double spaces, dashes and stray punctuation;
+  nothing wrong was found (British spelling throughout). The organiser page's tab
+  title now reads "My parties".
+- Every API route was matched against the pages. Without a page by design: the
+  sign-in steps (server pages), the Drive backup (Apps Script) and test-only routes
+  (off in production). The one real gap: releasing holds after a controlled
+  recovery (`/api/recovery/holds`, `.../release-hold`). Guests now shows owners an
+  "On hold after a recovery" card, only when something is on hold: each ticket or
+  team member with why it was held, a reason field and Release.

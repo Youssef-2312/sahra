@@ -1056,3 +1056,8 @@ html[lang="ar"] .home-story h2, html[lang="ar"] .home-guide h2 { letter-spacing:
 .pick-role { flex: none; font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
 .notice-code { font-family: var(--font-mono); overflow-wrap: anywhere; }
 @media (min-width: 900px) { .signin-panel .notice-big { font-size: 8rem; } }
+
+/* Guests: release a hold after a recovery (owner only). */
+#holds .s-list li { flex-wrap: wrap; align-items: flex-end; }
+.g-hold { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; flex: 1 1 260px; }
+.g-hold .field { flex: 1 1 200px; margin: 0; }

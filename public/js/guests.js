@@ -455,6 +455,45 @@
       })));
   }
 
+  // After a controlled recovery (src/recovery): tickets and team members whose latest
+  // change could not be confirmed are on hold (a held ticket does not let anyone in).
+  // The owner checks each one and releases it with a reason; shown only when there are any.
+  var holds = null, holdBusy = {};
+  function holdsCard() {
+    if (!holds || (!holds.tickets.length && !holds.staff.length)) return null;
+    function row(kind, x) {
+      var key = kind + ":" + x.id;
+      var reason = S.input("reason", "text", { minlength: 3, maxlength: 500, required: true, placeholder: t("g_hold_reason_ph"), dir: "auto" });
+      var b = el("button", { class: "btn small-btn yes", text: t("g_hold_release"), attrs: { type: "submit", disabled: !!holdBusy[key] } });
+      var f = el("form", { class: "g-hold" }, S.field(t("g_hold_reason"), reason), b);
+      f.addEventListener("submit", async function (e) {
+        e.preventDefault();
+        if (reason.value.trim().length < 3) { reason.focus(); return; }
+        holdBusy[key] = true; b.disabled = true;
+        var r = await S.act("/api/recovery/" + kind + "/" + encodeURIComponent(x.id) + "/release-hold", { reason: reason.value.trim() });
+        delete holdBusy[key];
+        if (!r.ok) { window.alert(S.why(r)); b.disabled = false; return; }
+        await loadHolds();
+      });
+      var what = kind === "tickets"
+        ? [Sahra.ref(x.id), t(x.used_at ? "g_st_inside" : SahraText.en["g_st_" + x.status] ? "g_st_" + x.status : "g_st_hold")].join(" \u00b7 ")
+        : t("tm_role_" + x.role);
+      return el("li", null,
+        el("div", { class: "s-type-text" }, el("strong", { text: (kind === "tickets" ? x.guest_name : x.name) || t("g_no_name"), attrs: { dir: "auto" } }),
+          el("span", { class: "muted small", text: what, attrs: { dir: "auto" } }),
+          x.hold_reason ? el("span", { class: "small muted", text: x.hold_reason, attrs: { dir: "auto" } }) : null),
+        f);
+    }
+    return S.section("holds", t("g_holds"), t("g_holds_p"),
+      el("ul", { class: "s-list" }, holds.tickets.map(function (x) { return row("tickets", x); }).concat(holds.staff.map(function (x) { return row("staff", x); }))));
+  }
+  var holdsNode = null;
+  async function loadHolds() {
+    var r = await Sahra.api.get("/api/recovery/holds");
+    if (r.ok) holds = r.body;
+    S.redraw();
+  }
+
   // ------------------------------------------------------------- page
 
   var tilesNode = null, scannersNode = null;
@@ -462,7 +501,7 @@
     tilesNode = tiles();
     if (tilesNode) app.appendChild(tilesNode);
     app.appendChild(el("div", { class: "g-cols" },
-      el("div", { class: "g-main" }, refundsNode = refundsCard(), findCard(), scannersNode = scanners(), manualCard()),
+      el("div", { class: "g-main" }, holdsNode = holdsCard(), refundsNode = refundsCard(), findCard(), scannersNode = scanners(), manualCard()),
       el("div", { class: "g-side" }, issueCard(), importCard(), announceCard())));
   }
 
@@ -489,6 +528,7 @@
         if (rs[1].ok) types = rs[1].body.types || [];
         S.redraw();
         setInterval(function () { if (document.visibilityState === "visible") loadStats(); }, 60000);
+        if (me.staff.role === "owner") loadHolds();
       });
     },
   });
