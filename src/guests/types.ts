@@ -36,9 +36,21 @@ export const onSale = (now: number) => sql`tt.archived_at IS NULL AND tt.staff_o
 export const hasPublicTypes = (partyId: Sql) =>
   sql`EXISTS (SELECT 1 FROM ticket_types pt WHERE pt.party_id = ${partyId} AND pt.archived_at IS NULL AND pt.staff_only = 0)`;
 
+/**
+ * People one ticket admits (migrations/0021): the type's own min_people / max_people
+ * when it sets them, otherwise 1 up to the party's max_people_per_ticket. `p` is
+ * the party's alias in the statement.
+ */
+export function peopleOk(typeId: string | null, people: number): Sql {
+  if (typeId === null) return sql`(${people} >= 1 AND ${people} <= p.max_people_per_ticket)`;
+  const col = (c: string) => sql`(SELECT tt.${raw(c)} FROM ticket_types tt WHERE tt.id = ${typeId} AND tt.party_id = p.id)`;
+  return sql`(${people} >= COALESCE(${col("min_people")}, 1) AND ${people} <= COALESCE(${col("max_people")}, p.max_people_per_ticket))`;
+}
+export const MAX_TYPE_PEOPLE = 50;
+
 export const TYPE_FIELDS = [
   "name", "description", "price", "quantity", "sales_opens_at", "sales_closes_at", "entry_from", "staff_only",
-  "payment_instructions", "sort",
+  "payment_instructions", "sort", "min_people", "max_people",
 ] as const;
 type TypeField = (typeof TYPE_FIELDS)[number];
 const TIMES = ["sales_opens_at", "sales_closes_at", "entry_from"] as const;
@@ -57,6 +69,8 @@ export interface TicketTypeRow {
   staff_only: number;
   payment_instructions: string | null;
   sort: number;
+  min_people: number | null;
+  max_people: number | null;
   archived_at: number | null;
   rev: number;
 }
@@ -106,6 +120,12 @@ export function parseType(b: Record<string, unknown>, timeZone: string | null, c
     if (n !== null && (typeof n !== "number" || !Number.isInteger(n) || n < 1 || n > MAX_TYPE_QUANTITY)) return bad("quantity");
     v.quantity = n as number | null;
   }
+  for (const f of ["min_people", "max_people"] as const) {
+    if (!(f in b)) continue;
+    const n = b[f];
+    if (n !== null && (typeof n !== "number" || !Number.isInteger(n) || n < 1 || n > MAX_TYPE_PEOPLE)) return bad(f);
+    v[f] = n as number | null;
+  }
   if ("sort" in b) {
     const n = b.sort;
     if (typeof n !== "number" || !Number.isInteger(n) || n < 0 || n > 1000) return bad("sort");
@@ -141,7 +161,7 @@ export function parseType(b: Record<string, unknown>, timeZone: string | null, c
 
 export type TypeChange =
   | { status: "created" | "changed" | "already" }
-  | { status: "rejected"; reason: "not_allowed" | "not_found" | "too_many_types" | "sales_close_before_open" | "quantity_below_held"; held?: number };
+  | { status: "rejected"; reason: "not_allowed" | "not_found" | "too_many_types" | "sales_close_before_open" | "quantity_below_held" | "people_min_above_max"; held?: number };
 
 export class TypeDb {
   constructor(readonly driver: SqlDriver) {}
@@ -150,7 +170,7 @@ export class TypeDb {
   async list(sess: SessionRef, now: number) {
     const r = await this.driver.all<TicketTypeRow & { held: number; approved: number; admitted: number }>(sql`SELECT tt.id, tt.party_id,
         tt.name, tt.description, tt.price, tt.quantity, tt.sales_opens_at, tt.sales_closes_at, tt.entry_from, tt.staff_only,
-        tt.payment_instructions, tt.sort, tt.archived_at, tt.rev,
+        tt.payment_instructions, tt.sort, tt.min_people, tt.max_people, tt.archived_at, tt.rev,
         ${typeHeld(sql`tt.id`)} AS held, ${typeApproved(sql`tt.id`)} AS approved,
         (SELECT COALESCE(SUM(u.people), 0) FROM tickets u WHERE u.type_id = tt.id AND u.used_at IS NOT NULL) AS admitted
       FROM ticket_types tt WHERE tt.party_id = ${sess.partyId} AND ${sessionValid(sess, MANAGERS, now)}
@@ -163,8 +183,9 @@ export class TypeDb {
     const r = await this.driver.all<{
       id: string; name: string; description: string | null; price: number; quantity: number | null; held: number;
       sales_opens_at: number | null; sales_closes_at: number | null; payment_instructions: string | null; on_sale: number;
+      min_people: number | null; max_people: number | null;
     }>(sql`SELECT tt.id, tt.name, tt.description, tt.price, tt.quantity, ${typeHeld(sql`tt.id`)} AS held,
-        tt.sales_opens_at, tt.sales_closes_at, tt.payment_instructions, (${onSale(now)}) AS on_sale
+        tt.sales_opens_at, tt.sales_closes_at, tt.payment_instructions, (${onSale(now)}) AS on_sale, tt.min_people, tt.max_people
       FROM ticket_types tt WHERE tt.party_id = ${partyId} AND tt.archived_at IS NULL AND tt.staff_only = 0
       ORDER BY tt.sort, tt.created_at, tt.id`);
     return r.results;
@@ -183,24 +204,26 @@ export class TypeDb {
     const windowOk = sql`(${val("sales_opens_at", null)} IS NULL OR ${val("sales_closes_at", null)} IS NULL
       OR ${val("sales_closes_at", null)} > ${val("sales_opens_at", null)})`;
     const roomOk = sql`(SELECT COUNT(*) FROM ticket_types WHERE party_id = ${p} AND archived_at IS NULL) < ${MAX_ACTIVE_TYPES}`;
+    const rangeOk = sql`(${val("min_people", null)} IS NULL OR ${val("max_people", null)} IS NULL OR ${val("min_people", null)} <= ${val("max_people", null)})`;
     const rs = await this.driver.batch([
       sql`INSERT INTO ticket_types (id, party_id, name, description, price, quantity, sales_opens_at, sales_closes_at, entry_from,
-          staff_only, payment_instructions, sort, created_at, created_by, last_op, last_action)
+          staff_only, payment_instructions, sort, min_people, max_people, created_at, created_by, last_op, last_action)
         SELECT ${id}, ${p}, ${val("name", "")}, ${val("description", null)}, ${val("price", 0)}, ${val("quantity", null)},
           ${val("sales_opens_at", null)}, ${val("sales_closes_at", null)}, ${val("entry_from", null)}, ${val("staff_only", 0)},
-          ${val("payment_instructions", null)}, ${val("sort", 0)}, ${now}, ${actor}, ${op}, 'type_created'
-        WHERE ${ok} AND ${windowOk} AND ${roomOk} AND NOT EXISTS (SELECT 1 FROM ticket_types WHERE id = ${id})`,
+          ${val("payment_instructions", null)}, ${val("sort", 0)}, ${val("min_people", null)}, ${val("max_people", null)}, ${now}, ${actor}, ${op}, 'type_created'
+        WHERE ${ok} AND ${windowOk} AND ${roomOk} AND ${rangeOk} AND NOT EXISTS (SELECT 1 FROM ticket_types WHERE id = ${id})`,
       audit(now, actor, "type_created", "ticket_type", sql`SELECT party_id, id, rev FROM ticket_types WHERE id = ${id} AND last_op = ${op}`),
-      sql`SELECT ${ok} AS session_ok, ${windowOk} AS window_ok, ${roomOk} AS room_ok,
+      sql`SELECT ${ok} AS session_ok, ${windowOk} AS window_ok, ${roomOk} AS room_ok, ${rangeOk} AS range_ok,
           (SELECT party_id FROM ticket_types WHERE id = ${id}) AS existing_party`,
     ]);
     if (rs[0]!.meta.changes === 1) return { status: "created" };
-    const d = rs[2]!.results[0] as { session_ok: number; window_ok: number; room_ok: number; existing_party: string | null };
+    const d = rs[2]!.results[0] as { session_ok: number; window_ok: number; room_ok: number; range_ok: number; existing_party: string | null };
     if (!d.session_ok) return { status: "rejected", reason: "not_allowed" };
     if (d.existing_party === p) return { status: "already" };
     if (d.existing_party !== null) return { status: "rejected", reason: "not_allowed" };
     if (!d.window_ok) return { status: "rejected", reason: "sales_close_before_open" };
     if (!d.room_ok) return { status: "rejected", reason: "too_many_types" };
+    if (!d.range_ok) return { status: "rejected", reason: "people_min_above_max" };
     return { status: "rejected", reason: "not_allowed" };
   }
 
@@ -228,27 +251,29 @@ export class TypeDb {
     const windowOk = sql`(${merged("sales_opens_at")} IS NULL OR ${merged("sales_closes_at")} IS NULL
       OR ${merged("sales_closes_at")} > ${merged("sales_opens_at")})`;
     const qtyOk = "quantity" in v && v.quantity != null ? sql`${v.quantity} >= ${typeHeld(sql`${id}`)}` : sql`1`;
+    const rangeOk = sql`(${merged("min_people")} IS NULL OR ${merged("max_people")} IS NULL OR ${merged("min_people")} <= ${merged("max_people")})`;
     const roomOk = archived === false
       ? sql`(archived_at IS NULL OR (SELECT COUNT(*) FROM ticket_types WHERE party_id = ${p} AND archived_at IS NULL) < ${MAX_ACTIVE_TYPES})`
       : sql`1`;
     const action = archived === true ? "type_archived" : archived === false && fields.length === 0 ? "type_restored" : "type_changed";
     const rs = await this.driver.batch([
       sql`UPDATE ticket_types SET ${join(sets, ", ")}, rev = rev + 1, last_op = ${op}, last_action = ${action}
-        WHERE id = ${id} AND party_id = ${p} AND ${ok} AND ${differs} AND ${windowOk} AND ${qtyOk} AND ${roomOk}`,
+        WHERE id = ${id} AND party_id = ${p} AND ${ok} AND ${differs} AND ${windowOk} AND ${qtyOk} AND ${roomOk} AND ${rangeOk}`,
       audit(now, actor, action, "ticket_type", sql`SELECT party_id, id, rev FROM ticket_types WHERE id = ${id} AND last_op = ${op}`,
         fields.join(",") || null),
-      sql`SELECT ${ok} AS session_ok, ${differs} AS differs, ${windowOk} AS window_ok, ${roomOk} AS room_ok,
+      sql`SELECT ${ok} AS session_ok, ${differs} AS differs, ${windowOk} AS window_ok, ${roomOk} AS room_ok, ${rangeOk} AS range_ok,
           ${typeHeld(sql`${id}`)} AS held
         FROM ticket_types WHERE id = ${id} AND party_id = ${p}`,
     ]);
     if (rs[0]!.meta.changes === 1) return { status: "changed" };
-    const d = rs[2]!.results[0] as undefined | { session_ok: number; differs: number; window_ok: number; room_ok: number; held: number };
+    const d = rs[2]!.results[0] as undefined | { session_ok: number; differs: number; window_ok: number; room_ok: number; range_ok: number; held: number };
     if (!d) return { status: "rejected", reason: "not_found" };
     if (!d.session_ok) return { status: "rejected", reason: "not_allowed" };
     if (!d.differs) return { status: "already" };
     if (!d.window_ok) return { status: "rejected", reason: "sales_close_before_open" };
     if (!d.room_ok) return { status: "rejected", reason: "too_many_types" };
     if ("quantity" in v && v.quantity != null && (v.quantity as number) < d.held) return { status: "rejected", reason: "quantity_below_held", held: d.held };
+    if (!d.range_ok) return { status: "rejected", reason: "people_min_above_max" };
     return { status: "rejected", reason: "not_allowed" };
   }
 }

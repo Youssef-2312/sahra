@@ -97,6 +97,7 @@ const REFUSAL: Record<SignupRefusal, { status: number; message: string }> = {
   type_unavailable: { status: 409, message: "This ticket type is not on sale right now." },
   type_full: { status: 409, message: "This ticket type is sold out." },
   full: { status: 409, message: "This party is full." },
+  people_out_of_range: { status: 400, message: "This number of people is not allowed for this ticket." },
   terms_changed: { status: 409, message: "The terms or this party's rules have changed. Please review them before sending your request." },
   refused: { status: 409, message: "This request cannot be made." },
 };
@@ -253,6 +254,8 @@ guestRoutes.get("/parties/:party", async (c) => {
       const left = t.quantity === null ? partyLeft : Math.max(0, Math.min(partyLeft, t.quantity - t.held));
       return {
         id: t.id, name: t.name, description: t.description, price: t.price, currency: "EGP",
+        // People one ticket of this type admits (a group type, a single one).
+        min_people: t.min_people ?? 1, max_people: t.max_people ?? p.max_people_per_ticket,
         places_left: left, sold_out: left === 0, on_sale: !!t.on_sale && left > 0,
         sales_opens_at: t.sales_opens_at, sales_closes_at: t.sales_closes_at,
         payment_instructions: t.payment_instructions ?? p.payment_instructions,
@@ -359,7 +362,9 @@ guestRoutes.post("/parties/:party/signup", async (c) => {
   const pf = storedForm(party.guest_form);
   const answers = checkAnswers(pf, answersRaw);
   if (!answers) return json(c, 400, { error: "invalid_answers" });
-  if (people > party.max_people_per_ticket) return json(c, 400, { error: "too_many_people", max_people_per_ticket: party.max_people_per_ticket });
+  // People per ticket: the chosen type's own limits (a group ticket, a single one), else the party's.
+  if (people > party.max_people) return json(c, 400, { error: "too_many_people", max_people_per_ticket: party.max_people });
+  if (people < party.min_people) return json(c, 400, { error: "too_few_people", min_people: party.min_people });
   if (pf.screenshot === "required" && !shot) return json(c, 400, { error: "screenshot_required" });
   if (pf.screenshot === "none" && shot) return json(c, 400, { error: "screenshot_not_wanted" });
   if (pf.id_photo === "required" && !idPhoto) return json(c, 400, { error: "id_photo_required" });

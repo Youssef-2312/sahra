@@ -18,7 +18,7 @@ import { audit, sessionValid, type SessionRef } from "../db/index";
 import { inList, join, sql, type Sql } from "../db/sql";
 import { isBase32 } from "../lib/crypto";
 import { outboxInsert, type OutboxRow } from "../outbox";
-import { hasPublicTypes, onSale, typeApproved, typeHeld } from "./types";
+import { hasPublicTypes, onSale, peopleOk, typeApproved, typeHeld } from "./types";
 
 const MANAGERS = ["owner", "admin"] as const;
 
@@ -50,11 +50,14 @@ export interface SignupParty {
   /** For the chosen type (if any): 1 when on sale to guests now, and its places left (NULL = no limit of its own). */
   type_on_sale: number | null;
   type_left: number | null;
+  /** People one ticket admits: the chosen type's own limits, else 1 up to the party's (migrations/0021). */
+  min_people: number;
+  max_people: number;
 }
 
 /** Why a sign-up was not stored (the same rules as the insert, read in the same batch). */
 export type SignupRefusal = "registration_not_open" | "registration_closed" | "email_limit" | "type_required" | "type_unavailable"
-  | "type_full" | "full" | "terms_changed" | "refused";
+  | "type_full" | "full" | "terms_changed" | "people_out_of_range" | "refused";
 
 /** The registration rules of a party row aliased `p`, at `now`, for one email (all inside SQL). */
 function registrationRules(now: number, email: string) {
@@ -119,7 +122,9 @@ export class GuestDb {
         ${email === null ? sql`0` : sql`(SELECT COUNT(*) FROM tickets e WHERE e.party_id = p.id AND e.guest_email = ${email} AND e.status IN ('pending', 'approved'))`} AS email_tickets,
         ${hasPublicTypes(sql`p.id`)} AS has_types,
         ${typeId === null ? sql`NULL` : sql`EXISTS (SELECT 1 ${tt} AND ${onSale(now)})`} AS type_on_sale,
-        ${typeId === null ? sql`NULL` : sql`(SELECT tt.quantity - ${typeHeld(sql`tt.id`)} ${tt})`} AS type_left
+        ${typeId === null ? sql`NULL` : sql`(SELECT tt.quantity - ${typeHeld(sql`tt.id`)} ${tt})`} AS type_left,
+        ${typeId === null ? sql`1` : sql`COALESCE((SELECT tt.min_people ${tt}), 1)`} AS min_people,
+        ${typeId === null ? sql`p.max_people_per_ticket` : sql`COALESCE((SELECT tt.max_people ${tt}), p.max_people_per_ticket)`} AS max_people
       FROM parties p WHERE p.id = ${partyId}`);
     return r.results[0] ?? null;
   }
@@ -146,7 +151,7 @@ export class GuestDb {
         SELECT ${a.id}, p.id, 'pending', ${a.people}, ${a.name}, ${a.email}, ${a.answers}, ${a.screenshotKey}, ${a.idPhotoKey ?? null}, ${a.instagram ?? null}, ${a.typeId}, ${ty.price},
           ${a.accepted.terms}, ${a.accepted.rules}, ${a.accepted.privacy}, ${a.now}, ${a.now}, ${a.op}, 'ticket_requested'
         FROM parties p
-        WHERE p.id = ${a.partyId} AND ${a.people} <= p.max_people_per_ticket AND ${roomOk} AND ${rulesOk}
+        WHERE p.id = ${a.partyId} AND ${peopleOk(a.typeId, a.people)} AND ${roomOk} AND ${rulesOk}
           AND ${reg.opened} AND ${reg.notClosed} AND ${reg.emailOk} AND ${ty.chosenOk} AND ${ty.placesOk}
           AND NOT EXISTS (SELECT 1 FROM tickets x WHERE x.id = ${a.id})`,
       audit(a.now, null, "ticket_requested", "ticket", sql`SELECT party_id, id, rev FROM tickets WHERE id = ${a.id} AND last_op = ${a.op}`),
@@ -158,6 +163,7 @@ export class GuestDb {
             WHEN NOT ${reg.notClosed} THEN 'registration_closed'
             WHEN NOT ${reg.emailOk} THEN 'email_limit'
             WHEN NOT ${ty.chosenOk} THEN ${a.typeId === null ? "type_required" : "type_unavailable"}
+            WHEN NOT ${peopleOk(a.typeId, a.people)} THEN 'people_out_of_range'
             WHEN NOT ${ty.placesOk} THEN 'type_full'
             WHEN NOT ${roomOk} THEN 'full'
             ELSE 'refused'
@@ -445,7 +451,7 @@ export class GuestDb {
       : sql`EXISTS (SELECT 1 ${tt} AND (tt.quantity IS NULL OR ${typeHeld(sql`tt.id`)} + ${a.people} <= tt.quantity))`;
     const price = a.complimentary ? sql`0` : a.typeId === null ? sql`NULL` : sql`(SELECT tt.price ${tt})`;
     const roomOk = sql`${held(sql`p.id`)} + ${a.people} <= p.capacity`;
-    const peopleOk = sql`${a.people} <= p.max_people_per_ticket`;
+    const peopleFit = peopleOk(a.typeId, a.people);
     const rel = a.release ? now : null;
     const rs = await this.driver.batch([
       sql`INSERT INTO tickets (id, party_id, status, people, guest_name, guest_email, type_id, price, created_at,
@@ -453,14 +459,14 @@ export class GuestDb {
         SELECT ${a.id}, p.id, 'approved', ${a.people}, ${a.name}, ${a.email}, ${a.typeId}, ${price}, ${now},
           ${now}, ${actor}, ${rel}, ${a.release ? actor : null}, ${op}, 'ticket_issued'
         FROM parties p
-        WHERE p.id = ${sess.partyId} AND ${ok} AND ${peopleOk} AND ${roomOk} AND ${typeOk} AND ${placesOk}
+        WHERE p.id = ${sess.partyId} AND ${ok} AND ${peopleFit} AND ${roomOk} AND ${typeOk} AND ${placesOk}
           AND NOT EXISTS (SELECT 1 FROM tickets x WHERE x.id = ${a.id})`,
       audit(now, actor, "ticket_issued", "ticket", sql`SELECT party_id, id, rev FROM tickets WHERE id = ${a.id} AND last_op = ${op}`,
         a.complimentary ? "complimentary" : null),
       ...(a.mail ? [outboxInsert(a.mail, sql`EXISTS (SELECT 1 FROM tickets WHERE id = ${a.id} AND party_id = ${sess.partyId}
         AND last_op = ${op} AND last_action = 'ticket_issued' AND released_at IS NOT NULL AND guest_email = ${a.mail.toEmail})`)] : []),
       sql`SELECT (SELECT party_id FROM tickets WHERE id = ${a.id}) AS existing_party, ${ok} AS session_ok,
-          CASE WHEN NOT ${peopleOk} THEN 'too_many_people' WHEN NOT ${typeOk} THEN 'type_unavailable'
+          CASE WHEN NOT ${peopleFit} THEN 'too_many_people' WHEN NOT ${typeOk} THEN 'type_unavailable'
             WHEN NOT ${placesOk} THEN 'type_full' WHEN NOT ${roomOk} THEN 'full' ELSE 'refused' END AS why
         FROM parties p WHERE p.id = ${sess.partyId}`,
     ]);

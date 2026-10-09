@@ -9,7 +9,7 @@
 // The invitation is any door-staff invitation link of an existing staging party
 // (it is used once, to get a session that may create test parties). Pictures are
 // the owner's photos in public/img/hero (demo data only). Needs migrations
-// 0016, 0017 and 0018 on staging. Some parties get entry rules and a cancellation
+// 0016 to 0021 on staging. Some parties get entry rules and a cancellation
 // policy (the request form's Terms box covers them). Prints the parties it made;
 // their owner sessions expire in 3 hours.
 
@@ -65,10 +65,10 @@ const PARTIES = [
   ["Neon Nights at the Villa", 7, 23, [["Entry", 500]], 200, [10, 1]],
   ["Midnight Masquerade: An All-Night Costume Party With Two Live DJs and Friends", 9, 22, [["Early", 400], ["Regular", 550]], 250, [15, 13, 7]],
   ["Sunset House", 11, 18, [["Entry", 200]], 80, []],                               // no picture: text-only card
-  ["Basement Grooves", 13, 23, [["Entry", 300], ["VIP", 800]], 150, [6, 12]],
+  ["Basement Grooves", 13, 23, [["Normal", 300, 1, 1], ["Group", 250, 2, 6], ["VIP", 800]], 150, [6, 12]],
   ["Pool Party Finale", 16, 16, [["Entry", 0]], 100, [14]],                          // free
   ["Retro 2000s Night", 18, 22, [["Entry", 350]], 180, [3, 8]],
-  ["Desert Lights", 21, 20, [["Early", 450], ["Regular", 600]], 220, [11, 16, 5]],
+  ["Desert Lights", 21, 20, [["Early", 450], ["Regular", 600], ["Group of 4 to 8", 400, 4, 8]], 220, [11, 16, 5]],
   ["Winter Warm-Up", 25, 21, [["Entry", 250]], 140, [12, 2]],
 ];
 
@@ -88,7 +88,11 @@ for (const [i, [name, days, hour, types, capacity, pics]] of PARTIES.entries()) 
     description: "Demo party on staging (test data).",
     rules: WITH_RULES.has(i) ? RULES : null, cancellation_policy: WITH_CANCEL.has(i) ? CANCEL : null,
   }, os), `details ${name}`);
-  for (const [tname, price] of types) must(await call("POST", "/api/tickets/types", { op: randomUUID(), name: tname, price }, os), `type ${tname}`);
+  // [name, price per person, min people, max people] (a group type sets its own people per ticket).
+  for (const [tname, price, min, max] of types) {
+    const people = min ? { min_people: min, max_people: max } : {};
+    must(await call("POST", "/api/tickets/types", { op: randomUUID(), name: tname, price, ...people }, os), `type ${tname}`);
+  }
   for (const n of pics) {
     const fd = new FormData();
     fd.set("op", randomUUID());

@@ -102,6 +102,8 @@
     if (!t) return;
     ["name", "price", "sort", "description", "payment_instructions"].forEach(function (k) { tf.elements[k].value = t[k] === null ? "" : t[k]; });
     tf.elements.quantity.value = t.quantity === null ? "" : t.quantity;
+    tf.elements.min_people.value = t.min_people == null ? "" : t.min_people;
+    tf.elements.max_people.value = t.max_people == null ? "" : t.max_people;
     ["sales_opens_at", "sales_closes_at", "entry_from"].forEach(function (k) { tf.elements[k + "_local"].value = local(t[k], party.time_zone); });
     tf.elements.staff_only.checked = !!t.staff_only;
     tf.elements.archived.checked = !!t.archived;
@@ -112,6 +114,40 @@
     tf.elements.name.value = "Early";
     tf.elements.description.value = "Early-bird ticket.";
   });
+  // Group and single tickets (owner request): presets for the people per ticket.
+  document.getElementById("type-normal").addEventListener("click", function () {
+    fillType(null);
+    tf.elements.name.value = "Normal";
+    tf.elements.min_people.value = 1;
+    tf.elements.max_people.value = 1;
+  });
+  document.getElementById("type-group").addEventListener("click", function () {
+    fillType(null);
+    tf.elements.name.value = "Group";
+    tf.elements.description.value = "One QR code for the whole group. Arrive together.";
+    tf.elements.min_people.value = 2;
+    tf.elements.max_people.value = 6;
+  });
+
+  // The guest form's three asks (proof of payment, ID photo, Instagram); its questions are kept as they are.
+  var asks = document.getElementById("asks");
+  var guestForm = null;
+  async function loadAsks() {
+    var r = await fetch("/api/tickets/form", { credentials: "same-origin" });
+    if (!r.ok) return;
+    guestForm = (await r.json()).form;
+    ["screenshot", "id_photo", "instagram"].forEach(function (k) { asks.elements[k].value = guestForm[k] || (k === "screenshot" ? "required" : "none"); });
+  }
+  asks.addEventListener("submit", async function (e) {
+    e.preventDefault();
+    if (!guestForm) return;
+    var form = Object.assign({}, guestForm);
+    ["screenshot", "id_photo", "instagram"].forEach(function (k) { form[k] = asks.elements[k].value; });
+    show(await Sahra.post("/api/tickets/form", { form: form }));
+    await loadAsks();
+  });
+  loadAsks();
+
   document.getElementById("type-pick").addEventListener("submit", function (e) {
     e.preventDefault();
     var id = new FormData(e.target).get("id");
@@ -122,6 +158,7 @@
     var f = new FormData(tf);
     var body = { name: String(f.get("name")).trim(), price: Number(f.get("price")), sort: Number(f.get("sort") || 0),
       quantity: f.get("quantity") === "" ? null : Number(f.get("quantity")), staff_only: !!f.get("staff_only"),
+      min_people: f.get("min_people") === "" ? null : Number(f.get("min_people")), max_people: f.get("max_people") === "" ? null : Number(f.get("max_people")),
       description: String(f.get("description") || "").trim() || null, payment_instructions: String(f.get("payment_instructions") || "").trim() || null };
     ["sales_opens_at_local", "sales_closes_at_local", "entry_from_local"].forEach(function (k) { body[k] = f.get(k) ? String(f.get(k)).slice(0, 16) : null; });
     var id = f.get("id");

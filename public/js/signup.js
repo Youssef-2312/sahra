@@ -237,6 +237,7 @@
         return el("label", { class: "choice" + (x.on_sale ? "" : " off") }, input,
           el("span", { class: "grow" },
             el("span", { class: "row" }, el("strong", { text: x.name, attrs: { dir: "auto" } }), el("span", { class: "price", text: x.price ? Sahra.money(x.price) + " " + t("per_person") : t("free") })),
+            el("span", { class: "small muted", text: peopleText(x) }),
             x.description ? el("span", { class: "small muted pre", text: x.description, attrs: { dir: "auto" } }) : null,
             el("span", null, typeStatus(x))));
       }));
@@ -328,26 +329,42 @@
   }
 
   // Quantity (owner request): how many people this ticket admits, with - and + buttons.
-  // One QR code admits them all together; the party sets the most per ticket.
-  function quantityField(people, maxPeople) {
-    if (maxPeople <= 1) return null;
+  // One QR code admits them all together. The limits are the chosen type's (a group
+  // type, a single one) or the party's; a type of exactly one person hides it.
+  function peopleRange(type) {
+    return type ? { min: type.min_people || 1, max: type.max_people || data.max_people_per_ticket } : { min: 1, max: data.max_people_per_ticket };
+  }
+  function quantityField(people) {
     var minus = el("button", { class: "qty-btn", text: "\u2212", attrs: { type: "button", "aria-label": t("qty_less") } });
     var plus = el("button", { class: "qty-btn", text: "+", attrs: { type: "button", "aria-label": t("qty_more") } });
+    var hint = el("span", { class: "hint" });
+    var range = { min: 1, max: 1 };
+    var field = el("div", { class: "field qty-field" },
+      el("label", { text: t("qty_label"), attrs: { for: "qty-input" } }), el("div", { class: "qty" }, minus, people, plus), hint);
     function set(n) {
-      var v = Math.max(1, Math.min(maxPeople, n || 1));
+      var v = Math.max(range.min, Math.min(range.max, n || range.min));
       people.value = String(v);
-      minus.disabled = v <= 1;
-      plus.disabled = v >= maxPeople;
+      minus.disabled = v <= range.min;
+      plus.disabled = v >= range.max;
       people.dispatchEvent(new Event("input", { bubbles: true }));
     }
+    field.bounds = function (r) {
+      range = r;
+      people.min = r.min;
+      people.max = r.max;
+      field.hidden = r.max <= 1;
+      hint.textContent = r.min > 1 ? t("people_hint_range", { min: r.min, max: r.max }) : t("people_hint", { n: r.max });
+      set(Number(people.value));
+    };
     minus.addEventListener("click", function () { set(Number(people.value) - 1); });
     plus.addEventListener("click", function () { set(Number(people.value) + 1); });
     people.addEventListener("change", function () { set(Number(people.value)); });
-    setTimeout(function () { set(Number(people.value)); }, 0);
-    return el("div", { class: "field qty-field" },
-      el("label", { text: t("qty_label"), attrs: { for: "qty-input" } }),
-      el("div", { class: "qty" }, minus, people, plus),
-      el("span", { class: "hint", text: t("people_hint", { n: maxPeople }) }));
+    return field;
+  }
+  function peopleText(type) {
+    var r = peopleRange(type);
+    if (r.max <= 1) return t("one_person");
+    return r.min > 1 ? t("people_range", { min: r.min, max: r.max }) : t("people_upto", { n: r.max });
   }
 
   function step(title, children) {
@@ -360,7 +377,11 @@
     var draft = {};
     try { draft = JSON.parse(sessionStorage.getItem(draftKey) || "{}"); } catch (e) { draft = {}; }
     var people = el("input", { class: "qty-input", attrs: { type: "number", id: "qty-input", name: "people", min: 1, max: maxPeople, value: draft.people || 1, inputmode: "numeric", required: true } });
-    var qty = quantityField(people, maxPeople);
+    var qty = quantityField(people);
+    var chosenType = function () {
+      var c = form.querySelector("input[name=type_id]:checked");
+      return c ? data.types.filter(function (x) { return x.id === c.value; })[0] || null : null;
+    };
     var typesSlot = el("div");
     var form = el("form", { class: "buy-form" },
       data.types.length ? step(t("choose_type"), [typesSlot, qty]) : null,
@@ -370,9 +391,8 @@
       el("div", { class: "field" }, el("label", null, t("email"),
         el("input", { attrs: { type: "email", name: "email", maxlength: 254, required: true, autocomplete: "email", inputmode: "email", value: draft.email || "" } }),
         el("span", { class: "hint", text: t("email_hint") }))),
-      // No ticket types: the quantity sits with the details; a party of one person per ticket keeps it hidden at 1.
+      // No ticket types: the quantity sits with the details (hidden when the party allows one person per ticket).
       data.types.length ? null : qty,
-      maxPeople <= 1 ? el("div", { hidden: true }, people) : null,
       instagramField(data.form.instagram || "none", draft),
       idPhotoField(data.form.id_photo || "none"),
       data.form.questions.map(questionField)]),
@@ -392,7 +412,11 @@
       if (first) form.querySelector("input[value='" + first.id + "']").checked = true;
     }
     people.addEventListener("input", function () { paymentRefresh(form); orderRefresh(form); });
-    form.addEventListener("change", function () { orderRefresh(form); });
+    form.addEventListener("change", function (e) {
+      if (e.target && e.target.name === "type_id") qty.bounds(peopleRange(chosenType()));
+      orderRefresh(form);
+    });
+    setTimeout(function () { qty.bounds(peopleRange(chosenType())); }, 0);
     form.addEventListener("submit", submit);
     setTimeout(function () { paymentRefresh(form); orderRefresh(form); }, 0);
     return form;

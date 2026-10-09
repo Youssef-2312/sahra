@@ -127,7 +127,7 @@ async function partyZone(c: Ctx, partyId: string) {
 
 function typeAnswer(c: Ctx, r: Awaited<ReturnType<TypeDb["create"]>>) {
   if (r.status !== "rejected") return null;
-  const code = r.reason === "not_found" ? 404 : r.reason === "sales_close_before_open" ? 400 : 409;
+  const code = r.reason === "not_found" ? 404 : r.reason === "sales_close_before_open" || r.reason === "people_min_above_max" ? 400 : 409;
   return json(c, code, { error: r.reason, ...(r.held !== undefined ? { held: r.held } : {}) });
 }
 

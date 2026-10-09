@@ -388,6 +388,17 @@ the `staging` branch; a finished piece the owner should try is pushed there too.
   says the ID is checked (privacy version "+id"). Queue: "Show ID photo" and the
   handle as a link; CSV exports include it. Tests: test/idphoto.test.ts.
 
+- Group and single tickets (owner request; migration 0021): a ticket type sets
+  min_people / max_people (NULL = 1 to the party's max_people_per_ticket), e.g.
+  "Normal" 1 to 1 and "Group" 2 to 6; checked in the request and issue
+  statements (src/guests/types.ts peopleOk). The ticket page's Quantity follows
+  the chosen type (hidden for exactly one person); each type says how many people
+  it admits. Party page: people-per-ticket fields and Normal / Group presets, and a
+  Guest form section for proof of payment, ID photo and Instagram. Tests:
+  test/grouptypes.test.ts.
+- Dashboard redesign, Quantity selector, Nova-style footer, wording pass ("Time",
+  "Location", a professional tone), home tab "Sahra | Parties".
+
 ## Next
 
 Piece 8: party settings (details, ticket types, sign-up questions).

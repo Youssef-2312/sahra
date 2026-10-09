@@ -59,6 +59,9 @@ When a party has types, every guest request must choose one.</p>
 <label>Price (EGP per person) <input name="price" type="number" min="0" max="1000000" value="0" required></label>
 <label>Places <input name="quantity" type="number" min="1" max="100000" placeholder="no own limit"></label>
 <label>Order <input name="sort" type="number" min="0" max="1000" value="0"></label></p>
+<p><label>People per ticket: at least <input name="min_people" type="number" min="1" max="50" placeholder="1"></label>
+<label>at most <input name="max_people" type="number" min="1" max="50" placeholder="the party's"></label>
+(for example 1 and 1 for a normal ticket, 2 and 6 for a group ticket; empty = the party's setting)</p>
 <p><label>On sale from <input name="sales_opens_at_local" type="datetime-local"></label>
 <label>On sale until <input name="sales_closes_at_local" type="datetime-local"></label>
 <label>Entry from (door) <input name="entry_from_local" type="datetime-local"></label></p>
@@ -67,8 +70,19 @@ When a party has types, every guest request must choose one.</p>
 <p><label>Description<br><textarea name="description" rows="2" cols="60" maxlength="500"></textarea></label></p>
 <p><label>Payment instructions for this type (empty = the party's)<br><textarea name="payment_instructions" rows="2" cols="60" maxlength="1000"></textarea></label></p>
 <button>Save type</button> <button id="type-new" type="button">New type</button> <button id="type-early" type="button">New "Early" type</button>
+<button id="type-normal" type="button">New "Normal" type (1 person)</button> <button id="type-group" type="button">New "Group" type (2 to 6)</button>
 </form>
 <form id="type-pick">Edit type <select name="id"></select> <button>Load</button></form>
+
+<h2>Guest form</h2>
+<p>What the ticket request form asks for. Each is checked by the server.</p>
+<form id="asks">
+<p><label>Proof of payment <select name="screenshot"><option value="required">Required</option><option value="optional">Optional</option><option value="none">Not asked</option></select></label></p>
+<p><label>ID photo <select name="id_photo"><option value="none">Not asked</option><option value="optional">Optional</option><option value="required">Required</option></select></label>
+(only owners and admins can see it; deleted 7 days after the party)</p>
+<p><label>Instagram handle <select name="instagram"><option value="none">Not asked</option><option value="optional">Optional</option><option value="required">Required</option></select></label></p>
+<button>Save guest form</button>
+</form>
 
 <h2>Preview</h2>
 <form id="preview">
