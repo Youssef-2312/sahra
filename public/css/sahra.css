@@ -231,27 +231,19 @@ html[lang="ar"] .serif { font-family: var(--font-head); font-style: normal; font
 /* Party cards (owner): pages of a fixed grid, 3 x 3 on desktops, 2 x 3 on
    tablets, 1 x 3 on phones; each card has the flyers on the start side and the
    details on the end side, aligned to the start. */
-.parties-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; margin-top: var(--gap); }
+.parties-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; margin-top: 20px; align-items: stretch; }
 .page-count { min-width: 3.2rem; text-align: center; color: var(--muted); font-size: 16px; font-variant-numeric: tabular-nums; }
-.party-card { display: grid; grid-template-columns: 42% minmax(0, 1fr); text-decoration: none; color: var(--text);
+.party-card { display: flex; flex-direction: column; text-decoration: none; color: var(--text);
   background: var(--surface); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; box-shadow: none; transition: border-color 0.15s; }
 .party-card:hover { border-color: var(--line-strong); }
-.flyers { display: grid; gap: 3px; background: var(--bg); min-height: 12rem; }
-.flyers.n2 { grid-template-rows: 1fr 1fr; }
-.flyers.n3 { grid-template-columns: 1fr 1fr; grid-template-rows: 2fr 1fr; }
-.flyers.n3 .fl:first-child { grid-column: 1 / -1; }
-.flyers .fl { position: relative; overflow: hidden; background: var(--surface-2); }
-.flyers img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 0.5s cubic-bezier(0.2, 0.7, 0.2, 1); }
-.party-card:hover .flyers img { transform: scale(1.04); }
-.flyers.none { place-items: center; background: var(--surface-2); border-inline-end: 1px solid var(--line); }
-.date-tile { display: flex; flex-direction: column; align-items: center; }
-.date-tile .day { font-family: var(--font-head); font-size: 3rem; font-weight: 700; line-height: 1; letter-spacing: -0.03em; }
-.date-tile .mon { font-family: var(--font-mono); font-size: 0.75rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); margin-top: 6px; }
-.party-card .info { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 18px 16px; text-align: start; min-width: 0; }
-.party-card .when { display: block; margin-bottom: 4px; font-size: 16px; line-height: 1.5; color: var(--muted); }
-.party-card .name { font-family: var(--font-head); font-weight: 700; font-size: 1.3rem; line-height: 1.2; letter-spacing: -0.015em; overflow-wrap: anywhere; }
+.party-card .cover { aspect-ratio: 16 / 9; background: var(--surface-2); border-bottom: 1px solid var(--line); overflow: hidden; }
+.party-card .cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.party-card .info { flex: 1; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 20px; text-align: start; min-width: 0; }
+.party-card .when { display: block; margin-bottom: 4px; font-size: 15px; line-height: 1.45; color: #a9adb6; }
+.party-card .name { font-family: var(--font-head); font-weight: 700; font-size: 21px; line-height: 1.25; letter-spacing: -0.015em; overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; }
 .party-card .price-line { font-size: 16px; line-height: 1.5; font-weight: 600; }
-.party-card .status { display: inline-flex; align-items: center; gap: 8px; font-size: 16px; line-height: 1.5; color: var(--muted); }
+.party-card .status { display: inline-flex; align-items: center; gap: 8px; font-size: 15px; line-height: 1.45; color: #a9adb6; }
 .party-card .status .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--faint); flex: none; }
 .party-card .status.yes .dot { background: var(--yes); }
 .party-card .status.no { color: var(--no); }
@@ -293,7 +285,7 @@ html[dir="rtl"] .round svg { transform: scaleX(-1); }
   display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px; }
 .site-footer a { color: var(--muted); text-decoration: none; }
 .site-footer a:hover { color: var(--text); }
-.site-footer .links a { display: inline-block; padding: 10px 0; margin-inline-end: 18px; }
+.site-footer .links a { display: inline-flex; align-items: center; min-height: 44px; margin-inline-end: 18px; }
 .nova { display: inline-flex; align-items: center; gap: 10px; }
 .nova .credit { display: inline-flex; align-items: center; gap: 9px; color: var(--text); padding: 6px 0; font-weight: 600; }
 .nova .credit img { width: 30px; height: 30px; border-radius: 8px; }
@@ -320,11 +312,8 @@ html[dir="rtl"] .round svg { transform: scaleX(-1); }
   .host { grid-template-columns: 1fr auto; align-items: center; }
   .section-head { margin-top: 72px; }
   #app > .section-head:first-child { margin-top: 44px; }
-  .parties-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
-  .flyers { min-height: 14rem; }
-  .party-card .info { padding: 18px 16px; }
-  .party-card .name { font-size: 1.2rem; }
-  .mine { grid-template-columns: repeat(2, 1fr); }
+  .parties-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
+    .mine { grid-template-columns: repeat(2, 1fr); }
   .steps { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 32px; }
   .host-actions { display: flex; gap: 12px; }
   .host { margin-top: 56px; }
@@ -375,6 +364,24 @@ html[dir="rtl"] .round svg { transform: scaleX(-1); }
   .reqs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
   .reqs .req { margin: 0; }
   .req .actions .btn { width: 100%; min-width: 0; }
+}
+
+/* Home rhythm (owner spec): one container for the parties, the steps, the organiser row and the footer. */
+.home main, .home .site-footer, .home .topbar { max-width: calc(1120px + 40px); padding-inline: 20px; }
+.home main { padding-top: 0; padding-bottom: 40px; }
+.home #app > .section-head:first-child, .home #app > .parties-section:first-child > .section-head { margin-top: 40px; }
+.home .section-head h2 { font-size: 24px; line-height: 1.25; }
+.home .parties-section + .how .section-head, .home .how > .section-head { margin-top: 40px; }
+.home .steps { margin-top: 20px; gap: 24px; }
+.home .step h3 { font-size: 17px; line-height: 1.35; margin: 6px 0; }
+.home .step p { font-size: 16px; line-height: 1.5; color: #b8bbc3; }
+.home .step .num { font-size: 13px; color: #a9adb6; }
+.home .host { margin-top: 32px; padding-top: 28px; }
+.home .site-footer { margin-top: 0; }
+@media (min-width: 900px) {
+  .home main, .home .site-footer, .home .topbar { max-width: calc(1120px + 48px); padding-inline: 24px; }
+  .home .steps { gap: 30px; }
+  .home .host { margin-top: 32px; }
 }
 
 /* About and Contact pages (owner request; laid out after Nova's). */

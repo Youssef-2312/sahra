@@ -86,25 +86,17 @@
             : el("a", { class: "btn", text: t("h_how"), attrs: { href: "#how" } }))));
   }
 
-  // A party card (owner's reference: an events row with the flyer and the details
-  // beside it): the party's flyers on the start side as a small grid (one large,
-  // up to two small), the details on the end side, aligned to the start. A party
-  // without flyers shows its date on a plain tile, never someone else's photos.
-  function flyers(p) {
-    var list = (p.flyers || []).slice(0, 3);
-    var box = el("div", { class: "flyers n" + Math.max(1, list.length) });
-    if (!list.length) {
-      box.classList.add("none");
-      box.appendChild(el("div", { class: "date-tile" },
-        el("span", { class: "day", text: datePart(p.starts_at, p.time_zone, { day: "numeric" }) }),
-        el("span", { class: "mon", text: datePart(p.starts_at, p.time_zone, { month: "short" }) })));
-      return box;
-    }
-    list.forEach(function (f, i) {
-      var img = el("img", { attrs: { src: f.url, alt: i === 0 ? t("h_flyer_alt", { name: p.name }) : "", loading: "lazy", decoding: "async" } });
-      img.addEventListener("error", function () { img.remove(); });
-      box.appendChild(el("div", { class: "fl" }, img));
-    });
+  // A party card (owner spec): the party's own artwork on top (16:9, cropped to
+  // fill), then date and time, name (three lines at most here; the full name is
+  // on the party's page), price, availability, action. No artwork: a compact
+  // text-only card, never borrowed photos or an empty frame.
+  function cover(p) {
+    var f = (p.flyers || [])[0];
+    if (!f) return null;
+    var box = el("div", { class: "cover" });
+    var img = el("img", { attrs: { src: f.url, alt: t("h_flyer_alt", { name: p.name }), loading: "lazy", decoding: "async" } });
+    img.addEventListener("error", function () { box.remove(); });
+    box.appendChild(img);
     return box;
   }
 
@@ -130,11 +122,12 @@
     var href = my ? my.link : "/signup.html?party=" + encodeURIComponent(p.id);
     var price = priceText(p);
     var action = my ? t("h_view_ticket") : p.state === "open" ? t("h_request") : t("h_details");
-    return el("a", { class: "party-card", attrs: { href: href } },
-      flyers(p),
+    var art = cover(p);
+    return el("a", { class: "party-card" + (art ? "" : " text-only"), attrs: { href: href } },
+      art,
       el("div", { class: "info" },
         el("span", { class: "when", text: Sahra.when(p.starts_at, p.time_zone) }),
-        el("span", { class: "name", text: p.name, attrs: { dir: "auto" } }),
+        el("span", { class: "name", text: p.name, attrs: { dir: "auto", title: p.name } }),
         price ? el("span", { class: "price-line", text: price }) : null,
         availability(p, my),
         el("span", { class: "go", text: action })));

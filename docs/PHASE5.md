@@ -276,6 +276,22 @@ the `staging` branch; a finished piece the owner should try is pushed there too.
   cards, tiles, request cards, the sign-in panel and the page background are
   flat colours with no soft shadows; the unused blueprint grid is gone.
 - Nova's site is now https://novadev.co/ (footer credit and About page).
+- Home refinement (owner spec): headline "A great *sahra* starts here.";
+  one container for the parties, steps, organiser row, footer and header
+  (1120 px content, 24 px desktop / 20 px phone gutters); 40 px hero to
+  "Upcoming parties", 20 px to the cards, 40 px to "How tickets work", 32 px to
+  the organiser row, 40 px to the footer. Cards: the party's own first image on
+  top at 16:9 (cover), or a compact text-only card; 3 equal columns on
+  desktops, 2 on tablets, 1 on phones; 20 px padding, 12 px corners, one
+  border; titles 21 px / 1.25, three lines at most (the full name on the
+  party page and in the title attribute); actions aligned at the bottom.
+  Steps: 24 px heading, 17 px titles, 16 px / 1.5 text. Footer links 44 px tall.
+- Guest wording: "Purchase a ticket" (card), "Purchase ticket" (sign-up
+  button), "Purchase your ticket" (step 1) instead of "Request". Status lines
+  still say the organiser checks the request, because approval is still a step.
+- Flyers (owner): organisers may upload more than four pictures per party
+  (suggested cap 8) when the flyer upload is built; cards show the first, the
+  party page shows them all.
 - Hero photos: done. The owner uploaded seven photos (and a blank PNG, left
   out), then five more; all are resized to 1000 px at most, blurred a little,
   stripped of metadata (no location data) and saved as
