@@ -112,22 +112,39 @@
   function people(n) { return n === 1 ? t("one_person") : t("q_people", { n: n }); }
 
   function rejectForm(row, actions) {
+    var ids = row.ids || [row.id];
     Sahra.clear(actions);
     var input = el("input", { attrs: { type: "text", maxlength: 300, dir: "auto", "aria-label": t("q_reject_reason"), placeholder: t("q_reject_reason") } });
     actions.appendChild(el("div", { class: "main" }, input));
     actions.appendChild(el("button", { class: "btn", text: t("q_cancel"), attrs: { type: "button" }, on: { click: render } }));
     actions.appendChild(el("button", { class: "btn no", text: t("q_reject_confirm"), attrs: { type: "button" },
-      on: { click: function () { run([row.id], function (ids) { return reject(ids, input.value.trim()); }); } } }));
+      on: { click: function () { run(ids, function (ids) { return reject(ids, input.value.trim()); }); } } }));
     input.focus();
   }
 
+  // Tickets requested together (an order, migrations/0022) share one card: the first
+  // ticket's details (proof, answers), every ticket's name, and actions on all of them.
+  function grouped(list) {
+    var out = [], byOrder = {};
+    list.forEach(function (r) {
+      if (!r.order_id) { out.push(r); return; }
+      var g = byOrder[r.order_id];
+      if (!g) { g = byOrder[r.order_id] = Object.assign({}, r, { members: [] }); out.push(g); }
+      g.members.push(r);
+      if (r.id === r.order_id) { var keep = g.members; Object.assign(g, r); g.members = keep; }
+    });
+    out.forEach(function (g) { if (g.members) g.ids = g.members.map(function (m) { return m.id; }); });
+    return out;
+  }
+
   function card(row) {
+    var ids = row.ids || [row.id];
     var note = notes[row.id];
     var finished = note && note.cls !== "no" && (note.state === "sent" || note.state === "rejected" || (tab === "pending" && note.state === "approved" && note.cls === "yes"));
     var canSelect = !finished && (tab === "pending" || (tab === "approved" && !row.released_at));
     var box = canSelect ? el("input", { attrs: { type: "checkbox", "aria-label": t("q_select") },
-      on: { change: function (e) { if (e.target.checked) selected[row.id] = true; else delete selected[row.id]; render(); } } }) : null;
-    if (box) box.checked = !!selected[row.id];
+      on: { change: function (e) { ids.forEach(function (id) { if (e.target.checked) selected[id] = true; else delete selected[id]; }); render(); } } }) : null;
+    if (box) box.checked = ids.every(function (id) { return !!selected[id]; });
 
     var shot = el("div", { class: "shot" });
     if (row.has_screenshot) {
@@ -150,6 +167,9 @@
         row.instagram ? el("li", null, el("span", { class: "muted", text: t("insta_label") + ": " }),
           el("a", { text: "@" + row.instagram, attrs: { href: "https://www.instagram.com/" + encodeURIComponent(row.instagram) + "/", target: "_blank", rel: "noopener noreferrer", dir: "ltr" } })) : null,
         el("li", { class: "muted", text: t("q_requested", { when: Sahra.rel(row.created_at) }) }),
+        ids.length > 1 ? row.members.map(function (m, i) {
+          return el("li", null, el("span", { class: "muted", text: t("ticket_n", { n: i + 1 }) + ": " }), el("span", { text: m.guest_name || "-", attrs: { dir: "auto" } }));
+        }) : null,
         answers.map(function (k) {
           return el("li", null, el("span", { class: "muted", text: k + ": ", attrs: { dir: "auto" } }), el("span", { class: "pre", text: String(row.answers[k]), attrs: { dir: "auto" } }));
         })));
@@ -158,19 +178,19 @@
     if (!finished && !busy) {
       if (tab === "pending") {
         actions.appendChild(el("button", { class: "btn primary main", text: t("q_approve_send"), attrs: { type: "button" },
-          on: { click: function () { run([row.id], function (ids) { return approve(ids, true); }); } } }));
+          on: { click: function () { run(ids, function (ids) { return approve(ids, true); }); } } }));
         actions.appendChild(el("button", { class: "btn", text: t("q_approve"), attrs: { type: "button" },
-          on: { click: function () { run([row.id], function (ids) { return approve(ids, false); }); } } }));
+          on: { click: function () { run(ids, function (ids) { return approve(ids, false); }); } } }));
         actions.appendChild(el("button", { class: "btn no", text: t("q_reject"), attrs: { type: "button" }, on: { click: function () { rejectForm(row, actions); } } }));
       } else if (tab === "approved" && !row.released_at) {
         actions.appendChild(el("button", { class: "btn primary main", text: t("q_send"), attrs: { type: "button" },
-          on: { click: function () { run([row.id], release); } } }));
+          on: { click: function () { run(ids, release); } } }));
       }
     }
     // After "Approve and send" failed to send: offer Send QR on the same card.
     if (tab === "pending" && note && note.cls === "maybe" && !busy) {
       actions.appendChild(el("button", { class: "btn primary main", text: t("q_send"), attrs: { type: "button" },
-        on: { click: function () { run([row.id], release); } } }));
+        on: { click: function () { run(ids, release); } } }));
     }
 
     var status = tab === "approved" ? el("span", { class: "pill " + (row.released_at ? "yes" : "maybe"), text: row.released_at ? t("q_sent") : t("q_approved") })
@@ -180,9 +200,9 @@
       el("div", { class: "head" },
         el("label", { class: "check" }, box,
           el("span", null, el("span", { class: "who", text: row.guest_name || "-", attrs: { dir: "auto" } }), el("br"),
-            el("span", { class: "small muted", text: [row.type_name, people(row.people)].filter(Boolean).join(" · "), attrs: { dir: "auto" } }))),
+            el("span", { class: "small muted", text: [ids.length > 1 ? t("q_n_tickets", { n: ids.length }) : null, row.type_name, people(row.people)].filter(Boolean).join(" · "), attrs: { dir: "auto" } }))),
         status),
-      row.price ? el("p", { class: "price", text: t("q_expected", { amount: Sahra.amount(row.price * row.people) }) }) : null,
+      row.price ? el("p", { class: "price", text: t("q_expected", { amount: Sahra.amount(row.price * row.people * ids.length) }) }) : null,
       row.same_email ? el("p", { class: "notice maybe small", text: t("q_same_email", { n: row.same_email }) }) : null,
       tab === "rejected" && row.reject_reason ? el("p", { class: "small muted", text: t("q_reason", { reason: row.reject_reason }), attrs: { dir: "auto" } }) : null,
       shot, details,
@@ -237,7 +257,7 @@
         app.appendChild(el("button", { class: "btn link", text: t("q_select_all"), attrs: { type: "button" },
           on: { click: function () { selectable.slice(0, MAX).forEach(function (r) { selected[r.id] = true; }); render(); } } }));
       }
-      app.appendChild(el("div", { class: "reqs" }, rows.map(card)));
+      app.appendChild(el("div", { class: "reqs" }, grouped(rows).map(card)));
     }
     if (next) app.appendChild(el("button", { class: "btn", text: t("q_more"), attrs: { type: "button", disabled: busy }, on: { click: function () { load(true); } } }));
     app.appendChild(el("div", { class: "stack buttons page-tools" },

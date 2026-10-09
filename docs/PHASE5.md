@@ -396,6 +396,15 @@ the `staging` branch; a finished piece the owner should try is pushed there too.
   it admits. Party page: people-per-ticket fields and Normal / Group presets, and a
   Guest form section for proof of payment, ID photo and Instagram. Tests:
   test/grouptypes.test.ts.
+- Separate tickets in one request (owner request; migration 0022): a guest can
+  ask for up to 10 tickets at once (never more than the party's tickets per
+  email), one per friend, each with its own link and QR code so friends can
+  arrive separately. Friends' names are optional (an empty one takes the
+  buyer's). One INSERT creates all or none; the whole order counts against
+  capacity, type places and the per-email limit. The tickets share order_id
+  (the first ticket's id); the payment proof, ID photo, Instagram and answers
+  stay on the first. The queue shows an order as one card ("3 tickets") and
+  approves, sends or rejects all of them together. Tests: test/orders.test.ts.
 - Dashboard redesign, Quantity selector, Nova-style footer, wording pass ("Time",
   "Location", a professional tone), home tab "Sahra | Parties".
 

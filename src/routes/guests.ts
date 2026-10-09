@@ -40,6 +40,8 @@ export const guestRoutes = new Hono<AppEnv>();
 
 const PARTY_RE = /^[a-z0-9-]{3,24}$/;
 /** The whole multipart request: the screenshot plus room for the other fields. */
+/** Separate tickets in one request (each its own QR code; migrations/0022). */
+export const MAX_ORDER_TICKETS = 10;
 // A payment screenshot and an ID photo, plus the form fields.
 const MAX_SIGNUP_BYTES = 2 * MAX_FILE_BYTES + 64 * 1024;
 const MAX_ANSWERS_JSON = 16 * 1024;
@@ -76,6 +78,12 @@ async function signupIds(partyId: string, token: string) {
   let m = 0;
   for (const b of h2.subarray(0, 6)) m = m * 256 + b;
   return { ticketId: base32(h.subarray(0, 10), 16), fileId: n + 1, idFileId: m + 1 };
+}
+/** The other tickets of an order (2nd, 3rd...): ids from the same token, so a retry is the same order. */
+async function orderIds(partyId: string, token: string, count: number) {
+  const out: string[] = [];
+  for (let i = 1; i < count; i++) out.push(base32((await sha256(`sahra-signup-v1|${partyId}|${token}|${i}`)).subarray(0, 10), 16));
+  return out;
 }
 
 const shotsOk = (cap: FilesCapacity) => cap.state === "ok";
@@ -289,14 +297,31 @@ guestRoutes.post("/parties/:party/signup", async (c) => {
   const name = guestName(form.get("name"));
   const email = guestEmail(form.get("email"));
   const people = Number(form.get("people") ?? 1);
+  // Separate tickets for friends: how many, and (optionally) the name on each of the others.
+  const count = Number(form.get("tickets") ?? 1);
+  const namesText = form.get("names");
   const typeField = form.get("type_id");
   const typeId = typeField === null || typeField === "" ? null : typeField;
   const answersText = form.get("answers");
   const file = form.get("screenshot");
   if (typeof token !== "string" || !parseToken(token) || !name || !email || !Number.isInteger(people) || people < 1 || people > 100
-    || (typeId !== null && !isTypeId(typeId))) {
+    || (typeId !== null && !isTypeId(typeId)) || !Number.isInteger(count) || count < 1 || count > MAX_ORDER_TICKETS) {
     return json(c, 400, { error: "invalid_request" });
   }
+  // Names on the other tickets: optional; an empty one takes the guest's own name.
+  const otherNames: string[] = [];
+  if (namesText !== null) {
+    let raw: unknown;
+    try { raw = typeof namesText === "string" && namesText.length <= 4096 ? JSON.parse(namesText) : null; } catch { raw = null; }
+    if (!Array.isArray(raw) || raw.length > count - 1) return json(c, 400, { error: "invalid_request" });
+    for (const v of raw) {
+      if (v === null || (typeof v === "string" && v.trim() === "")) { otherNames.push(name); continue; }
+      const n2 = guestName(v);
+      if (!n2) return json(c, 400, { error: "invalid_request" });
+      otherNames.push(n2);
+    }
+  }
+  while (otherNames.length < count - 1) otherNames.push(name);
   // The Terms box is required here, not only in the page (a retry of a stored request sends it too).
   if (form.get("accept_terms") !== "yes") {
     return json(c, 400, { error: "terms_not_accepted", message: "Please accept the terms before submitting your request." });
@@ -345,11 +370,18 @@ guestRoutes.post("/parties/:party/signup", async (c) => {
   if (!party) return json(c, 404, { error: "not_found" });
   const env = envRecord(c);
   const done = async (status: number) => {
-    await flushChangeLog(c.var.db, c.var.ledger, now, [ticketId]);
-    const link = await signLink(env, { partyId, ticketId, version: 1 });
+    // Every ticket of the order (a retry finds them by the first ticket's id).
+    // In the order the guest listed them (the ids follow the ticket number; created_at is the same for all).
+    const found = await gdb.orderTickets(partyId, ticketId);
+    const pos = new Map([ticketId, ...(await orderIds(partyId, token, found.length))].map((id, i) => [id, i]));
+    const order = [...found].sort((a, b) => (pos.get(a.id) ?? found.length) - (pos.get(b.id) ?? found.length));
+    await flushChangeLog(c.var.db, c.var.ledger, now, order.map((t) => t.id));
+    const tickets = await Promise.all(order.map(async (t) => ({
+      ticket_id: t.id, name: t.guest_name, link: linkPath(await signLink(env, { partyId, ticketId: t.id, version: 1 })),
+    })));
     // Duplicate warning: the address's other pending/approved requests for this party.
-    const earlier = party.existing_party === null ? party.email_tickets : Math.max(0, party.email_tickets - 1);
-    return json(c, status, { status: "requested", ticket_id: ticketId, link: linkPath(link), earlier_requests: earlier,
+    const earlier = party.existing_party === null ? party.email_tickets : Math.max(0, party.email_tickets - order.length);
+    return json(c, status, { status: "requested", ticket_id: ticketId, link: tickets[0]!.link, tickets, earlier_requests: earlier,
       ...(earlier > 0 ? { notice: `This email already has ${earlier} other request${earlier === 1 ? "" : "s"} for this party.` } : {}) });
   };
   // A retry of a sign-up that was already stored: finish its change log only.
@@ -374,11 +406,11 @@ guestRoutes.post("/parties/:party/signup", async (c) => {
   const reg = registration(party, now);
   if (reg.state === "not_open_yet") return refusal(c, "registration_not_open");
   if (reg.state === "closed") return refusal(c, "registration_closed");
-  if (party.max_tickets_per_email !== null && party.email_tickets >= party.max_tickets_per_email) return refusal(c, "email_limit");
+  if (party.max_tickets_per_email !== null && party.email_tickets + count > party.max_tickets_per_email) return refusal(c, "email_limit");
   if (party.has_types && typeId === null) return refusal(c, "type_required");
   if (typeId !== null && !party.type_on_sale) return refusal(c, "type_unavailable");
-  if (party.type_left !== null && party.type_left < people) return refusal(c, "type_full");
-  if (party.held + people > party.capacity) return json(c, 409, { error: "full", message: REFUSAL.full.message });
+  if (party.type_left !== null && party.type_left < people * count) return refusal(c, "type_full");
+  if (party.held + people * count > party.capacity) return json(c, 409, { error: "full", message: REFUSAL.full.message });
   // Every files database past 70% (or unreadable): no new screenshots (fail closed; health alerts the owner).
   const target = shot || idPhoto ? await uploadTarget(c.env, now) : null;
   if (target && target.state !== "ok") {
@@ -405,6 +437,7 @@ guestRoutes.post("/parties/:party/signup", async (c) => {
   const r = await gdb.signup({
     id: ticketId, partyId, people, name, email, answers: Object.keys(answers).length ? JSON.stringify(answers) : null,
     screenshotKey, idPhotoKey, instagram: pf.instagram === "none" ? null : instagram, typeId, now, op: crypto.randomUUID(),
+    more: (await orderIds(partyId, token, count)).map((id, i) => ({ id, name: otherNames[i]! })),
     rules: party.rules, cancellation: party.cancellation_policy, accepted: { terms: policy.terms_version, rules: policy.rules_version, privacy: policy.privacy_version },
   });
   // The rules were edited between the read above and the insert: show the new ones.

@@ -60,12 +60,13 @@ export type SignupRefusal = "registration_not_open" | "registration_closed" | "e
   | "type_full" | "full" | "terms_changed" | "people_out_of_range" | "refused";
 
 /** The registration rules of a party row aliased `p`, at `now`, for one email (all inside SQL). */
-function registrationRules(now: number, email: string) {
+function registrationRules(now: number, email: string, count = 1) {
   const emailCount = sql`(SELECT COUNT(*) FROM tickets e WHERE e.party_id = p.id AND e.guest_email = ${email} AND e.status IN ('pending', 'approved'))`;
   return {
     opened: sql`(p.registration_opens_at IS NULL OR p.registration_opens_at <= ${now})`,
     notClosed: sql`(p.registration_closes_at IS NULL OR p.registration_closes_at > ${now})`,
-    emailOk: sql`(p.max_tickets_per_email IS NULL OR ${emailCount} < p.max_tickets_per_email)`,
+    // Every ticket of the order counts (an order of 3 needs 3 free).
+    emailOk: sql`(p.max_tickets_per_email IS NULL OR ${emailCount} + ${count} <= p.max_tickets_per_email)`,
   };
 }
 
@@ -110,6 +111,13 @@ export class GuestDb {
 
   // ------------------------------------------------------------ guests
 
+  /** The tickets of the order led by `leadId` (just that ticket when it is a single one), oldest first. */
+  async orderTickets(partyId: string, leadId: string): Promise<{ id: string; guest_name: string | null }[]> {
+    const r = await this.driver.all<{ id: string; guest_name: string | null }>(sql`SELECT id, guest_name FROM tickets
+      WHERE party_id = ${partyId} AND (id = ${leadId} OR order_id = ${leadId}) ORDER BY id = ${leadId} DESC, created_at, id`);
+    return r.results;
+  }
+
   /** One read before sign-up: the party, its form, places held, and whether this sign-up already exists. */
   async signupParty(partyId: string, ticketId: string, o: { email?: string; typeId?: string | null; now?: number } = {}): Promise<SignupParty | null> {
     const email = o.email ?? null;
@@ -130,31 +138,46 @@ export class GuestDb {
   }
 
   /**
-   * The sign-up batch: insert the pending ticket only if the party has room for
-   * its people (same statement), audit it, and read back. A retry with the same
+   * The sign-up batch: insert the pending ticket(s) only if the party has room for
+   * their people (same statement), audit them, and read back. A retry with the same
    * ticket id inserts nothing and is recognized by the read-back. The accepted
-   * versions are stored in the same row, and only while the party's rules are
+   * versions are stored in the same rows, and only while the party's rules are
    * still the texts the guest accepted (entry rules and cancellation policy; NULL = none).
+   *
+   * An order (`more`: the other tickets' ids and names, migrations/0022) is one
+   * INSERT of every ticket, all or none, with the whole order counted against the
+   * capacity, the type's places and the tickets-per-email limit. The payment proof,
+   * ID photo, answers and handle stay on the first ticket.
    */
   async signup(a: {
     id: string; partyId: string; people: number; name: string; email: string; answers: string | null;
     screenshotKey: string | null; idPhotoKey?: string | null; instagram?: string | null; typeId: string | null; now: number; op: string;
     rules: string | null; cancellation: string | null; accepted: { terms: string; rules: string | null; privacy: string };
+    more?: { id: string; name: string }[];
   }): Promise<"created" | "already" | SignupRefusal> {
-    const reg = registrationRules(a.now, a.email);
-    const ty = typeRules(a.typeId, a.people, a.now);
-    const roomOk = sql`${held(sql`p.id`)} + ${a.people} <= p.capacity`;
+    const more = a.more ?? [];
+    const count = 1 + more.length;
+    const reg = registrationRules(a.now, a.email, count);
+    const ty = typeRules(a.typeId, a.people * count, a.now);
+    const roomOk = sql`${held(sql`p.id`)} + ${a.people * count} <= p.capacity`;
     const rulesOk = sql`(p.rules IS ${a.rules} AND p.cancellation_policy IS ${a.cancellation})`;
+    const orderId = count > 1 ? a.id : null;
+    const rows = join([sql`(0, ${a.id}, ${a.name})`, ...more.map((m, i) => sql`(${i + 1}, ${m.id}, ${m.name})`)], ", ");
+    const ids = [a.id, ...more.map((m) => m.id)];
     const rs = await this.driver.batch([
-      sql`INSERT INTO tickets (id, party_id, status, people, guest_name, guest_email, answers, screenshot_key, id_photo_key, instagram, type_id, price,
-          terms_version, rules_version, privacy_version, terms_accepted_at, created_at, last_op, last_action)
-        SELECT ${a.id}, p.id, 'pending', ${a.people}, ${a.name}, ${a.email}, ${a.answers}, ${a.screenshotKey}, ${a.idPhotoKey ?? null}, ${a.instagram ?? null}, ${a.typeId}, ${ty.price},
-          ${a.accepted.terms}, ${a.accepted.rules}, ${a.accepted.privacy}, ${a.now}, ${a.now}, ${a.op}, 'ticket_requested'
-        FROM parties p
+      sql`WITH o(i, id, nm) AS (VALUES ${rows})
+        INSERT INTO tickets (id, party_id, status, people, guest_name, guest_email, answers, screenshot_key, id_photo_key, instagram, type_id, price,
+          order_id, terms_version, rules_version, privacy_version, terms_accepted_at, created_at, last_op, last_action)
+        SELECT o.id, p.id, 'pending', ${a.people}, o.nm, ${a.email},
+          CASE WHEN o.i = 0 THEN ${a.answers} END, CASE WHEN o.i = 0 THEN ${a.screenshotKey} END,
+          CASE WHEN o.i = 0 THEN ${a.idPhotoKey ?? null} END, CASE WHEN o.i = 0 THEN ${a.instagram ?? null} END, ${a.typeId}, ${ty.price},
+          ${orderId}, ${a.accepted.terms}, ${a.accepted.rules}, ${a.accepted.privacy}, ${a.now}, ${a.now}, ${a.op}, 'ticket_requested'
+        FROM o, parties p
         WHERE p.id = ${a.partyId} AND ${peopleOk(a.typeId, a.people)} AND ${roomOk} AND ${rulesOk}
           AND ${reg.opened} AND ${reg.notClosed} AND ${reg.emailOk} AND ${ty.chosenOk} AND ${ty.placesOk}
-          AND NOT EXISTS (SELECT 1 FROM tickets x WHERE x.id = ${a.id})`,
-      audit(a.now, null, "ticket_requested", "ticket", sql`SELECT party_id, id, rev FROM tickets WHERE id = ${a.id} AND last_op = ${a.op}`),
+          AND NOT EXISTS (SELECT 1 FROM tickets x WHERE x.id IN (${inList(ids)}))
+        ORDER BY o.i`,
+      audit(a.now, null, "ticket_requested", "ticket", sql`SELECT party_id, id, rev FROM tickets WHERE id IN (${inList(ids)}) AND last_op = ${a.op}`),
       // Why nothing was stored, from the same rules on the same state.
       sql`SELECT (SELECT party_id FROM tickets WHERE id = ${a.id}) AS existing_party,
           CASE
@@ -170,7 +193,7 @@ export class GuestDb {
           END AS why
         FROM parties p WHERE p.id = ${a.partyId}`,
     ]);
-    if (rs[0]!.meta.changes === 1) return "created";
+    if (rs[0]!.meta.changes === count) return "created";
     const row = rs[2]!.results[0] as { existing_party: string | null; why: SignupRefusal } | undefined;
     if (row?.existing_party === a.partyId) return "already";
     if (!row || row.existing_party !== null) return "refused";
@@ -268,7 +291,7 @@ export class GuestDb {
     const cursor = after ? sql`AND (t.created_at > ${after.at} OR (t.created_at = ${after.at} AND t.id > ${after.id}))` : sql``;
     // same_email: the address's other pending/approved tickets (the duplicate warning; index tickets_party_email).
     const r = await this.driver.all(sql`SELECT t.id, t.status, t.people, t.guest_name, t.guest_email, t.answers,
-        t.screenshot_key IS NOT NULL AS has_screenshot, t.id_photo_key IS NOT NULL AS has_id_photo, t.instagram, t.created_at, t.approved_at, t.released_at, t.reject_reason, t.hold_at,
+        t.screenshot_key IS NOT NULL AS has_screenshot, t.id_photo_key IS NOT NULL AS has_id_photo, t.instagram, t.order_id, t.created_at, t.approved_at, t.released_at, t.reject_reason, t.hold_at,
         t.used_at, t.qr_version, t.rev, t.type_id, (SELECT name FROM ticket_types WHERE id = t.type_id) AS type_name, t.price,
         CASE WHEN t.guest_email IS NULL THEN 0 ELSE (SELECT COUNT(*) FROM tickets d WHERE d.party_id = t.party_id
           AND d.guest_email = t.guest_email AND d.id != t.id AND d.status IN ('pending', 'approved')) END AS same_email

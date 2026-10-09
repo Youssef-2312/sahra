@@ -744,3 +744,12 @@ html[dir="rtl"] .quick .qa-go { transform: rotate(-45deg); }
   .f-top { grid-template-columns: minmax(0, 2fr) repeat(3, minmax(0, 1fr)); gap: 32px; }
   .f-brand { grid-column: auto; }
 }
+/* Several tickets in one request: the names on the other tickets, and one row per ticket after sending. */
+.names-box > .label { margin: 8px 0 10px; font-weight: 600; }
+.names-box > .hint { margin: -6px 0 12px; }
+.ticket-list { list-style: none; margin: 20px 0; padding: 0; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); }
+.ticket-list li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; margin: 0; padding: 14px 16px; border-top: 1px solid var(--line); }
+.ticket-list li:first-child { border-top: 0; }
+.ticket-list .tl-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ticket-list .tl-actions { display: flex; gap: 8px; }
+.ticket-list .tl-actions .btn { margin: 0; min-width: 0; }
