@@ -122,6 +122,21 @@ const cases: Case[] = [
   ["announce, junk session", "POST", "/api/party/announce", (h) => h.req("/api/party/announce", { method: "POST", headers: JSON_H, cookies: junkCookie, body: JSON.stringify({ op: newId(), subject: "Hi", body: "Hello" }) })],
   ["announce, no session", "POST", "/api/party/announce", (h) => h.req("/api/party/announce", { method: "POST", headers: JSON_H, body: JSON.stringify({ op: newId(), subject: "Hi", body: "Hello" }) })],
   ["party stats, junk session", "GET", "/api/party/stats", (h) => h.req("/api/party/stats", { cookies: junkCookie })],
+  ["party pictures, junk session", "GET", "/api/party/flyers", (h) => h.req("/api/party/flyers", { cookies: junkCookie })],
+  ["upload picture, junk session", "POST", "/api/party/flyers", (h) => {
+    const fd = new FormData();
+    fd.set("op", newId());
+    fd.set("file", new File([new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3])], "a.jpg", { type: "image/jpeg" }));
+    return h.req("/api/party/flyers", { method: "POST", headers: { origin: ORIGIN, "sec-fetch-site": "same-origin" }, cookies: junkCookie, body: fd });
+  }],
+  ["upload picture, no session", "POST", "/api/party/flyers", (h) => {
+    const fd = new FormData();
+    fd.set("op", newId());
+    fd.set("file", new File([new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3])], "a.jpg", { type: "image/jpeg" }));
+    return h.req("/api/party/flyers", { method: "POST", headers: { origin: ORIGIN, "sec-fetch-site": "same-origin" }, body: fd });
+  }],
+  ["delete picture, junk session", "POST", "/api/party/flyers/:id/delete", (h) => h.req("/api/party/flyers/AAAAAAAAAAAAAAAA/delete", { method: "POST", headers: JSON_H, cookies: junkCookie, body: JSON.stringify({ op: newId() }) })],
+  ["party picture, unknown", "GET", "/api/guest/flyers/:party/:id", (h) => h.req(`/api/guest/flyers/${GP}/AAAAAAAAAAAAAAAA`)],
   ["home party list", "GET", "/api/guest/parties", (h) => h.req("/api/guest/parties")],
   ["remembered ticket statuses", "POST", "/api/guest/tickets/status", (h) => h.req("/api/guest/tickets/status", { method: "POST", headers: JSON_H, body: JSON.stringify({ links: ["junk"] }) })],
   ["approve, no session", "POST", "/api/tickets/approve", (h) => h.req("/api/tickets/approve", { method: "POST", headers: JSON_H, body: JSON.stringify({ ids: [tid] }) })],

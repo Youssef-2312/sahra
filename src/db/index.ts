@@ -53,7 +53,7 @@ export function audit(
   now: number,
   actor: string | null,
   action: string,
-  entityType: "staff" | "invite" | "party" | "session" | "ticket" | "ticket_type",
+  entityType: "staff" | "invite" | "party" | "session" | "ticket" | "ticket_type" | "flyer",
   from: Sql,
   detail: string | null = null,
 ): Sql {
@@ -62,7 +62,7 @@ export function audit(
     SELECT party_id, ${now}, ${actor}, ${action}, ${entityType}, id, rev, ${detail} FROM (${from})`;
 }
 
-export type LogEntity = "party" | "staff" | "invite" | "ticket" | "platform_admin" | "organiser" | "organiser_invite" | "ticket_type";
+export type LogEntity = "party" | "staff" | "invite" | "ticket" | "platform_admin" | "organiser" | "organiser_invite" | "ticket_type" | "flyer";
 export interface UnloggedRow {
   entity: LogEntity;
   id: string;
@@ -403,7 +403,7 @@ export class Db {
 
   /**
    * Rows whose latest rev is not yet confirmed in the change log (ledger): all
-   * parties, staff, invites and ticket types (small tables), plus the given tickets. Tickets are
+   * parties, staff, invites, ticket types and party pictures (small tables), plus the given tickets. Tickets are
    * never scanned as a whole: there can be thousands, and admissions write their
    * own ledger record on the scan path without updating `logged_rev`.
    */
@@ -419,6 +419,7 @@ export class Db {
       sql`SELECT * FROM organisers WHERE rev > logged_rev LIMIT ${limit}`,
       sql`SELECT * FROM organiser_invites WHERE rev > logged_rev LIMIT ${limit}`,
       sql`SELECT * FROM ticket_types WHERE rev > logged_rev LIMIT ${limit}`,
+      sql`SELECT * FROM party_flyers WHERE rev > logged_rev LIMIT ${limit}`,
     ]);
     const out: UnloggedRow[] = [];
     const add = (entity: LogEntity, rows: Record<string, unknown>[]) => {
@@ -441,13 +442,14 @@ export class Db {
     add("organiser", rs[5]!.results);
     add("organiser_invite", rs[6]!.results);
     add("ticket_type", rs[7]!.results);
+    add("flyer", rs[8]!.results);
     return out;
   }
 
   async markLogged(rows: { entity: LogEntity; id: string; rev: number }[]): Promise<void> {
     if (rows.length === 0) return;
     const table = { party: "parties", staff: "staff", invite: "invites", ticket: "tickets",
-      platform_admin: "platform_admins", organiser: "organisers", organiser_invite: "organiser_invites", ticket_type: "ticket_types" } as const;
+      platform_admin: "platform_admins", organiser: "organisers", organiser_invite: "organiser_invites", ticket_type: "ticket_types", flyer: "party_flyers" } as const;
     await this.driver.batch(
       rows.map((r) => {
         const t = table[r.entity];

@@ -30,6 +30,8 @@ import { clientIp, rateLimited, sameOrigin } from "../lib/http";
 import { chargeGuest } from "../limits";
 import { PartyDb } from "../party/db";
 import { visiblePartyDetails } from "../party/details";
+import { FlyerDb, flyerUrl, isFlyerId } from "../party/flyers";
+import { getFlyerFile } from "../storage";
 import { signQr } from "../qr";
 import { FileStore, MAX_FILE_BYTES, sniffImage, uploadTarget, type FilesCapacity } from "../storage";
 
@@ -121,6 +123,7 @@ guestRoutes.get("/parties", async (c) => {
       return {
         id: p.id, name: p.name, starts_at: p.starts_at, ends_at: p.ends_at, time_zone: p.time_zone,
         from_price: p.from_price, price_count: p.price_count, places_left: left,
+        flyers: p.flyers.map((f) => ({ id: f.id, url: flyerUrl(p.id, f.id, f.rev) })),
         state: left === 0 ? "full" : notYet ? "not_open_yet" : over ? "closed" : "open",
         opens_at: notYet ? p.registration_opens_at : null,
       };
@@ -162,6 +165,51 @@ guestRoutes.post("/tickets/status", async (c) => {
   }) });
 });
 
+/**
+ * A party picture, for guests: only a live picture of a party that is switched on
+ * and not over (one indexed read), served with a long browser cache because the
+ * URL carries the picture's rev. Recent pictures are kept in this isolate (a few
+ * MB at most), so a busy home page does not read the files database every time.
+ */
+const flyerCache = new Map<string, { type: string; bytes: Uint8Array }>();
+let flyerCacheBytes = 0;
+const FLYER_CACHE_MAX = 6_000_000;
+guestRoutes.get("/flyers/:party/:id", async (c) => {
+  const partyId = c.req.param("party");
+  const id = c.req.param("id");
+  if (!PARTY_RE.test(partyId) || !isFlyerId(id)) return json(c, 404, { error: "not_found" });
+  const now = c.var.deps.now();
+  const f = await new FlyerDb(c.var.db.driver).publicFile(partyId, id, now);
+  if (!f) return json(c, 404, { error: "not_found" });
+  const key = `${partyId}/${id}/${f.rev}`;
+  let hit = flyerCache.get(key);
+  if (!hit) {
+    const stored = await getFlyerFile(c.env, f.file_key, partyId, id);
+    if (!stored || stored === "not_configured" || "deleted" in stored) return json(c, 404, { error: "not_found" });
+    hit = { type: stored.type, bytes: stored.bytes };
+    if (hit.bytes.length <= FLYER_CACHE_MAX / 4) {
+      flyerCache.set(key, hit);
+      flyerCacheBytes += hit.bytes.length;
+      // Oldest first out (a Map keeps insertion order).
+      for (const [k, v] of flyerCache) {
+        if (flyerCacheBytes <= FLYER_CACHE_MAX) break;
+        flyerCache.delete(k);
+        flyerCacheBytes -= v.bytes.length;
+      }
+    }
+  }
+  return new Response(hit.bytes, { headers: {
+    "content-type": hit.type, "cache-control": "public, max-age=31536000, immutable", "x-content-type-options": "nosniff",
+    "content-disposition": "inline",
+  } });
+});
+
+/** Tests only: forget the cached pictures. */
+export function clearFlyerCache() {
+  flyerCache.clear();
+  flyerCacheBytes = 0;
+}
+
 /** The public sign-up form: party name, questions, people per ticket, whether it is full. Read-only. */
 guestRoutes.get("/parties/:party", async (c) => {
   const partyId = c.req.param("party");
@@ -175,9 +223,12 @@ guestRoutes.get("/parties/:party", async (c) => {
   // The public party page's data too (times, description, rules, address status), so the
   // sign-up page needs one request. The place stays hidden unless its mode is public.
   const row = await new PartyDb(c.var.db.driver).get(partyId);
+  const flyers = await new FlyerDb(c.var.db.driver).list(partyId);
   return json(c, 200, {
     party: { id: p.id, name: p.name },
     details: row ? visiblePartyDetails(row, { kind: "public" }, now) : null,
+    // The party's pictures, in order (the home page card shows the first).
+    flyers: flyers.map((f) => ({ id: f.id, url: flyerUrl(partyId, f.id, f.rev) })),
     form,
     max_people_per_ticket: p.max_people_per_ticket,
     places_left: partyLeft,

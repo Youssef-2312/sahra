@@ -292,6 +292,20 @@ the `staging` branch; a finished piece the owner should try is pushed there too.
 - Flyers (owner): organisers may upload more than four pictures per party
   (suggested cap 8) when the flyer upload is built; cards show the first, the
   party page shows them all.
+- Party pictures backend (migration 0016_party_flyers.sql, src/party/flyers.ts):
+  up to 8 per party (owner: more than four). Owner/admin: GET /api/party/flyers,
+  POST /api/party/flyers (multipart `file` + `op`; JPEG/PNG/WebP from the first
+  bytes, 600,000 bytes at most; a retry with the same op is the same picture;
+  the limit is counted inside the INSERT, so racing uploads never make a ninth),
+  POST /api/party/flyers/:id/delete. Guests: GET /api/guest/flyers/:party/:id
+  (live pictures of parties switched on and not over; one-year immutable cache,
+  the URL carries the picture's rev; a few MB kept in the isolate). The party
+  list and the party page carry `flyers: [{ id, url }]`. Bytes live in the
+  files databases like screenshots; the daily purge keeps live pictures and
+  empties deleted ones, those of parties over for 30 days, and failed uploads
+  after a day. Logged entity (change log, audit, recovery, backup export);
+  daily limit 50 uploads per party. Tests: test/flyers.test.ts. The owner
+  applies migration 0016 on staging first, then production.
 - Hero photos: done. The owner uploaded seven photos (and a blank PNG, left
   out), then five more; all are resized to 1000 px at most, blurred a little,
   stripped of metadata (no location data) and saved as

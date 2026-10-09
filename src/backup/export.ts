@@ -68,6 +68,7 @@ const BASE: readonly TableSpec[] = [
   { db: "main", table: "organiser_invites", key: ["id"] },
   { db: "main", table: "parties", key: ["id"] },
   { db: "main", table: "ticket_types", key: ["id"] },
+  { db: "main", table: "party_flyers", key: ["id"] },
   { db: "main", table: "staff", key: ["id"] },
   { db: "main", table: "invites", key: ["id"] },
   { db: "main", table: "tickets", key: ["id"] },

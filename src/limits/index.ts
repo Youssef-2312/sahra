@@ -23,7 +23,7 @@ import type { SqlDriver } from "../db/driver";
 import { sessionValid, type Role } from "../db";
 import { sql, type Sql } from "../db/sql";
 
-export type LimitKind = "signup" | "resend_link" | "release" | "notice" | "outbox_approve" | "export" | "reject_stale" | "issue" | "announce";
+export type LimitKind = "signup" | "resend_link" | "release" | "notice" | "outbox_approve" | "export" | "reject_stale" | "issue" | "announce" | "flyer";
 
 export const DAY_MS = 86_400_000;
 
@@ -58,6 +58,8 @@ export const LIMITS: Record<LimitKind, { cap: number; essential: boolean; label:
   issue: { cap: 500, essential: true, label: "tickets issued by staff" },
   // One announcement queues up to 1,000 emails awaiting approval (3 rows each), like a guest notice.
   announce: { cap: 3, essential: false, label: "announcements" },
+  // Party pictures: about 7 rows per upload (picture row, 2 index entries, audit, logged_rev, ledger, file, counter).
+  flyer: { cap: 50, essential: false, label: "party picture uploads" },
 };
 
 export const dayOf = (now: number) => Math.floor(now / DAY_MS);

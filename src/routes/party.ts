@@ -18,6 +18,10 @@ import { PartyDb } from "../party/db";
 import { doorView, staffView, visiblePartyDetails, type Viewer } from "../party/details";
 import { parseEdit, text, TIME_OR_PLACE } from "../party/input";
 import { announceText, AUDIENCES, noticeText, type Audience } from "../party/notice";
+import { flyerIdsFor, FlyerDb, flyerUrl, isFlyerId, MAX_FLYERS, type FlyerRow } from "../party/flyers";
+import { sessionValid } from "../db";
+import { sql } from "../db/sql";
+import { FileStore, flyerOwner, MAX_FILE_BYTES, sniffImage, StorageConflictError, uploadTarget } from "../storage";
 
 export const partyRoutes = new Hono<AppEnv>();
 
@@ -194,4 +198,96 @@ partyRoutes.get("/stats", requireAuth(["owner", "admin", "door"]), async (c) => 
     requests_per_hour: s.hours.map((h) => ({ at: h.hour * 3_600_000, requests: Number(h.requests), people: Number(h.people) })),
     by_scanner: [...scanners.values()].sort((x, y) => y.people - x.people),
   });
+});
+
+// ------------------------------------------------------------ party pictures
+
+/**
+ * Party pictures (src/party/flyers.ts), owner/admin: up to MAX_FLYERS per party.
+ * Guests see the first on the home page card and all of them on the party page.
+ */
+function flyerView(f: FlyerRow) {
+  return { id: f.id, url: flyerUrl(f.party_id, f.id, f.rev), type: f.type, size: f.size, position: f.position, created_at: f.created_at };
+}
+
+partyRoutes.get("/flyers", requireAuth(["owner", "admin"]), async (c) => {
+  const a = c.var.auth;
+  const ok = await c.var.db.driver.all(sql`SELECT 1 AS ok WHERE ${sessionValid({ hash: a.hash, partyId: a.info.party_id }, ["owner", "admin"], c.var.deps.now())}`);
+  if (!ok.results.length) return json(c, 401, { error: "not_signed_in" });
+  const flyers = await new FlyerDb(c.var.db.driver).list(a.info.party_id);
+  return json(c, 200, { flyers: flyers.map(flyerView), max: MAX_FLYERS, max_bytes: MAX_FILE_BYTES });
+});
+
+/**
+ * Upload one picture: multipart with `file` (JPEG, PNG or WebP, checked from its
+ * first bytes, at most MAX_FILE_BYTES) and `op` (a UUID: a retry after "pending"
+ * or a lost answer is the same picture). The bytes are stored first, then the row
+ * that points to them; a refused row leaves the bytes for the daily purge.
+ */
+const MAX_FLYER_REQUEST = MAX_FILE_BYTES + 16 * 1024;
+partyRoutes.post("/flyers", requireAuth(["owner", "admin"]), async (c) => {
+  const len = Number(c.req.header("content-length") ?? NaN);
+  if (!Number.isFinite(len)) return json(c, 411, { error: "length_required" });
+  if (len > MAX_FLYER_REQUEST) return json(c, 413, { error: "too_large", max_bytes: MAX_FILE_BYTES });
+  if (!(c.req.header("content-type") ?? "").startsWith("multipart/form-data")) return json(c, 400, { error: "invalid_request" });
+  let form: FormData;
+  try {
+    form = await c.req.raw.formData();
+  } catch {
+    return json(c, 400, { error: "invalid_request" });
+  }
+  const op = form.get("op");
+  const file = form.get("file");
+  if (!isUuid(op) || file === null || typeof file === "string") return json(c, 400, { error: "invalid_request" });
+  if (file.size > MAX_FILE_BYTES) return json(c, 413, { error: "too_large", max_bytes: MAX_FILE_BYTES });
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const type = sniffImage(bytes);
+  if (!type || bytes.length === 0) return json(c, 415, { error: "picture_must_be_jpeg_png_or_webp" });
+  // Fail closed: no files database, or every one past 70% (the health check alerts the owner).
+  if (!c.env.FILES) return json(c, 503, { error: "uploads_not_configured" });
+  const a = c.var.auth;
+  const now = c.var.deps.now();
+  const target = await uploadTarget(c.env, now);
+  if (target.writable === null) return json(c, 503, { error: target.state === "not_configured" ? "uploads_not_configured" : "uploads_full" });
+  const sess = { hash: a.hash, partyId: a.info.party_id };
+  const fdb = new FlyerDb(c.var.db.driver);
+  const { flyerId, fileId } = await flyerIdsFor(sess.partyId, op);
+  // Before storing anything: the party's limit (checked again, atomically, by the INSERT).
+  const current = await fdb.list(sess.partyId);
+  const done = current.find((f) => f.id === flyerId);
+  if (done) {
+    // A retry after "pending": finish the change-log write the first try could not confirm.
+    await flushChangeLog(c.var.db, c.var.ledger, now);
+    return json(c, 200, { status: "already", flyer: flyerView(done) });
+  }
+  if (current.length >= MAX_FLYERS) return json(c, 409, { error: "too_many_flyers", max: MAX_FLYERS });
+  const over = await chargeStaff(c, "flyer", 1);
+  if (over) return over;
+  let fileKey: string;
+  try {
+    fileKey = await FileStore.for(c.env, target.writable)!.put({ id: fileId, partyId: sess.partyId, ticketId: flyerOwner(flyerId), type, bytes, now });
+  } catch (e) {
+    if (e instanceof StorageConflictError) return json(c, 409, { error: "changed_meanwhile_try_again" });
+    throw e;
+  }
+  const r = await fdb.add(sess, { id: flyerId, fileKey, type, size: bytes.length }, now, a.info.staff_id, op);
+  if (r.status === "rejected") {
+    return json(c, r.reason === "too_many_flyers" ? 409 : 401, { error: r.reason === "not_allowed" ? "not_signed_in" : r.reason, max: MAX_FLYERS });
+  }
+  await flushChangeLog(c.var.db, c.var.ledger, now);
+  const row = (await fdb.list(sess.partyId)).find((f) => f.id === flyerId);
+  return json(c, r.status === "created" ? 201 : 200, { status: r.status, flyer: row ? flyerView(row) : null });
+});
+
+/** Delete a picture. Body: op (UUID). Its bytes go with the next daily purge. */
+partyRoutes.post("/flyers/:id/delete", requireAuth(["owner", "admin"]), async (c) => {
+  const id = c.req.param("id");
+  const b = await readJson(c);
+  if (!isFlyerId(id) || !b || !isUuid(b.op)) return json(c, 400, { error: "invalid_request" });
+  const a = c.var.auth;
+  const now = c.var.deps.now();
+  const r = await new FlyerDb(c.var.db.driver).remove({ hash: a.hash, partyId: a.info.party_id }, id, now, a.info.staff_id, b.op);
+  if (r.status === "rejected") return json(c, r.reason === "not_found" ? 404 : 401, { error: r.reason === "not_allowed" ? "not_signed_in" : r.reason });
+  await flushChangeLog(c.var.db, c.var.ledger, now);
+  return json(c, 200, { status: r.status });
 });

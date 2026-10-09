@@ -170,6 +170,23 @@ export async function getScreenshot(env: FilesEnv, key: string, partyId: string,
   return store.get(k.id, partyId, ticketId);
 }
 
+/**
+ * Party pictures (src/party/flyers.ts) are kept in the same files databases. Their
+ * files row is owned by "flyer:<picture id>" in the ticket_id column, so the
+ * screenshot rules (party and owner must match on every read) apply unchanged.
+ */
+export const flyerOwner = (flyerId: string) => `flyer:${flyerId}`;
+const isFlyerOwner = (ticketId: string) => ticketId.startsWith("flyer:");
+
+/** A party picture's bytes by its stored key. */
+export async function getFlyerFile(env: FilesEnv, key: string, partyId: string, flyerId: string): Promise<StoredFile | null | "not_configured"> {
+  const k = parseFileKey(key);
+  if (!k) return null;
+  const store = FileStore.for(env, k.shard);
+  if (!store) return "not_configured";
+  return store.get(k.id, partyId, flyerOwner(flyerId));
+}
+
 // ------------------------------------------------------------- retention
 
 const DAY = 86_400_000;
@@ -189,6 +206,9 @@ export const DELETED_REASON = {
   rejected: "screenshot deleted 30 days after the request was rejected (kept in the Drive backup)",
   cancelled: "screenshot deleted 30 days after the ticket was cancelled (kept in the Drive backup)",
   orphan: "screenshot of a request that was not stored",
+  flyer_deleted: "party picture deleted by the organiser (kept in the Drive backup)",
+  flyer_party_ended: "party picture deleted 30 days after the party (kept in the Drive backup)",
+  flyer_orphan: "party picture of an upload that was not stored",
 } as const;
 
 export interface PurgeReport {
@@ -205,7 +225,9 @@ function chunks<T>(xs: T[], n: number): T[][] {
 }
 
 /**
- * Deletes the bytes of screenshots past their retention, at most RETENTION.perRun
+ * Deletes the bytes of screenshots past their retention (and of party pictures:
+ * deleted ones, those of parties over for 30 days, and failed uploads after a
+ * day), at most RETENTION.perRun
  * per database per run (the next run continues), keeping a tombstone. Per database:
  * one read of the live files (covering index, no BLOBs read), one read of their
  * tickets in the main database (by party, tickets_party_status index), one write
@@ -224,7 +246,16 @@ export async function purgeOldScreenshots(env: FilesEnv, main: SqlDriver, now: n
         WHERE NOT EXISTS (SELECT 1 FROM file_tombstones d WHERE d.id = f.id)`)).results;
     const tickets = new Map<string, { party_id: string; screenshot_key: string | null; status: string; rejected_at: number | null;
       cancelled_at: number | null; ends_at: number | null }>();
-    const parties = [...new Set(live.map((f) => f.party_id))];
+    // Party pictures are decided by their own rows (party_flyers), screenshots by their tickets.
+    const flyerFiles = live.filter((f) => isFlyerOwner(f.ticket_id));
+    const flyers = new Map<string, { party_id: string; file_key: string; deleted_at: number | null; over_at: number | null }>();
+    if (flyerFiles.length) {
+      const rs = await main.batch(chunks(flyerFiles.map((f) => f.ticket_id.slice("flyer:".length)), RETENTION.chunk)
+        .map((ids) => sql`SELECT f.id, f.party_id, f.file_key, f.deleted_at, COALESCE(p.ends_at, p.starts_at + 43200000) AS over_at
+          FROM party_flyers f JOIN parties p ON p.id = f.party_id WHERE f.id IN (${inList(ids)})`));
+      for (const r of rs) for (const x of r.results as Record<string, unknown>[]) flyers.set(String(x.id), x as never);
+    }
+    const parties = [...new Set(live.filter((f) => !isFlyerOwner(f.ticket_id)).map((f) => f.party_id))];
     if (parties.length) {
       const rs = await main.batch(chunks(parties, RETENTION.chunk).map((ps) => sql`SELECT t.id, t.party_id, t.screenshot_key, t.status,
           t.rejected_at, t.cancelled_at, p.ends_at
@@ -235,6 +266,20 @@ export async function purgeOldScreenshots(env: FilesEnv, main: SqlDriver, now: n
     const old = now - RETENTION.keepDays * DAY;
     const due: { id: number; party_id: string; ticket_id: string; reason: keyof typeof DELETED_REASON }[] = [];
     for (const f of live) {
+      if (isFlyerOwner(f.ticket_id)) {
+        const fl = flyers.get(f.ticket_id.slice("flyer:".length));
+        const k = fl ? parseFileKey(fl.file_key) : null;
+        let reason: keyof typeof DELETED_REASON | null = null;
+        if (!fl || fl.party_id !== f.party_id || !k || k.shard !== shard || k.id !== f.id) {
+          if (f.created_at < now - RETENTION.orphanDays * DAY) reason = "flyer_orphan";
+        } else if (fl.deleted_at != null) {
+          reason = "flyer_deleted";
+        } else if (fl.over_at != null && fl.over_at < old) {
+          reason = "flyer_party_ended";
+        }
+        if (reason) due.push({ id: f.id, party_id: f.party_id, ticket_id: f.ticket_id, reason });
+        continue;
+      }
       const t = tickets.get(f.ticket_id);
       const k = t?.screenshot_key ? parseFileKey(t.screenshot_key) : null;
       let reason: keyof typeof DELETED_REASON | null = null;
