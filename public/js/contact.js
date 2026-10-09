@@ -10,23 +10,20 @@
   var FORMSUBMIT = "https://formsubmit.co/ajax/db6a97da86c51e677ae5d16e12abd9ab";
 
   document.querySelectorAll("form[data-contact]").forEach(function (form) {
-    var via = "form";
     var busy = false;
     var status = form.querySelector("[data-status]");
     function say(cls, text) { status.className = "notice " + cls; status.textContent = text; status.hidden = false; }
-    form.querySelectorAll("button[data-via]").forEach(function (b) {
-      b.addEventListener("click", function () { via = b.getAttribute("data-via"); });
-    });
     form.addEventListener("submit", async function (e) {
       e.preventDefault();
       if (busy) return;
+      var via = e.submitter ? e.submitter.getAttribute("data-via") : "form";
       var f = form.elements;
       var ar = Sahra.lang() === "ar";
       var v = function (k) { return f[k] && typeof f[k].value === "string" ? f[k].value.trim() : ""; };
       var name = v("name"), email = v("email"), message = v("message");
       if (!name || !email || !message || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
         say("no", ar ? "أضف اسمك وبريدك الإلكتروني ورسالة قصيرة." : "Please add your name, your email and a short message.");
-        (name ? email ? f.message : f.email : f.name).focus();
+        (!name ? f.name : !email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? f.email : f.message).focus();
         return;
       }
       var lines = [
@@ -59,7 +56,7 @@
         var r = await fetch(FORMSUBMIT, {
           method: "POST",
           headers: { "content-type": "application/json", accept: "application/json" },
-          body: JSON.stringify({ name: name, email: email, phone: v("phone"), date: v("date") || "not decided yet", guests: v("guests"),
+          body: JSON.stringify({ name: name, email: email, phone: v("phone"), date: v("date") || (ar ? "لم يُحدد بعد" : "not decided yet"), guests: v("guests"),
             message: message, _subject: subject, _template: "table", _captcha: "false", _replyto: email }),
         });
         var j = await r.json().catch(function () { return {}; });

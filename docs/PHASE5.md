@@ -475,3 +475,46 @@ Validation:
   Scanner verdict logic was not changed.
 - Known gaps: ID photos are collected from the buyer only, not friends on a
   multi-ticket order; Drive backup is not active; Find my tickets is not built.
+
+### Contact redesign and shared visual polish (9 October 2026)
+
+The contact page now uses a larger bilingual headline, an existing Sahra party
+photo and a full-width ruled message panel alongside a consistently padded form.
+The Send button fills the form's content box, removing the desktop width plus
+margin overflow. Name, email, phone, date and guest controls share 52px height,
+16px type, 10px corners, 12px by 14px padding and the same dark fill and border.
+The date is optional free text with English/Arabic examples; the message field
+has five rows and a 146px minimum height. Consent uses a dark, blue checked box.
+Date help and the simplified footnote are 14px. FormSubmit, consent meaning,
+Privacy, honeypot and WhatsApp/email alternatives remain in place. Invalid email
+focus now lands on the email field; submit routing uses the current submitter.
+
+Shared polish adds bilingual Parties/About/Contact navigation with an active
+underline, larger home/About and staff headings, clearer statistics and ruled
+staff lists. The scanner keeps its compact header. Dark Nova colours, existing
+photography and solid surfaces remain; no gradients or inline scripts/styles
+were introduced. Legal copy, backend permissions and admission logic are unchanged.
+
+Browser validation used local Wrangler and Chromium at 390, 768 and 1440px in
+English and Arabic. All six contact layouts measured zero horizontal overflow
+and zero console errors. Send button insets from both card edges were 21px on
+phone/tablet and 29px on desktop, including the 1px card border. Desktop column
+tops matched exactly (0px difference). All five single-line controls measured
+52px; textarea 146px; all six shared computed border, background, radius, font
+size and padding. Message links measured 83.05 to 88.69px high.
+
+`scripts/contact-browser.mjs` reproduces the contact checks with optional external
+Playwright, rejects nonlocal origins and intercepts every FormSubmit request.
+Twelve stubbed submissions covered rejection with preserved input and success
+with reset across the six layouts. Missing consent and filled honeypot blocked
+submission; WhatsApp URL construction was checked with window.open stubbed.
+No real email was sent. Screenshots and JSON measurements are written outside
+the repository (set SAHRA_SCREENSHOTS to choose a directory).
+
+The shared styling was also checked across 54 staff layouts (dashboard, queue,
+guests, party, outbox, tools, join, scan and platform) and 30 public layouts
+(home, About, sign-in, Privacy and Terms), all with zero horizontal overflow and
+zero console errors. Screenshots use synthetic local data, not live accounts.
+
+Required pre-commit checks passed: `npx tsc --noEmit -p .` and `npx vitest run`
+(33 files, 488 tests). No deployment or remote account action was performed.

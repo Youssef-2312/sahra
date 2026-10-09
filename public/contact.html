@@ -15,13 +15,14 @@
      one side, a short form on the other. The form is emailed through FormSubmit
      (owner decision; js/contact.js) and Sahra stores nothing; WhatsApp and email
      stay as alternatives that open those apps with the message filled in. -->
-<main class="page">
+<main class="page contact-page">
 <article data-lang="en" data-tab="Contact">
   <div class="contact-wrap">
     <section class="contact-intro">
       <p class="label-line">Contact</p>
-      <h1>Host your party with Sahra.</h1>
+      <h1>Host <span>your party.</span><br>Make it a Sahra.</h1>
       <p class="lede">Planning a house party? Tell us the date, roughly how many guests and what you have in mind.</p>
+      <figure class="contact-photo"><img src="/img/hero/hero-3.jpg" alt="" width="1000" height="667" loading="lazy"></figure>
       <div class="msg-panel">
         <p class="label-line">Prefer to message?</p>
         <a class="msg-row" href="https://wa.me/201119990639" target="_blank" rel="noopener"><span class="k">WhatsApp</span><span class="v" dir="ltr">+20 111 999 0639</span></a>
@@ -37,17 +38,17 @@
       </div>
       <div class="field"><label for="c-phone-en">Phone or WhatsApp <span class="opt">(optional)</span></label><input id="c-phone-en" name="phone" type="tel" autocomplete="tel" maxlength="40" dir="ltr"></div>
       <div class="two">
-        <div class="field"><label for="c-date-en">Party date <span class="opt">(optional)</span></label><input id="c-date-en" name="date" type="date"><span class="hint">Leave it empty if you have not decided yet.</span></div>
+        <div class="field"><label for="c-date-en">Party date <span class="opt">(optional)</span></label><input id="c-date-en" name="date" type="text" maxlength="80" placeholder="e.g. 24 October 2026" aria-describedby="c-date-hint-en"><span class="hint" id="c-date-hint-en">Leave it empty if you have not decided yet.</span></div>
         <div class="field"><label for="c-guests-en">Guests <span class="opt">(optional)</span></label>
           <select id="c-guests-en" name="guests"><option value="">Not sure yet</option><option>Up to 50</option><option>50 to 150</option><option>150 to 300</option><option>More than 300</option></select></div>
       </div>
-      <div class="field"><label for="c-msg-en">Tell us about your party</label><textarea id="c-msg-en" name="message" required maxlength="1500"></textarea></div>
+      <div class="field"><label for="c-msg-en">Tell us about your party</label><textarea id="c-msg-en" name="message" rows="5" required maxlength="1500"></textarea></div>
       <input class="trap" type="text" name="_honey" tabindex="-1" autocomplete="off" aria-hidden="true">
-      <label class="check consent"><input type="checkbox" name="consent" required><span>I agree that my details are emailed to Sahra through FormSubmit so we can reply. See the <a href="/privacy">Privacy</a> page.</span></label>
-      <p class="notice" data-status hidden></p>
+      <label class="check accept consent"><input type="checkbox" name="consent" required><span>I agree that my details are emailed to Sahra through FormSubmit so we can reply. See the <a href="/privacy">Privacy</a> page.</span></label>
+      <p class="notice" data-status role="status" aria-live="polite" hidden></p>
       <button class="btn primary wide-btn" type="submit" data-via="form">Send message</button>
       <p class="alt-actions">Or continue in <button class="btn link" type="submit" data-via="whatsapp">WhatsApp</button> or by <button class="btn link" type="submit" data-via="email">email</button></p>
-      <p class="small muted helper">Sending emails your message to us through FormSubmit; Sahra stores nothing. WhatsApp or email opens that app with your message filled in: review it and press Send there.</p>
+      <p class="small muted helper">Sahra does not store this form. Using WhatsApp or email? Review your message and send it in the app.</p>
     </form>
   </div>
 </article>
@@ -56,8 +57,9 @@
   <div class="contact-wrap">
     <section class="contact-intro">
       <p class="label-line">تواصل معنا</p>
-      <h1>نظّم حفلتك مع سهرة.</h1>
+      <h1>حفلتك.<br><span>سهرة على طريقتك.</span></h1>
       <p class="lede">تخطط لحفلة منزلية؟ أخبرنا بالتاريخ وعدد الضيوف تقريبًا وما تفكر فيه.</p>
+      <figure class="contact-photo"><img src="/img/hero/hero-3.jpg" alt="" width="1000" height="667" loading="lazy"></figure>
       <div class="msg-panel">
         <p class="label-line">تفضّل المراسلة؟</p>
         <a class="msg-row" href="https://wa.me/201119990639" target="_blank" rel="noopener"><span class="k">واتساب</span><span class="v" dir="ltr">+20 111 999 0639</span></a>
@@ -73,17 +75,17 @@
       </div>
       <div class="field"><label for="c-phone-ar">الهاتف أو واتساب <span class="opt">(اختياري)</span></label><input id="c-phone-ar" name="phone" type="tel" autocomplete="tel" maxlength="40" dir="ltr"></div>
       <div class="two">
-        <div class="field"><label for="c-date-ar">تاريخ الحفلة <span class="opt">(اختياري)</span></label><input id="c-date-ar" name="date" type="date"><span class="hint">اتركه فارغًا إذا لم تحدده بعد.</span></div>
+        <div class="field"><label for="c-date-ar">تاريخ الحفلة <span class="opt">(اختياري)</span></label><input id="c-date-ar" name="date" type="text" maxlength="80" placeholder="مثلًا: 24 أكتوبر 2026" dir="auto" aria-describedby="c-date-hint-ar"><span class="hint" id="c-date-hint-ar">اتركه فارغًا إذا لم تحدده بعد.</span></div>
         <div class="field"><label for="c-guests-ar">عدد الضيوف <span class="opt">(اختياري)</span></label>
           <select id="c-guests-ar" name="guests"><option value="">لست متأكدًا بعد</option><option>حتى 50</option><option>من 50 إلى 150</option><option>من 150 إلى 300</option><option>أكثر من 300</option></select></div>
       </div>
-      <div class="field"><label for="c-msg-ar">أخبرنا عن حفلتك</label><textarea id="c-msg-ar" name="message" required maxlength="1500" dir="auto"></textarea></div>
+      <div class="field"><label for="c-msg-ar">أخبرنا عن حفلتك</label><textarea id="c-msg-ar" name="message" rows="5" required maxlength="1500" dir="auto"></textarea></div>
       <input class="trap" type="text" name="_honey" tabindex="-1" autocomplete="off" aria-hidden="true">
-      <label class="check consent"><input type="checkbox" name="consent" required><span>أوافق على إرسال بياناتي إلى سهرة بالبريد عبر FormSubmit حتى نرد عليك. راجع صفحة <a href="/privacy">الخصوصية</a>.</span></label>
-      <p class="notice" data-status hidden></p>
+      <label class="check accept consent"><input type="checkbox" name="consent" required><span>أوافق على إرسال بياناتي إلى سهرة بالبريد عبر FormSubmit حتى نرد عليك. راجع صفحة <a href="/privacy">الخصوصية</a>.</span></label>
+      <p class="notice" data-status role="status" aria-live="polite" hidden></p>
       <button class="btn primary wide-btn" type="submit" data-via="form">أرسل الرسالة</button>
       <p class="alt-actions">أو تابع على <button class="btn link" type="submit" data-via="whatsapp">واتساب</button> أو عبر <button class="btn link" type="submit" data-via="email">البريد</button></p>
-      <p class="small muted helper">الإرسال يوصل رسالتك إلينا بالبريد عبر FormSubmit، ولا تحفظ سهرة شيئًا. واتساب أو البريد يفتح التطبيق ورسالتك جاهزة: راجعها واضغط إرسال هناك.</p>
+      <p class="small muted helper">لا تحفظ سهرة هذا النموذج. تستخدم واتساب أو البريد؟ راجع رسالتك وأرسلها من التطبيق.</p>
     </form>
   </div>
 </article>

@@ -152,10 +152,19 @@ var Sahra = (function () {
     var account = el("a", { class: "btn small-btn", attrs: { href: me ? (me.staff.role === "door" ? "/scan.html" : "/dashboard.html") : "/signin.html" } });
     var sw = el("button", { class: "lang-switch", attrs: { type: "button" } });
     var foot = el("footer", { class: "site-footer" });
+    var publicNav = el("nav", { class: "public-nav" });
+    var navItems = [["tab_home", "/"], ["about", "/about.html"], ["contact", "/contact.html"]];
     function label() {
       account.textContent = me ? (me.staff ? me.staff.name : me.name) : t("sign_in");
       sw.textContent = t("lang_other");
       sw.setAttribute("lang", lang() === "en" ? "ar" : "en");
+      publicNav.replaceChildren();
+      publicNav.setAttribute("aria-label", lang() === "ar" ? "التنقل الرئيسي" : "Main navigation");
+      navItems.forEach(function (item) {
+        var link = el("a", { attrs: { href: item[1] } }, t(item[0]));
+        if (location.pathname.replace(/\.html$/, "") === item[1].replace(/\.html$/, "")) link.setAttribute("aria-current", "page");
+        publicNav.appendChild(link);
+      });
       footer(foot);
     }
     sw.addEventListener("click", function () {
@@ -167,6 +176,7 @@ var Sahra = (function () {
     label();
     if (!me) signedIn(function (who) { me = who; account.textContent = who.name; account.setAttribute("href", who.href); });
     document.body.insertBefore(el("div", { class: "topbar-shell" }, el("header", { class: "topbar" }, brand, el("span", { class: "topbar-end" }, sw, account))), document.body.firstChild);
+    if (!opts || opts.footer !== false) document.querySelector(".topbar").appendChild(publicNav);
     motion();
     // The door scanner shows only the camera and the result (brainstorm idea 12): no footer there.
     if (!opts || opts.footer !== false) document.body.appendChild(foot);
