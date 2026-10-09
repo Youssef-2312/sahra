@@ -518,3 +518,24 @@ zero console errors. Screenshots use synthetic local data, not live accounts.
 
 Required pre-commit checks passed: `npx tsc --noEmit -p .` and `npx vitest run`
 (33 files, 488 tests). No deployment or remote account action was performed.
+
+### Homepage expansion (9 October 2026)
+
+Added all three areas requested by the owner: an editorial photo section using
+three existing approved images, a guest preparation guide and a hosting guide.
+Guest guidance explains request versus ticket release, checking time/rules and
+address availability, and keeping a released QR private. Hosting guidance covers
+ticket setup, reviewing requests and payment proof, and inviting the door team.
+The existing hero, real party listings, ticket steps, FAQ and contact actions stay
+in place. New content is translated into English and Arabic, with logical layout
+properties for RTL, solid dark surfaces and the existing blue accent.
+
+Local Chromium checks passed at 390, 768 and 1440px in both languages: six layouts,
+zero horizontal overflow, zero console errors, all three gallery images loaded,
+three guest tips and three hosting tips rendered in every layout. The gallery's
+party link and the language switch worked. Public translation keys match at 385
+per language. Full-page screenshots were captured outside the repository.
+
+Pre-commit typecheck passed and all 488 tests in 33 files passed. The owner
+explicitly authorised deploying this frontend update to staging; production
+and database migrations are excluded.

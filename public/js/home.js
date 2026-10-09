@@ -1,8 +1,8 @@
 // Home page (owner decisions): a full-width hero (the party photos behind the
 // heading, "Discover parties" and "How it works"), the upcoming parties as a
-// sideways row of cards (flyers on the start side, then date and time, name,
-// price, availability, action; arrows only when the row overflows), "How
-// tickets work" in three plain columns, the organiser sign-in row, the footer.
+// wrapping grid of cards (artwork, date and time, name, price, availability,
+// action), ticket steps and preparation tips, party photography, hosting
+// guidance, the organiser sign-in row and the footer.
 // Sign-in for organisers and staff sits at the top right. A card shows this
 // browser's own ticket for that party when it remembers one (brainstorm idea 4):
 // the links saved by the sign-up and ticket pages (localStorage sahra_tickets),
@@ -202,6 +202,34 @@
       el("a", { class: "why-more", text: t("h_why_more"), attrs: { href: "/about" } }));
   }
 
+  // Existing owner-supplied photos are decorative, never used as party artwork.
+  function story() {
+    return el("section", { class: "home-story" },
+      el("div", { class: "home-story-copy" },
+        el("p", { class: "label-line", text: t("h_story_label") }),
+        el("h2", { text: t("h_story_title") }),
+        el("p", { class: "lede", text: t("h_story_p") }),
+        el("a", { class: "btn", text: t("h_story_link"), attrs: { href: "#parties" } })),
+      el("div", { class: "home-photos", attrs: { "aria-hidden": "true" } },
+        [13, 8, 3].map(function (n) { return el("div", null, photo(n, false)); })));
+  }
+
+  function guide(kind) {
+    var host = kind === "hosts";
+    return el("section", { class: "home-guide home-guide-" + kind },
+      el("div", { class: "home-guide-head" },
+        el("p", { class: "label-line", text: t(host ? "h_host_label" : "h_ready_label") }),
+        el("h2", { text: t("h_" + kind + "_title") }),
+        el("p", { class: "lede", text: t("h_" + kind + "_p") }),
+        host ? el("a", { class: "why-more", text: t("h_hosts_link"), attrs: { href: "/about" } }) : null),
+      el("ol", { class: "home-guide-list" }, [1, 2, 3].map(function (n) {
+        return el("li", null,
+          el("span", { class: "home-guide-number", text: "0" + n, attrs: { "aria-hidden": "true" } }),
+          el("div", null, el("h3", { text: t("h_" + kind + n + "_t") }),
+            el("p", { text: t("h_" + kind + n + "_p") })));
+      })));
+  }
+
   function mineSection() {
     var shown = mine.filter(function (m) { return m.status !== "invalid"; });
     if (!shown.length) return null;
@@ -233,7 +261,9 @@
           el("h3", { text: t("h_step" + n + "_t") }),
           el("p", { text: t("h_step" + n + "_p") }));
       })),
+      guide("ready"),
       faq(),
+      guide("hosts"),
       // For organisers: a panel over one of the party photos (darkened, flat; no gradient).
       el("div", { class: "host host-panel" },
         photo(5, false),
@@ -254,6 +284,7 @@
     if (m) m.forEach(function (n) { app.appendChild(n); });
     app.appendChild(el("div", { class: "parties-section" }, partiesSection()));
     app.appendChild(why());
+    app.appendChild(story());
     app.appendChild(how());
   }
 
