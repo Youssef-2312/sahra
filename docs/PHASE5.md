@@ -32,7 +32,7 @@ the `staging` branch; a finished piece the owner should try is pushed there too.
   on every page: Privacy, Terms, copyright, and in the corner "Built by Nova"
   with Nova's logo (`public/img/nova-logo.svg`, a copy of
   https://bynova.vercel.app/favicon.svg) and an Instagram icon next to it
-  linking to https://www.instagram.com/nova.dev26/ (Sahra has no Instagram).
+  linking to https://www.instagram.com/novadev.co/ (Sahra has no Instagram).
 
 ## Owner decisions during Phase 5 (2026-10-08)
 
@@ -265,7 +265,7 @@ the `staging` branch; a finished piece the owner should try is pushed there too.
   party tonight?", true facts only (one scan per ticket, two languages, no app,
   QR by email), why Sahra, what organisers get, how hosting works, built by
   Nova, contact. Contact page (contact.html, after Nova's Contact): Nova's
-  WhatsApp +20 111 999 0639, novadevco@icloud.com and @nova.dev26, and a form
+  WhatsApp +20 111 999 0639, novadevco@icloud.com and @novadev.co, and a form
   that stores nothing: it opens WhatsApp or the email app with the message
   filled in (js/contact.js). Owner decision: keep FormSubmit; the form is
   emailed through Nova's FormSubmit endpoint after a consent box, and only
