@@ -54,6 +54,7 @@ async function fixture(role, lang = 'en', width = 390) {
       '/api/platform/parties': { parties: state.parties },
       '/api/platform/site-owners': { site_owners: [{ id: ownerId, name: 'Site owner', email: 'owner@example.test', linked: true }, { id: organiserId, name: 'Old access record', email: 'old@example.test', linked: false }] },
       '/api/platform/my-parties': { parties: state.mine },
+      '/api/platform/teams': { teams: state.mine.map(p => ({ party_id: p.id, party_name: p.name, role: 'owner' })) },
     };
     assert.ok(path in data, `Unexpected API request: ${path}`);
     return send(data[path]);

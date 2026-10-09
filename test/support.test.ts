@@ -16,9 +16,9 @@ afterEach(() => vi.restoreAllMocks());
 
 describe("support contact", () => {
   it("accepts phone numbers as people type them, and refuses what is not one", () => {
-    for (const ok of ["+20 111 999 0639", "01119990639", "(02) 2345-6789", "+44 20 7946 0958"]) expect(cleanPhone(ok)).toBe(ok);
-    expect(cleanPhone("  +20   111  999 0639 ")).toBe("+20 111 999 0639");
-    for (const bad of ["12345", "call me", "+20+111", "1".repeat(21), "011 1999 0639 ext 2", 20111999]) expect(cleanPhone(bad)).toBeUndefined();
+    for (const ok of ["+20 100 000 0000", "01000000000", "(02) 2345-6789", "+44 20 7946 0958"]) expect(cleanPhone(ok)).toBe(ok);
+    expect(cleanPhone("  +20   100  000 0000 ")).toBe("+20 100 000 0000");
+    for (const bad of ["12345", "call me", "+20+111", "1".repeat(21), "010 0000 0000 ext 2", 20111999]) expect(cleanPhone(bad)).toBeUndefined();
     expect(cleanPhone("")).toBeNull();
   });
 
@@ -34,13 +34,13 @@ describe("support contact", () => {
     // The organiser sets it in Settings (format checked).
     expect((await h.req("/api/party/details", api(os, { support_phone: "not a number" }))).status).toBe(400);
     expect((await h.req("/api/party/details", api(os, { support_email: "nope" }))).status).toBe(400);
-    const set = await h.req("/api/party/details", api(os, { support_phone: "+20 111 999 0639", support_email: "Host@Example.com", support_note: "Available 6pm to midnight" }));
+    const set = await h.req("/api/party/details", api(os, { support_phone: "+20 100 000 0000", support_email: "Host@Example.com", support_note: "Available 6pm to midnight" }));
     expect(set.status).toBe(200);
-    expect(((await set.json()) as { party: Record<string, unknown> }).party).toMatchObject({ support_phone: "+20 111 999 0639", support_email: "host@example.com" });
+    expect(((await set.json()) as { party: Record<string, unknown> }).party).toMatchObject({ support_phone: "+20 100 000 0000", support_email: "host@example.com" });
 
     const open = (await (await h.req(`/api/guest/parties/${party}`)).json()) as { registration: { state: string }; details: { support: unknown } };
     expect(open.registration.state).toBe("open");
-    const contact = { phone: "+20 111 999 0639", email: "host@example.com", note: "Available 6pm to midnight" };
+    const contact = { phone: "+20 100 000 0000", email: "host@example.com", note: "Available 6pm to midnight" };
     expect(open.details.support).toEqual(contact);
     const s = await signup(h, party);
     expect(s.status).toBe(201);

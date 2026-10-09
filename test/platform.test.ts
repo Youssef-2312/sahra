@@ -229,24 +229,34 @@ describe("party creation by organisers", () => {
     expect(await logEntry("party", id, 1)).not.toBeNull();
     expect(await logEntry("staff", staffId, 1)).not.toBeNull();
 
-    // Staff sign-in with the same Google account lands in the new party as owner.
+    // One sign-in: with exactly one party the same Google account lands straight in it
+    // as owner, and My parties (the platform session) is signed in too.
     h.google.identity = { sub: o.sub, email: `${o.sub}@gmail.com` };
-    // One button: both kinds of access, so the organiser page is signed in and the party is one choice away.
     const login = await googleLogin(h);
     expect(login.res.status).toBe(200);
-    expect(login.html).toContain("Organiser page");
-    expect(login.html).toContain(id);
-    expect(login.cookies["__Host-sahra_p"]).toBeDefined();
-    const form = new FormData();
-    form.set("party_id", id);
-    const sel = await h.req("/api/auth/select-party", {
-      method: "POST", body: form, headers: { origin: ORIGIN }, cookies: { "__Host-sahra_pick": login.cookies["__Host-sahra_pick"]!.value },
-    });
-    expect(sel.status).toBe(200);
-    const me = await (await h.req("/api/me", { cookies: { "__Host-sahra_s": setCookies(sel)["__Host-sahra_s"]!.value } })).json();
+    expect(login.html).toContain('data-next="/dashboard"');
+    const pCookie = login.cookies["__Host-sahra_p"]!.value;
+    const me = await (await h.req("/api/me", { cookies: { "__Host-sahra_s": login.cookies["__Host-sahra_s"]!.value } })).json();
     expect(me).toMatchObject({ party: { id }, staff: { id: staffId, role: "owner" } });
-    const pme = await h.req("/api/platform/me", { cookies: { "__Host-sahra_p": login.cookies["__Host-sahra_p"]!.value } });
+    const pme = await h.req("/api/platform/me", { cookies: { "__Host-sahra_p": pCookie } });
     expect(pme.status).toBe(200);
+
+    // My parties lists it and opens it without signing in again; another party's id does not open.
+    const teams = (await (await h.req("/api/platform/teams", { cookies: { "__Host-sahra_p": pCookie } })).json()) as { teams: { party_id: string; role: string }[] };
+    expect(teams.teams).toEqual([{ party_id: id, party_name: `Party ${id}`, role: "owner" }]);
+    const csrf = ((await pme.json()) as { csrf: string }).csrf;
+    const open = (pid: string, cookie = pCookie) => h.req(`/api/platform/parties/${pid}/open`, {
+      method: "POST", headers: { origin: ORIGIN, "content-type": "application/json", "x-sahra-csrf": csrf }, cookies: { "__Host-sahra_p": cookie }, body: "{}",
+    });
+    const opened = await open(id);
+    expect(opened.status).toBe(200);
+    const me2 = await (await h.req("/api/me", { cookies: { "__Host-sahra_s": setCookies(opened)["__Host-sahra_s"]!.value } })).json();
+    expect(me2).toMatchObject({ party: { id }, staff: { id: staffId, role: "owner" } });
+    const elsewhere = await seedParty();
+    expect((await open(elsewhere)).status).toBe(404);
+    // Signed out of My parties: nothing opens any more.
+    await h.req("/api/platform/logout", { method: "POST", headers: { origin: ORIGIN, "content-type": "application/json", "x-sahra-csrf": csrf }, cookies: { "__Host-sahra_p": pCookie }, body: "{}" });
+    expect((await open(id)).status).toBe(401);
 
     const mine = (await (await h.req("/api/platform/my-parties", { cookies: { "__Host-sahra_p": o.s.token } })).json()) as { parties: { id: string }[] };
     expect(mine.parties.map((x) => x.id)).toEqual([id]);

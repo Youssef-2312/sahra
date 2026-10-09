@@ -22,7 +22,7 @@ import { CONFIG } from "../env";
 import { COOKIE_SESSION, clearCookie, cookie } from "../lib/http";
 import { csrfFor, isUuid, newId, newToken, sha256hex } from "../lib/crypto";
 import { COOKIE_PLATFORM, requirePlatform, type PCtx, type PlatformEnv } from "../platform/auth";
-import { MAX_PARTY_LIMIT, PLATFORM, siteOwnerValid } from "../platform/db";
+import { MAX_PARTY_LIMIT, PLATFORM, platformSessionFor, siteOwnerValid } from "../platform/db";
 import { healthView } from "../health";
 import { discordStatus } from "../health/discord";
 import { LIMITS } from "../limits";
@@ -262,6 +262,44 @@ platformRoutes.post("/parties/:id/manage", requirePlatform(["site_owner"]), asyn
   if (s === "capped") return j(c, 429, { error: "too_many_sessions" });
   if (s !== "created") return j(c, 409, { error: "not_allowed" });
   const res = j(c, 200, { status: "managing", party: partyId, expires_at: expiresAt });
+  res.headers.append("set-cookie", cookie(COOKIE_SESSION, token, { maxAgeS: CONFIG.googleSessionMs / 1000, sameSite: "Strict" }));
+  return res;
+});
+
+// ------------------------------------------------------------ one sign-in
+
+/**
+ * The parties this Google account is on the team of (owner or admin), for the
+ * "My parties" page: one sign-in, then open any of them.
+ */
+platformRoutes.get("/teams", requirePlatform(["site_owner", "organiser"]), async (c) => {
+  const rows = await c.var.db.activeStaffForSub(c.var.platform.info.google_sub);
+  return j(c, 200, { teams: rows.map((r) => ({ party_id: r.party_id, party_name: r.party_name, role: r.role })) });
+});
+
+/**
+ * Open one of those parties without signing in again: a party session for the
+ * same Google account's own staff row there. The insert itself requires the
+ * platform session to be live and of that account, and the staff row to be
+ * active, linked to it and owner or admin (the same rule as choosing a party
+ * after sign-in, src/routes/auth.ts).
+ */
+platformRoutes.post("/parties/:id/open", requirePlatform(["site_owner", "organiser"]), async (c) => {
+  const partyId = c.req.param("id");
+  if (!PARTY_ID.test(partyId)) return j(c, 400, { error: "invalid_request" });
+  const p = c.var.platform;
+  const now = c.var.deps.now();
+  const s = (await c.var.db.activeStaffForSub(p.info.google_sub)).find((x) => x.party_id === partyId);
+  if (!s) return j(c, 404, { error: "not_found" });
+  const token = newToken();
+  const expiresAt = now + CONFIG.googleSessionMs;
+  const ok = await c.var.db.createGoogleSession({
+    hash: await sha256hex(token), staffId: s.staff_id, partyId, sub: p.info.google_sub, now, expiresAt,
+    guard: platformSessionFor(p.hash, p.info.google_sub, now),
+  });
+  if (ok === "capped") return j(c, 429, { error: "too_many_sessions" });
+  if (ok !== "created") return j(c, 409, { error: "not_allowed" });
+  const res = j(c, 200, { status: "opened", party: partyId, role: s.role, expires_at: expiresAt });
   res.headers.append("set-cookie", cookie(COOKIE_SESSION, token, { maxAgeS: CONFIG.googleSessionMs / 1000, sameSite: "Strict" }));
   return res;
 });

@@ -715,3 +715,28 @@ party) and a mistyped address answered `{"error":"not_found"}`. Now:
   ui.js): a ticket link that is not valid, a party that does not exist, and staff
   pages opened while signed out. The door scanner keeps its minimal screen.
 - Test: `test/notice.test.ts`.
+
+### One sign-in: organiser and party owner are one role (9 October 2026)
+
+Owner: party owners are single people, so there is no separate "organiser". On
+the site everyone who runs parties is a party owner; guests read "the host".
+
+- One sign-in page for everyone (`Sahra.signinView` in ui.js, used by /signin and
+  by /platform when signed out); it always uses `/api/auth/google/start`.
+- After sign-in, an account that may create parties (or the site owner) also gets
+  the My parties session. With exactly one party it goes straight to that party's
+  dashboard; otherwise to My parties (/platform).
+- My parties lists every party the account runs (`GET /api/platform/teams`) with an
+  Open button (`POST /api/platform/parties/:id/open`): a party session for the same
+  Google account's own owner/admin row, created only while the My parties session
+  is live (checked inside the insert), the same rule as choosing a party after
+  sign-in. No second Google sign-in.
+- Party pages show a "My parties" link when the account has that session, and
+  Sign out ends both sessions.
+- Under the hood the permission to create parties (and its party limit, set by the
+  site owner) is unchanged, so not every Google account can create parties. The
+  site-owner panel calls it "Party owners".
+- Wording: "organiser" is gone from the site, emails' wording unchanged (they never
+  used it); About, Privacy and Terms say "host" (same meaning, same version date).
+- Contact page: "Date of party", "continue on WhatsApp or by Email"; the Settings
+  example phone number is a made-up one (+20 100 000 0000).

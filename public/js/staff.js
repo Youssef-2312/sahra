@@ -41,15 +41,29 @@ var SahraStaff = (function () {
     return r;
   }
 
+  // One sign-in: an account that also has My parties (a party owner who creates
+  // parties, or the site owner) gets a link back there, and signing out ends both.
+  var platform; // undefined: not asked yet; null: none
+  function myParties() { return el("a", { class: "staff-mine", text: t("p_my_parties"), attrs: { href: "/platform" } }); }
+  async function askPlatform() {
+    platform = null;
+    var r = await Sahra.api.get("/api/platform/me");
+    if (!r.ok) return;
+    platform = r.body;
+    document.querySelectorAll(".staff-nav").forEach(function (n) { if (!n.querySelector(".staff-mine")) n.insertBefore(myParties(), n.firstChild); });
+  }
+
   async function signOut() {
     await Sahra.api.post("/api/auth/logout");
+    if (platform) await Sahra.api.post("/api/platform/logout", {}, { "x-sahra-csrf": platform.csrf });
     Sahra.store.del(Sahra.SESSION_KEY);
     location.href = "/";
   }
 
   /** The staff menu: one row of links, the current page marked. */
   function nav(current, role) {
-    return el("nav", { class: "staff-nav", attrs: { "aria-label": t("s_nav_label") } },
+    if (platform === undefined && role !== "door") askPlatform();
+    return el("nav", { class: "staff-nav", attrs: { "aria-label": t("s_nav_label") } }, platform ? myParties() : null,
       PAGES.filter(function (p) { return !p[3] || p[3] === role; }).map(function (p) {
         return el("a", { text: t(p[2]), attrs: { href: p[1], "aria-current": p[0] === current ? "page" : null } });
       }), el("button", { class: "staff-out", text: t("s_sign_out"), attrs: { type: "button" }, on: { click: signOut } }));

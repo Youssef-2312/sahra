@@ -218,7 +218,7 @@
     var p = party;
     var card = formCard("contact", t("s_contact"), t("s_contact_p"), [
       p.support_phone ? null : el("p", { class: "notice maybe", text: t("s_contact_missing") }),
-      S.field(t("s_contact_phone"), S.input("support_phone", "tel", { maxlength: 30, value: p.support_phone || "", placeholder: "+20 111 999 0639", dir: "ltr", autocomplete: "tel" }), t("s_contact_phone_h")),
+      S.field(t("s_contact_phone"), S.input("support_phone", "tel", { maxlength: 30, value: p.support_phone || "", placeholder: "+20 100 000 0000", dir: "ltr", autocomplete: "tel" }), t("s_contact_phone_h")),
       el("div", { class: "s-two" },
         S.field(t("s_contact_email"), S.input("support_email", "email", { maxlength: 254, value: p.support_email || "", dir: "ltr" }), t("s_optional")),
         S.field(t("s_contact_note"), S.input("support_note", "text", { maxlength: 120, value: p.support_note || "", placeholder: t("s_contact_note_ph"), dir: "auto" }), t("s_optional"))),

@@ -1,4 +1,6 @@
-// Organiser and site-owner panel. Platform authentication and CSRF are separate
+// My parties (party owners who create parties) and the site-owner panel, at /platform.
+// One sign-in for everyone (Sahra.signinView); each party opens from here without
+// signing in again (POST /api/platform/parties/:id/open). Platform authentication and CSRF are separate
 // from party sessions: never call Sahra.api.me() or SahraStaff.start() here.
 // Retry bodies (including invitation / staff UUIDs) stay fixed until confirmed.
 "use strict";
@@ -30,7 +32,7 @@
     var key = "p_e_" + (r.body && r.body.error);
     return SahraText.en[key] ? t(key) : S.why(r);
   }
-  var paths = { health: "/health", organisers: "/organisers", parties: "/parties", owners: "/site-owners", mine: "/my-parties" };
+  var paths = { health: "/health", organisers: "/organisers", parties: "/parties", owners: "/site-owners", mine: "/my-parties", teams: "/teams" };
   async function load(key) {
     if (loading[key]) return;
     loading[key] = true;
@@ -197,6 +199,14 @@
       el("div", { class: "g-actions" }, go, button("q_cancel", function () { disabling[key] = false; render(); }, "")));
   }
 
+  function teamRow(m) {
+    var key = "open:" + m.party_id;
+    return el("li", { class: "g-row" },
+      el("div", { class: "g-name-line" }, el("strong", { text: m.party_name, attrs: { dir: "auto" } }), el("span", { class: "pill", text: t("nt_role_" + m.role) })),
+      el("p", { class: "muted small", text: m.party_id, attrs: { dir: "ltr" } }),
+      el("div", { class: "g-actions" }, action(key, "/api/platform/parties/" + encodeURIComponent(m.party_id) + "/open", {}, null, null, null, "p_open_party", "primary", "/dashboard")),
+      notice(key));
+  }
   function partyRow(p, siteOwner) {
     var key = "party:" + p.id, path = "/api/platform/parties/" + encodeURIComponent(p.id);
     var acts = [];
@@ -239,7 +249,7 @@
     return form("create", [S.field(t("p_party_id"), S.input("id", "text", { required: true, minlength: 3, maxlength: 24, pattern: "[a-z0-9][a-z0-9\\-]{1,22}[a-z0-9]", dir: "ltr", autocapitalize: "none", spellcheck: "false" }), t("p_party_id_hint")),
       S.field(t("s_name"), S.input("name", "text", { required: true, maxlength: 80, dir: "auto" })),
       S.field(t("p_capacity"), S.input("capacity", "number", { required: true, min: 1, max: 100000, step: 1, value: 100 }))], "p_create", function (v) {
-        return act("create", "/api/platform/parties", { id: v.id, name: v.name, capacity: Number(v.capacity), staff_id: crypto.randomUUID() }, "mine", "p_created");
+        return act("create", "/api/platform/parties", { id: v.id, name: v.name, capacity: Number(v.capacity), staff_id: crypto.randomUUID() }, "teams", "p_created");
       });
   }
 
@@ -252,13 +262,14 @@
     Sahra.clear(app);
     Sahra.title(t(me && me.site_owner ? "p_site_owner" : "p_title"));
     if (!me) {
-      app.appendChild(S.section("signin", t("p_title"), t("p_signin_intro"),
-        authError && authError.status !== 401 ? el("div", { class: "notice no" }, el("p", { text: why(authError) }), button("p_retry", function () { location.reload(); })) : null,
-        el("form", { attrs: { method: "post", action: "/api/auth/platform/start" } }, el("button", { class: "btn primary", text: t("p_google"), attrs: { type: "submit" } }))));
+      Sahra.title(t("si_title"));
+      app.appendChild(Sahra.signinView(authError && authError.status !== 401
+        ? el("div", { class: "notice no" }, el("p", { text: why(authError) }), button("p_retry", function () { location.reload(); })) : null));
       return;
     }
-    var navItems = me.site_owner ? [["health", "p_health"], ["organisers", "p_organisers"], ["parties", "p_parties"], ["owners", "p_site_owners"]] : [];
-    if (me.organiser) navItems.push(["mine", "p_my_parties"], ["create", "p_create"]);
+    var navItems = [["mine", "p_my_parties"]];
+    if (me.organiser) navItems.push(["create", "p_create"]);
+    if (me.site_owner) navItems.push(["health", "p_health"], ["organisers", "p_organisers"], ["parties", "p_parties"], ["owners", "p_site_owners"]);
     app.appendChild(el("nav", { class: "staff-nav", attrs: { "aria-label": t("p_nav") } }, navItems.map(function (n) { return el("a", { text: t(n[1]), attrs: { href: "#" + n[0] } }); }),
       action("logout", "/api/platform/logout", {}, null, null, null, "s_sign_out", "staff-out", "/platform")));
     app.appendChild(el("header", { class: "staff-head" }, el("div", null,
@@ -266,6 +277,12 @@
       el("h1", { text: t(me.site_owner ? "p_site_owner" : "p_title") }),
       el("p", { class: "muted lede", text: t(me.site_owner ? "p_owner_intro" : "p_organiser_intro") }))));
     app.appendChild(notice("logout"));
+    // My parties: every party this account runs, opened without signing in again; and a new one.
+    app.appendChild(el("div", { class: "g-cols" },
+      S.section("mine", t("p_my_parties"), t("p_mine_intro"), content("teams", function (d) {
+        return d.teams.length ? el("ul", { class: "g-list" }, d.teams.map(teamRow)) : empty(me.organiser ? "p_no_parties_yet" : "p_no_parties");
+      })),
+      me.organiser ? S.section("create", t("p_create"), t("p_create_intro"), createParty()) : null));
     if (me.site_owner) {
       app.appendChild(S.section("health", t("p_health"), t("p_health_intro"), content("health", health)));
       app.appendChild(el("div", { class: "g-cols" },
@@ -273,10 +290,6 @@
         el("div", null, S.section("organisers", t("p_organisers"), t("p_organisers_intro"), content("organisers", organisers)),
           S.section("owners", t("p_site_owners"), t("p_owners_intro"), content("owners", owners)))));
     }
-    if (me.organiser) app.appendChild(el("div", { class: "g-cols" },
-      S.section("mine", t("p_my_parties"), t("p_mine_intro"), content("mine", function (d) { return d.parties.length ? el("ul", { class: "g-list" }, d.parties.map(function (p) { return partyRow(p, false); })) : empty("p_no_parties"); }),
-        el("a", { class: "btn small-btn", text: t("p_staff_signin"), attrs: { href: "/signin" } })),
-      S.section("create", t("p_create"), t("p_create_intro"), createParty())));
     app.querySelectorAll("form[data-form]").forEach(function (f) {
       // Clear successful submitted forms; keep other drafts on every redraw.
       if (notes[f.dataset.form] && notes[f.dataset.form].ok) return;
@@ -290,5 +303,5 @@
   else { authError = r; if (r.status === 401) Sahra.store.del(Sahra.SESSION_KEY); }
   Sahra.boot({ render: render });
   if (me && me.site_owner) ["health", "organisers", "parties", "owners"].forEach(load);
-  if (me && me.organiser) load("mine");
+  if (me) load("teams");
 })();

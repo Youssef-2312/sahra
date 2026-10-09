@@ -141,12 +141,12 @@ export class Db {
    * Creates a session only if the staff row is still linked to this Google account
    * and active, and the person is under the hourly session cap.
    */
-  async createGoogleSession(a: { hash: string; staffId: string; partyId: string; sub: string; now: number; expiresAt: number }) {
+  async createGoogleSession(a: { hash: string; staffId: string; partyId: string; sub: string; now: number; expiresAt: number; guard?: Sql }) {
     const rs = await this.driver.batch([
       sql`INSERT INTO sessions (id_hash, kind, party_id, staff_id, role, created_at, expires_at)
         SELECT ${a.hash}, 'google', party_id, id, role, ${a.now}, ${a.expiresAt} FROM staff
         WHERE id = ${a.staffId} AND party_id = ${a.partyId} AND google_sub = ${a.sub} AND disabled_at IS NULL
-          AND role IN ('owner', 'admin') AND ${underSessionCap(a.staffId, a.now)}
+          AND role IN ('owner', 'admin') AND ${underSessionCap(a.staffId, a.now)} AND ${a.guard ?? sql`1`}
           AND NOT EXISTS (SELECT 1 FROM parties dp WHERE dp.id = staff.party_id AND dp.disabled_at IS NOT NULL)`,
       sql`INSERT INTO audit (party_id, at, actor_staff_id, action, entity_type, entity_id, entity_rev, detail)
         SELECT party_id, ${a.now}, staff_id, 'login_google', 'staff', staff_id, NULL, NULL FROM sessions WHERE id_hash = ${a.hash}`,

@@ -136,41 +136,42 @@ authRoutes.get("/google/callback", async (c) => {
   // Confirm every staff/invite/platform change (including any link just made) in the change log first.
   if (linked > 0 || staff.length > 0 || platform) await flushChangeLog(db, c.var.ledger, now);
 
-  // Organiser or site owner: their own session (cookie) too.
+  // One sign-in for everyone who runs parties. A party owner who may create
+  // parties (or the site owner) also gets the "My parties" session (cookie): with
+  // exactly one party they go straight to it, otherwise to My parties, where each
+  // party opens without signing in again (POST /api/platform/parties/:id/open).
   const cookies = [...clear];
   if (platform) {
     const s = await platformSession(pdb, claims.sub, now);
     if (s === "capped") return noticeResponse(c, 429, "capped", { cookies: clear });
     if (s === "changed") return noticeResponse(c, 403, "changed", { cookies: clear });
     cookies.push(s.cookie);
-    if (staff.length === 0) return noticeResponse(c, 200, "signed_in", { refreshTo: "/platform", cookies });
+    if (staff.length !== 1) return noticeResponse(c, 200, "signed_in", { refreshTo: "/platform", cookies });
   }
 
-  if (staff.length === 1 && !platform) {
+  if (staff.length === 1) {
     const s = staff[0]!;
     const token = newToken();
     const ok = await db.createGoogleSession({
       hash: await sha256hex(token), staffId: s.staff_id, partyId: s.party_id, sub: claims.sub, now,
       expiresAt: now + CONFIG.googleSessionMs,
     });
-    if (ok === "capped") return noticeResponse(c, 429, "capped", { cookies: clear });
-    if (ok !== "created") return noticeResponse(c, 403, "changed", { cookies: clear });
+    if (ok === "capped") return noticeResponse(c, 429, "capped", { cookies });
+    if (ok !== "created") return noticeResponse(c, 403, "changed", { cookies });
     // A small same-site page navigates on; a 302 straight to the dashboard could drop the Strict cookie.
     return noticeResponse(c, 200, "signed_in", { refreshTo: "/dashboard", cookies: [
-      ...clear,
+      ...cookies,
       cookie(COOKIE_SESSION, token, { maxAgeS: CONFIG.googleSessionMs / 1000, sameSite: "Strict" }),
     ] });
   }
 
-  // Staff at several parties: a sealed, 2-minute, Strict cookie holds the verified
+  // Team member (not a party owner who creates parties) at several parties: a sealed, 2-minute, Strict cookie holds the verified
   // Google account id until a party is picked. No database write.
   const pick = await seal(envRecord(c), PICK_PURPOSE, { sub: claims.sub }, now + CONFIG.loginGrantMs);
   const forms = staff
     .map((s) => `<form method="post" action="/api/auth/select-party" class="pick"><input type="hidden" name="party_id" value="${escapeHtml(s.party_id)}"><button type="submit" class="btn" data-name="${escapeHtml(s.party_name)}" data-role="${escapeHtml(s.role)}">${escapeHtml(s.party_name)} (${escapeHtml(s.role)})</button></form>`)
     .join("");
-  // Also an organiser or site owner (already signed in to that page above): it is one more choice.
-  const platformLink = platform ? `<p><a href="/platform" class="btn" data-platform="">Organiser page</a></p>` : "";
-  return noticeResponse(c, 200, "choose", { extraHtml: forms + platformLink, cookies: [
+  return noticeResponse(c, 200, "choose", { extraHtml: forms, cookies: [
     ...cookies,
     cookie(COOKIE_PICK, pick, { maxAgeS: CONFIG.loginGrantMs / 1000, sameSite: "Strict" }),
   ] });

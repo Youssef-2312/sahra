@@ -70,7 +70,8 @@ var Sahra = (function () {
     var init = { method: method, credentials: "same-origin", headers: h };
     if (body instanceof FormData) init.body = body;
     else if (body !== undefined) { h["content-type"] = "application/json"; init.body = JSON.stringify(body); }
-    if (method !== "GET" && csrf) h["x-sahra-csrf"] = csrf;
+    // A page may pass its own token (the My parties session has its own); otherwise the party session's.
+    if (method !== "GET" && csrf && !h["x-sahra-csrf"]) h["x-sahra-csrf"] = csrf;
     try {
       var r = await fetch(path, init);
       var j = await r.json().catch(function () { return {}; });
@@ -132,6 +133,27 @@ var Sahra = (function () {
   }
 
   /** The browser tab, Nova's way: "Page | Sahra"; the home page is "Sahra | Private party tickets". */
+  /**
+   * The one sign-in (brainstorm idea 27; owner: one sign-in for everyone who runs
+   * parties): a photo panel and one "Continue with Google". The server finds what
+   * the account may open (its party, My parties, the site-owner panel) and goes
+   * there. Used by /signin and by /platform when signed out. `extra`: an error box.
+   */
+  function signinView(extra) {
+    var img = el("img", { attrs: { src: "/img/hero/hero-3.jpg", alt: "", decoding: "async" } });
+    img.addEventListener("error", function () { img.remove(); });
+    return el("div", { class: "signin-wrap" },
+      el("div", { class: "signin-panel" }, img, el("p", { class: "label-line", text: t("si_title") }), el("h1", { text: t("si_head") }), el("p", { text: t("si_text") })),
+      el("div", null, extra || null,
+        el("section", { class: "card" },
+          el("h2", { text: t("si_one") }),
+          el("p", { class: "muted", text: t("si_one_hint") }),
+          el("form", { attrs: { method: "post", action: "/api/auth/google/start" } },
+            el("button", { class: "btn primary", text: t("si_google"), attrs: { type: "submit" } }))),
+        el("p", { class: "small muted", text: t("si_invite_only") }),
+        el("p", { class: "small muted", text: t("si_door") })));
+  }
+
   /**
    * A page that cannot go on (page not found, a ticket link that is not valid, a
    * party that does not exist, a sign-in that failed or is needed): the sign-in
@@ -304,5 +326,5 @@ var Sahra = (function () {
   }
 
   return { t: t, el: el, clear: clear, api: api, errorText: errorText, money: money, amount: amount, when: when, time: time, rel: rel,
-    lang: lang, boot: boot, store: store, SESSION_KEY: SESSION_KEY, token: token, title: title, problem: problem, contactCard: contactCard, ref: function (id) { return id ? "SAH-" + String(id).slice(0, 6) : ""; } };
+    lang: lang, boot: boot, store: store, SESSION_KEY: SESSION_KEY, token: token, title: title, problem: problem, signinView: signinView, contactCard: contactCard, ref: function (id) { return id ? "SAH-" + String(id).slice(0, 6) : ""; } };
 })();
