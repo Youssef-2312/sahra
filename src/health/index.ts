@@ -41,6 +41,7 @@ import { newId } from "../lib/crypto";
 import { ACCOUNT_DAILY_WRITES, BUDGET_STOP_AT, dayOf, DAY_MS } from "../limits";
 import { schedule } from "../backup/export";
 import { outboxInsert } from "../outbox";
+import { PROVIDER_NAMES } from "../email/provider";
 import { PLATFORM, SITE_OWNER_EMAIL } from "../platform/db";
 import type { EraseReport } from "../guests/retention";
 import { filesCapacity, FILES_FULL_AT, type FilesEnv, type PurgeReport } from "../storage";
@@ -546,7 +547,7 @@ async function estimateUsage(main: SqlDriver, state: State, now: number, admissi
     state.outbox_seen_at == null
       ? sql`SELECT 0 AS n`
       : sql`SELECT COUNT(*) AS n FROM parties p JOIN outbox o ON o.party_id = p.id AND o.created_at > ${state.outbox_seen_at} AND o.created_at <= ${now}`,
-    sql`SELECT COALESCE(SUM(sent), 0) AS n FROM email_quota WHERE provider IN ('gmail', 'brevo') AND hour >= ${today * 24}`,
+    sql`SELECT COALESCE(SUM(sent), 0) AS n FROM email_quota WHERE provider IN (${inList([...PROVIDER_NAMES])}) AND hour >= ${today * 24}`,
   ]);
   const audit = Number(rs[0]!.results[0]?.n ?? 0);
   const maxId = rs[0]!.results[0]?.max_id;

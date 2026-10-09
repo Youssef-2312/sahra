@@ -20,21 +20,21 @@
 // to the same ticket page; over Gmail the Message-ID is the same) but kept rare.
 
 import type { SqlDriver } from "../db/driver";
-import { sql } from "../db/sql";
+import { inList, sql } from "../db/sql";
 import type { Env } from "../env";
 import { assertPlainText } from "../outbox";
 import { BrevoProvider } from "./brevo";
 import { isSafeAddress, type Message } from "./mime";
-import type { Provider, ProviderName, SendResult } from "./provider";
+import { PROVIDER_NAMES, type Provider, type ProviderName, type SendResult } from "./provider";
 import { SmtpProvider, type Connect } from "./smtp";
 
 export const EMAIL = {
   /** Emails per run (a run is once a minute; Workers Free allows 10 ms CPU per invocation). */
   batch: 3,
-  /** Rolling 24-hour caps, below the providers' own (Gmail about 500, Brevo free 300). */
-  dayCap: { gmail: 450, brevo: 280 } as Record<ProviderName, number>,
+  /** Rolling 24-hour caps, below the providers' own (Gmail about 500 per account, Brevo free 300). */
+  dayCap: { gmail: 450, gmail2: 450, gmail3: 450, brevo: 280 } as Record<ProviderName, number>,
   /** Per-minute caps (each run sends at most `batch`; these bound overlapping runs). */
-  minuteCap: { gmail: 10, brevo: 10 } as Record<ProviderName, number>,
+  minuteCap: { gmail: 10, gmail2: 10, gmail3: 10, brevo: 10 } as Record<ProviderName, number>,
   /** A claimed row not finished by then is reclaimed by a later run. */
   claimTimeoutMs: 10 * 60_000,
   /** Attempts (claims) before a row is marked failed. */
@@ -66,14 +66,29 @@ export interface RunReport {
   gaveUp: number;
 }
 
-/** Providers with complete settings, in the owner's order: the platform Gmail, then Brevo. */
+/** The platform's own Gmail accounts (never a party owner's): up to three, each with complete settings. */
+export function gmailAccounts(env: Env): { name: "gmail" | "gmail2" | "gmail3"; address: string; password: string }[] {
+  const slots = [
+    ["gmail", env.GMAIL_ADDRESS, env.GMAIL_APP_PASSWORD],
+    ["gmail2", env.GMAIL_ADDRESS_2, env.GMAIL_APP_PASSWORD_2],
+    ["gmail3", env.GMAIL_ADDRESS_3, env.GMAIL_APP_PASSWORD_3],
+  ] as const;
+  return slots.filter((x) => x[1] && x[2]).map((x) => ({ name: x[0], address: x[1]!, password: x[2]! }));
+}
+
+/** True when at least one provider has complete settings. */
+export function anyEmailProvider(env: Env): boolean {
+  return gmailAccounts(env).length > 0 || !!(env.BREVO_API_KEY && env.BREVO_SENDER);
+}
+
+/** Providers with complete settings, in the owner's order: the platform Gmail accounts (1, 2, 3), then Brevo. */
 export function configuredProviders(env: Env, deps: SenderDeps): Provider[] {
   const out: Provider[] = [];
-  if (env.GMAIL_ADDRESS && env.GMAIL_APP_PASSWORD) {
+  for (const g of gmailAccounts(env)) {
     out.push(new SmtpProvider({
-      connect: deps.connect, host: "smtp.gmail.com", port: 465,
-      user: env.GMAIL_ADDRESS, pass: env.GMAIL_APP_PASSWORD.replace(/\s+/g, ""),
-      fromEmail: env.GMAIL_ADDRESS, fromName: EMAIL.fromName,
+      name: g.name, connect: deps.connect, host: "smtp.gmail.com", port: 465,
+      user: g.address, pass: g.password.replace(/\s+/g, ""),
+      fromEmail: g.address, fromName: EMAIL.fromName,
       ehloName: hostOf(env.PUBLIC_ORIGIN), timeoutMs: EMAIL.timeoutMs,
     }));
   }
@@ -110,7 +125,7 @@ async function remaining(driver: SqlDriver, names: ProviderName[], now: number):
   const hour = Math.floor(now / HOUR), minute = Math.floor(now / MINUTE);
   const r = await driver.all<{ provider: string; day: number; min: number }>(sql`SELECT provider, SUM(sent) AS day,
       COALESCE(MAX(CASE WHEN hour = ${hour} AND minute = ${minute} THEN minute_sent END), 0) AS min
-    FROM email_quota WHERE provider IN ('gmail', 'brevo') AND hour > ${hour - 24} GROUP BY provider`);
+    FROM email_quota WHERE provider IN (${inList([...PROVIDER_NAMES])}) AND hour > ${hour - 24} GROUP BY provider`);
   const out: Record<string, number> = {};
   for (const n of names) {
     const row = r.results.find((x) => x.provider === n);
@@ -181,7 +196,7 @@ export async function runSender(env: Env, driver: SqlDriver, deps: SenderDeps): 
       let used: ProviderName | null = null;
       const counts = [];
       for (const p of usable) {
-        msg.fromEmail = p.name === "gmail" ? env.GMAIL_ADDRESS! : env.BREVO_SENDER!;
+        msg.fromEmail = p.fromEmail;
         result = await p.send(msg, now);
         used = p.name;
         if (result.status === "not_sent" && result.quotaExhausted) {

@@ -3,7 +3,9 @@
 
 import type { Message } from "./mime";
 
-export type ProviderName = "gmail" | "brevo";
+/** Up to three platform Gmail accounts (each with its own daily cap), then Brevo. */
+export const PROVIDER_NAMES = ["gmail", "gmail2", "gmail3", "brevo"] as const;
+export type ProviderName = (typeof PROVIDER_NAMES)[number];
 
 export type SendResult =
   | { status: "sent" }
@@ -16,6 +18,8 @@ export type SendResult =
 
 export interface Provider {
   readonly name: ProviderName;
+  /** The address this provider sends from. */
+  readonly fromEmail: string;
   send(m: Message, now: number): Promise<SendResult>;
   close(): Promise<void>;
 }

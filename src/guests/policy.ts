@@ -26,8 +26,10 @@ export const TERMS_VERSION = "2026-10-09";
 export const PRIVACY_VERSION = "2026-10-09";
 
 /** True when ticket emails can actually be sent (the same settings src/email/sender.ts uses). */
-export function emailConfigured(env: Pick<Env, "GMAIL_ADDRESS" | "GMAIL_APP_PASSWORD" | "BREVO_API_KEY" | "BREVO_SENDER">): boolean {
-  return !!((env.GMAIL_ADDRESS && env.GMAIL_APP_PASSWORD) || (env.BREVO_API_KEY && env.BREVO_SENDER));
+export function emailConfigured(env: Pick<Env, "GMAIL_ADDRESS" | "GMAIL_APP_PASSWORD" | "GMAIL_ADDRESS_2" | "GMAIL_APP_PASSWORD_2"
+  | "GMAIL_ADDRESS_3" | "GMAIL_APP_PASSWORD_3" | "BREVO_API_KEY" | "BREVO_SENDER">): boolean {
+  return !!((env.GMAIL_ADDRESS && env.GMAIL_APP_PASSWORD) || (env.GMAIL_ADDRESS_2 && env.GMAIL_APP_PASSWORD_2)
+    || (env.GMAIL_ADDRESS_3 && env.GMAIL_APP_PASSWORD_3) || (env.BREVO_API_KEY && env.BREVO_SENDER));
 }
 
 export async function rulesVersion(rules: string | null, cancellation: string | null = null): Promise<string | null> {

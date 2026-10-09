@@ -753,3 +753,15 @@ the site everyone who runs parties is a party owner; guests read "the host".
   recovery (`/api/recovery/holds`, `.../release-hold`). Guests now shows owners an
   "On hold after a recovery" card, only when something is on hold: each ticket or
   team member with why it was held, a reason field and Release.
+
+### Up to three Gmail accounts (9 October 2026)
+
+Owner: about 1500 tickets, so three platform Gmail accounts. Settings (secrets, set by
+the owner): `GMAIL_ADDRESS` / `GMAIL_APP_PASSWORD`, optional `GMAIL_ADDRESS_2` /
+`GMAIL_APP_PASSWORD_2` and `GMAIL_ADDRESS_3` / `GMAIL_APP_PASSWORD_3`, then Brevo as
+before. They are used in that order; each account (`gmail`, `gmail2`, `gmail3`) has
+its own rolling 24-hour cap of 450 (below Gmail's 500) and per-minute cap, and sends
+from its own address. Three accounts plus Brevo: up to 1630 emails per 24 hours.
+Speed is unchanged: 3 emails per one-minute run (the Workers Free CPU limit), so
+about 180 per hour; 1500 emails take about 8 hours. No migration (provider names
+are free text). Test: `test/email-sender.test.ts` (three accounts).

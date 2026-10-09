@@ -228,6 +228,38 @@ describe("email sender", () => {
     expect(await run(GMAIL)).toMatchObject({ sent: 1 });
   });
 
+  it("three Gmail accounts: in order, each with its own daily cap and its own From address", async () => {
+    const G3 = {
+      ...GMAIL, GMAIL_ADDRESS_2: "platform2@gmail.com", GMAIL_APP_PASSWORD_2: "test-only-app-password-2",
+      GMAIL_ADDRESS_3: "platform3@gmail.com", GMAIL_APP_PASSWORD_3: "test-only-app-password-3",
+    };
+    const hour = Math.floor(clock.now() / 3600_000);
+    const full = (name: string) => env.DB.prepare("INSERT INTO email_quota (provider, hour, sent) VALUES (?, ?, ?) ON CONFLICT DO UPDATE SET sent = excluded.sent")
+      .bind(name, hour - 1, 450).run();
+    const [a] = await add(1);
+    expect(await run(G3)).toMatchObject({ sent: 1 });
+    expect(await row(a!)).toMatchObject({ status: "sent", provider: "gmail" });
+    await full("gmail");
+    const [b] = await add(1);
+    expect(await run(G3)).toMatchObject({ sent: 1 });
+    expect(await row(b!)).toMatchObject({ status: "sent", provider: "gmail2" });
+    await full("gmail2");
+    const [c] = await add(1);
+    expect(await run(G3)).toMatchObject({ sent: 1 });
+    expect(await row(c!)).toMatchObject({ status: "sent", provider: "gmail3" });
+    expect(smtp.messages.map((m) => /^From: .*<([^>]+)>/m.exec(m.data)?.[1])).toEqual(["platform@gmail.com", "platform2@gmail.com", "platform3@gmail.com"]);
+    // All three at their caps and no Brevo: nothing is claimed.
+    await full("gmail3");
+    const [d] = await add(1);
+    expect((await run(G3)).skipped).toBe("at_cap");
+    expect(await row(d!)).toMatchObject({ status: "queued", attempts: 0 });
+    // Half a second account is no account.
+    expect((await run({ GMAIL_ADDRESS_2: "platform2@gmail.com" })).skipped).toBe("no_provider");
+    // No password is ever stored.
+    const errs = JSON.stringify((await env.DB.prepare("SELECT last_error FROM outbox").all()).results);
+    expect(errs).not.toContain("test-only-app-password");
+  });
+
   it("per-minute cap and counting", async () => {
     await add(EMAIL.minuteCap.gmail + 2);
     let sent = 0;
