@@ -65,6 +65,7 @@
     if (!data) return null;
     if (!data.turnstile_site_key) return t("closed_unavailable");
     if (data.full) return t("closed_full");
+    if (data.registration.needs_contact) return t("closed_contact");
     if (data.registration.state === "not_open_yet") return t("closed_not_yet", { when: Sahra.when(data.registration.opens_at, tz()) });
     if (data.registration.state === "closed") return t("closed_over");
     if (data.types.length && !data.types.some(function (x) { return x.on_sale; })) return t("closed_unavailable");
@@ -525,7 +526,7 @@
     var closed = closedReason();
     app.appendChild(partyCard());
     app.appendChild(el("div", { class: "buy-cols" }, body,
-      el("aside", { class: "summary" }, closed ? null : orderCard(), addressCard(), rulesCard())));
+      el("aside", { class: "summary" }, closed ? null : orderCard(), addressCard(), rulesCard(), Sahra.contactCard(data.details && data.details.support))));
     if (closed) {
       body.appendChild(el("p", { class: "notice maybe", text: closed }));
     } else {

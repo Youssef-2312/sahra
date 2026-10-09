@@ -37,6 +37,8 @@ export interface SignupParty {
   /** Party of the ticket with this sign-up's id, if it exists already (a retry). */
   existing_party: string | null;
   registration_opens_at: number | null;
+  /** The organiser's support number (migrations/0023); requests stay closed while it is NULL. */
+  support_phone: string | null;
   registration_closes_at: number | null;
   max_tickets_per_email: number | null;
   /** Pending + approved tickets of the party for the given email (0 without one). */
@@ -63,7 +65,8 @@ export type SignupRefusal = "registration_not_open" | "registration_closed" | "e
 function registrationRules(now: number, email: string, count = 1) {
   const emailCount = sql`(SELECT COUNT(*) FROM tickets e WHERE e.party_id = p.id AND e.guest_email = ${email} AND e.status IN ('pending', 'approved'))`;
   return {
-    opened: sql`(p.registration_opens_at IS NULL OR p.registration_opens_at <= ${now})`,
+    // No requests until the organiser has set a support number (brainstorm idea 16, migrations/0023).
+    opened: sql`(p.support_phone IS NOT NULL AND (p.registration_opens_at IS NULL OR p.registration_opens_at <= ${now}))`,
     notClosed: sql`(p.registration_closes_at IS NULL OR p.registration_closes_at > ${now})`,
     // Every ticket of the order counts (an order of 3 needs 3 free).
     emailOk: sql`(p.max_tickets_per_email IS NULL OR ${emailCount} + ${count} <= p.max_tickets_per_email)`,
@@ -126,7 +129,7 @@ export class GuestDb {
     const tt = sql`FROM ticket_types tt WHERE tt.id = ${typeId} AND tt.party_id = p.id`;
     const r = await this.driver.all<SignupParty>(sql`SELECT p.id, p.name, p.capacity, p.max_people_per_ticket, p.guest_form,
         ${held(sql`p.id`)} AS held, (SELECT party_id FROM tickets WHERE id = ${ticketId}) AS existing_party,
-        p.registration_opens_at, p.registration_closes_at, p.max_tickets_per_email, p.payment_instructions, p.rules, p.cancellation_policy,
+        p.registration_opens_at, p.registration_closes_at, p.max_tickets_per_email, p.payment_instructions, p.rules, p.cancellation_policy, p.support_phone,
         ${email === null ? sql`0` : sql`(SELECT COUNT(*) FROM tickets e WHERE e.party_id = p.id AND e.guest_email = ${email} AND e.status IN ('pending', 'approved'))`} AS email_tickets,
         ${hasPublicTypes(sql`p.id`)} AS has_types,
         ${typeId === null ? sql`NULL` : sql`EXISTS (SELECT 1 ${tt} AND ${onSale(now)})`} AS type_on_sale,
@@ -207,11 +210,11 @@ export class GuestDb {
    */
   async listedParties(now: number) {
     const r = await this.driver.all<{ id: string; name: string; starts_at: number; ends_at: number | null; time_zone: string | null;
-      capacity: number; held: number; registration_opens_at: number | null; registration_closes_at: number | null; prices: string; flyers: string }>(
+      capacity: number; held: number; registration_opens_at: number | null; registration_closes_at: number | null; support_phone: string | null; prices: string; flyers: string }>(
       // One pass over the public types gives both the lowest price and how many different prices there are
       // (the card says "EGP 350" for one price, "From EGP 350" for several).
       sql`SELECT p.id, p.name, p.starts_at, p.ends_at, p.time_zone, p.capacity, ${held(sql`p.id`)} AS held,
-          p.registration_opens_at, p.registration_closes_at,
+          p.registration_opens_at, p.registration_closes_at, p.support_phone,
           (SELECT json_array(MIN(tt.price), COUNT(DISTINCT tt.price)) FROM ticket_types tt
             WHERE tt.party_id = p.id AND tt.archived_at IS NULL AND tt.staff_only = 0) AS prices,
           ${flyerListJson(sql`p.id`)} AS flyers

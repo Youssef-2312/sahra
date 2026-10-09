@@ -12,6 +12,7 @@ export const EDITABLE = [
   "payment_instructions", "capacity", "max_people_per_ticket", "address_mode", "reveal_at", "address_locked_at",
   "email_ticket_subject", "email_ticket_body", "email_link_subject", "email_link_body",
   "registration_opens_at", "registration_closes_at", "max_tickets_per_email",
+  "support_phone", "support_email", "support_note",
 ] as const;
 export type EditableField = (typeof EDITABLE)[number];
 export type EditValues = Partial<Record<EditableField, string | number | null>>;
@@ -35,6 +36,27 @@ export const MAX_TICKETS_PER_EMAIL = 100;
 
 // Same ranges as src/outbox.ts assertPlainText (rule 6: no emojis), plus control characters.
 const EMOJI = /[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{FE0F}]/u;
+
+/**
+ * A phone or WhatsApp number as typed: digits, spaces and + - ( ) only, 6 to 20
+ * digits, a "+" only at the start. Spaces are tidied; nothing else is rewritten.
+ */
+export function cleanPhone(v: unknown): string | null | undefined {
+  if (v === null || v === "") return null;
+  if (typeof v !== "string") return undefined;
+  const s = v.trim().replace(/\s+/g, " ");
+  if (!/^\+?[0-9 ()-]+$/.test(s)) return undefined;
+  const digits = s.replace(/[^0-9]/g, "").length;
+  return digits >= 6 && digits <= 20 && s.length <= 30 ? s : undefined;
+}
+
+/** A plain email address (lower case), or null to clear it. */
+export function cleanContactEmail(v: unknown): string | null | undefined {
+  if (v === null || v === "") return null;
+  if (typeof v !== "string") return undefined;
+  const s = v.trim().toLowerCase();
+  return s.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s) ? s : undefined;
+}
 
 export function text(v: unknown, max: number, multiline: boolean): string | null | undefined {
   if (v === null) return null;
@@ -90,6 +112,21 @@ export function parseEdit(b: Record<string, unknown>): ParsedEdit {
     const s = text(b[f], TEXT_LIMITS[f]!, MULTILINE.has(f));
     if (s === undefined) return bad(f);
     values[f] = s;
+  }
+  if ("support_phone" in b) {
+    const ph = cleanPhone(b.support_phone);
+    if (ph === undefined) return bad("support_phone");
+    values.support_phone = ph;
+  }
+  if ("support_email" in b) {
+    const em = cleanContactEmail(b.support_email);
+    if (em === undefined) return bad("support_email");
+    values.support_email = em;
+  }
+  if ("support_note" in b) {
+    const n = text(b.support_note, 120, false);
+    if (n === undefined) return bad("support_note");
+    values.support_note = n;
   }
   if ("map_url" in b) {
     const u = cleanMapUrl(b.map_url);

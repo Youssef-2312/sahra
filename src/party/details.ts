@@ -40,6 +40,15 @@ export interface PartyDetailsRow {
   registration_opens_at?: number | null;
   registration_closes_at?: number | null;
   max_tickets_per_email?: number | null;
+  /** The organiser's support contact (migrations/0023); public, by the organiser's choice. */
+  support_phone?: string | null;
+  support_email?: string | null;
+  support_note?: string | null;
+}
+
+/** The organiser's contact, as every view shows it (null when no number is set). */
+export function supportOf(p: PartyDetailsRow): { phone: string; email: string | null; note: string | null } | null {
+  return p.support_phone ? { phone: p.support_phone, email: p.support_email ?? null, note: p.support_note ?? null } : null;
 }
 
 /**
@@ -73,6 +82,8 @@ export interface VisibleParty {
   map_url: string | null;
   /** null when the place is shown; otherwise how and when it will be (countdown when `at` is set). */
   reveal: null | { mode: AddressMode; at?: number; waiting_for: WaitingFor };
+  /** The organiser's support contact; null when none is set. */
+  support: { phone: string; email: string | null; note: string | null } | null;
 }
 
 function mode(v: string): AddressMode {
@@ -121,6 +132,7 @@ export function visiblePartyDetails(party: PartyDetailsRow, viewer: Viewer, now:
     address: shown ? party.address : null,
     map_url: shown ? party.map_url : null,
     reveal,
+    support: supportOf(party),
   };
 }
 
@@ -129,6 +141,7 @@ export function doorView(p: PartyDetailsRow) {
   return {
     id: p.id, name: p.name, starts_at: p.starts_at, ends_at: p.ends_at, time_zone: p.time_zone,
     venue_name: p.venue_name, address: p.address, map_url: p.map_url,
+    support: supportOf(p),
   };
 }
 
@@ -144,6 +157,7 @@ export function staffView(p: PartyDetailsRow, now: number) {
     address_locked: p.address_locked_at !== null && p.address_locked_at <= now,
     registration_opens_at: p.registration_opens_at ?? null, registration_closes_at: p.registration_closes_at ?? null,
     max_tickets_per_email: p.max_tickets_per_email ?? null,
+    support_phone: p.support_phone ?? null, support_email: p.support_email ?? null, support_note: p.support_note ?? null,
     emails: {
       ticket_subject: p.email_ticket_subject ?? null, ticket_body: p.email_ticket_body ?? null,
       link_subject: p.email_link_subject ?? null, link_body: p.email_link_body ?? null,

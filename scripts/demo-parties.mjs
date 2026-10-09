@@ -86,6 +86,8 @@ for (const [i, [name, days, hour, types, capacity, pics]] of PARTIES.entries()) 
   must(await call("POST", "/api/party/details", {
     name, time_zone: "Africa/Cairo", starts_at_local: local(days, hour), ends_at_local: local(days + 1, 4), capacity,
     description: "Demo party on staging (test data).",
+    // A contact number is required before requests open (migrations/0023); a clearly fake demo one.
+    support_phone: "+20 100 000 0000", support_note: "Demo number, not in use",
     rules: WITH_RULES.has(i) ? RULES : null, cancellation_policy: WITH_CANCEL.has(i) ? CANCEL : null,
   }, os), `details ${name}`);
   // [name, price per person, min people, max people] (a group type sets its own people per ticket).

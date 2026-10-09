@@ -105,6 +105,9 @@
         el("p", { class: "dash-meta" }, when ? el("span", { text: when }) : null,
           admission ? el("span", { class: "pill " + (admission.open ? "yes" : "maybe"), text: admission.open ? t("d_doors_open") : t("d_doors_paused") }) : null)),
       headActions()));
+    // Requests stay closed until the party has a contact number (brainstorm idea 16).
+    if (party && !party.support_phone) app.appendChild(el("div", { class: "notice maybe dash-warn" },
+      el("p", { text: t("d_contact_missing") }), el("a", { class: "btn small-btn", text: t("d_contact_add"), attrs: { href: "/party.html#contact" } })));
     app.appendChild(tiles());
     var C = window.SahraCharts;
     var charts = el("div", { class: "charts" + (drawn ? "" : " animate"), attrs: { id: "charts" } });

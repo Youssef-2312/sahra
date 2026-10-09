@@ -31,7 +31,7 @@ const tid = "0123456789ABCDEF";
 // A party guests can sign up for (default form: screenshot required).
 const GP = "unauth-guests";
 beforeAll(async () => {
-  await env.DB.prepare("INSERT OR IGNORE INTO parties (id, name, capacity, created_at, logged_rev) VALUES (?, 'Guests', 300, 0, 1)").bind(GP).run();
+  await env.DB.prepare("INSERT OR IGNORE INTO parties (id, name, capacity, created_at, logged_rev, support_phone) VALUES (?, 'Guests', 300, 0, 1, '+20 100 000 0001')").bind(GP).run();
 });
 const failingBot = { TURNSTILE_SECRET: "2x0000000000000000000000000000000AA" };
 const withEnv = async (e: Record<string, unknown>, f: (h: Harness) => Promise<Response>) => f(await harness({ env: e as never }));

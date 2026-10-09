@@ -254,7 +254,7 @@ export function setCookies(res: Response): Record<string, { value: string; attrs
 
 export async function seedParty(id = `p${newId().slice(0, 8)}`): Promise<string> {
   await env.DB.prepare(
-    "INSERT INTO parties (id, name, capacity, created_at, logged_rev) VALUES (?, ?, 300, ?, 1)",
+    "INSERT INTO parties (id, name, capacity, created_at, logged_rev, support_phone) VALUES (?, ?, 300, ?, 1, '+20 100 000 0001')",
   ).bind(id, `Party ${id}`, Date.now()).run();
   return id;
 }
@@ -426,7 +426,7 @@ export async function signup(h: Harness, party: string, f: SignupFields = {}) {
 /** Party with chosen capacity and people per ticket, plus an owner session. */
 export async function guestParty(h: Harness, a: { capacity?: number; maxPeople?: number; form?: unknown } = {}) {
   const party = `g${newId().slice(0, 8)}`;
-  await env.DB.prepare("INSERT INTO parties (id, name, capacity, max_people_per_ticket, created_at, logged_rev, guest_form) VALUES (?, ?, ?, ?, ?, 1, ?)")
+  await env.DB.prepare("INSERT INTO parties (id, name, capacity, max_people_per_ticket, created_at, logged_rev, guest_form, support_phone) VALUES (?, ?, ?, ?, ?, 1, ?, '+20 100 000 0001')")
     .bind(party, `Party ${party}`, a.capacity ?? 300, a.maxPeople ?? 4, Date.now(), a.form === undefined ? null : JSON.stringify(a.form)).run();
   const owner = await seedOwner(party);
   const os = await seedSession(party, owner.id, "owner", h.clock);

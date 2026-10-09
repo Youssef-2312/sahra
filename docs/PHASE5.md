@@ -563,3 +563,24 @@ soonest first, at most 20). No accounts.
   page, and from the ticket page's device note.
 - Tests: `test/find.test.ts` (4), plus the unauthenticated-route and page-header
   tests. Browser: 390 and 1440 px, English and Arabic, zero overflow and errors.
+
+### Organiser contact number (9 October 2026)
+
+Brainstorm idea 16 (owner: "A phone or WhatsApp number. required"). Migration
+**0023** adds `parties.support_phone`, `support_email` and `support_note`.
+
+- Settings has a "Contact for guests" card (phone required, email and "when you
+  answer" optional; the hint says the number is public). The dashboard shows a
+  warning with a link while no number is set.
+- Guest requests stay closed until a number is set: checked in the sign-up
+  INSERT itself (`registrationRules.opened`), shown as "not open yet" on the home
+  card and the ticket page ("the organiser has not added a contact number").
+  Existing tickets are not affected; clearing the number closes new requests.
+- Shown on the ticket request page and the guest's ticket page (Call; WhatsApp
+  for a number in +country form; Email), with "Sahra does not run parties", and
+  on the door scanner ("Organiser: number") for staff.
+- Format: digits, spaces and + - ( ), 6 to 20 digits (`cleanPhone`).
+- Tests: `test/support.test.ts`; test parties now carry a number.
+- **Owner action:** apply migration 0023 on staging, then add a contact number to
+  each staging party in Settings (or rerun the demo script, which sets a fake
+  demo number). Until then their ticket requests are closed.

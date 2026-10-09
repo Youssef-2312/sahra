@@ -212,6 +212,23 @@
     });
   }
 
+  // The organiser's contact (brainstorm idea 16): a phone or WhatsApp number is required before requests open.
+  function contact() {
+    var p = party;
+    var card = formCard("contact", t("s_contact"), t("s_contact_p"), [
+      p.support_phone ? null : el("p", { class: "notice maybe", text: t("s_contact_missing") }),
+      S.field(t("s_contact_phone"), S.input("support_phone", "tel", { maxlength: 30, value: p.support_phone || "", placeholder: "+20 111 999 0639", dir: "ltr", autocomplete: "tel" }), t("s_contact_phone_h")),
+      el("div", { class: "s-two" },
+        S.field(t("s_contact_email"), S.input("support_email", "email", { maxlength: 254, value: p.support_email || "", dir: "ltr" }), t("s_optional")),
+        S.field(t("s_contact_note"), S.input("support_note", "text", { maxlength: 120, value: p.support_note || "", placeholder: t("s_contact_note_ph"), dir: "auto" }), t("s_optional"))),
+    ], function (f, box) {
+      var phone = val(f, "support_phone");
+      if (!phone && party.support_phone && !window.confirm(t("s_contact_clear_confirm"))) return null;
+      return { support_phone: phone || null, support_email: textOrNull(f, "support_email"), support_note: textOrNull(f, "support_note") };
+    });
+    return card;
+  }
+
   function rules() {
     return formCard("rules", t("s_rules"), t("s_rules_p"), [
       S.field(t("s_entry_rules"), textarea("rules", party.rules, 2000, 4), t("s_entry_rules_h")),
@@ -473,8 +490,8 @@
     });
   }
 
-  var BUILD = { basics: basics, time: time, location: location, requests: requests, rules: rules, pictures: pictures, types: typesCard, form: formCardGuest, emails: emails };
-  var ORDER = [["basics", "s_basics"], ["time", "s_time"], ["location", "s_location"], ["requests", "s_requests"], ["rules", "s_rules"],
+  var BUILD = { basics: basics, contact: contact, time: time, location: location, requests: requests, rules: rules, pictures: pictures, types: typesCard, form: formCardGuest, emails: emails };
+  var ORDER = [["basics", "s_basics"], ["contact", "s_contact"], ["time", "s_time"], ["location", "s_location"], ["requests", "s_requests"], ["rules", "s_rules"],
     ["pictures", "s_pictures"], ["types", "s_types"], ["form", "s_form"], ["emails", "s_emails"]];
 
   function render(me, app) {

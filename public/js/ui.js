@@ -253,6 +253,25 @@ var Sahra = (function () {
         el("a", { class: "icon-link", attrs: { href: NOVA_INSTAGRAM, target: "_blank", rel: "noopener", "aria-label": "Nova on Instagram" } }, instagramIcon()))));
   }
 
+  /**
+   * The organiser's contact (brainstorm idea 16) as a card: call, WhatsApp (only for a
+   * number in international form, "+..."), email and the availability line. The words
+   * make clear the organiser answers, not Sahra. null when there is no contact.
+   */
+  function contactCard(support) {
+    if (!support || !support.phone) return null;
+    var digits = support.phone.replace(/[^0-9]/g, "");
+    var links = [el("a", { class: "btn small-btn", text: t("ct_call"), attrs: { href: "tel:" + support.phone.replace(/[^0-9+]/g, "") } })];
+    if (support.phone.charAt(0) === "+") links.push(el("a", { class: "btn small-btn", text: t("ct_whatsapp"), attrs: { href: "https://wa.me/" + digits, target: "_blank", rel: "noopener" } }));
+    if (support.email) links.push(el("a", { class: "btn small-btn", text: t("ct_email"), attrs: { href: "mailto:" + support.email } }));
+    return el("section", { class: "card contact-card" },
+      el("p", { class: "small muted", text: t("ct_title") }),
+      el("p", { class: "ct-phone", text: support.phone, attrs: { dir: "ltr" } }),
+      support.note ? el("p", { class: "small", text: support.note, attrs: { dir: "auto" } }) : null,
+      el("div", { class: "ct-links" }, links),
+      el("p", { class: "small muted", text: t("ct_hint") }));
+  }
+
   /** A fresh random token (256 bits, base64url): the sign-up token. */
   function token() {
     var b = new Uint8Array(32);
@@ -263,5 +282,5 @@ var Sahra = (function () {
   }
 
   return { t: t, el: el, clear: clear, api: api, errorText: errorText, money: money, amount: amount, when: when, time: time, rel: rel,
-    lang: lang, boot: boot, store: store, SESSION_KEY: SESSION_KEY, token: token, title: title };
+    lang: lang, boot: boot, store: store, SESSION_KEY: SESSION_KEY, token: token, title: title, contactCard: contactCard };
 })();

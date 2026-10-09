@@ -133,7 +133,7 @@ describe("visiblePartyDetails", () => {
     expect(v.address_mode).toBe("manual");
     expect(Object.keys(visiblePartyDetails(row({ address_mode: "public" }), good, T0)).sort()).toEqual([
       "address", "address_mode", "cancellation_policy", "description", "ends_at", "id", "max_people_per_ticket", "map_url", "name",
-      "payment_instructions", "reveal", "rules", "starts_at", "time_zone", "venue_name",
+      "payment_instructions", "reveal", "rules", "starts_at", "support", "time_zone", "venue_name",
     ].sort());
   });
 });
@@ -259,7 +259,9 @@ describe("party details routes", () => {
     const door = await seedDoor(party, h.clock);
     const d = await (await h.req("/api/party", { cookies: { "__Host-sahra_s": door.token } })).json();
     expect(d).toEqual({ id: party, name: "Halloween Night", starts_at: Date.UTC(2026, 9, 31, 19, 0), ends_at: Date.UTC(2026, 10, 1, 1, 0),
-      time_zone: "Africa/Cairo", venue_name: VENUE, address: ADDRESS, map_url: MAP });
+      time_zone: "Africa/Cairo", venue_name: VENUE, address: ADDRESS, map_url: MAP,
+      // The organiser's number, so door staff can call during a problem (brainstorm idea 16).
+      support: { phone: "+20 100 000 0001", email: null, note: null } });
     measure("get_details_door");
     const o = (await (await h.req("/api/party", { cookies: { "__Host-sahra_s": os.token } })).json()) as Record<string, unknown>;
     expect(o).toMatchObject({ address_mode: "manual", revealed_at: null, capacity: 300, payment_instructions: "InstaPay to the organiser" });

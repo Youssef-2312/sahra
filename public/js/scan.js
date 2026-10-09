@@ -219,6 +219,10 @@
       app.appendChild(el("p", { class: "center muted", text: t("sc_point") }));
       if (hasTorch()) app.appendChild(el("button", { class: "btn" + (torchOn ? " primary" : ""), text: t("sc_light"), attrs: { type: "button", "aria-pressed": String(torchOn) }, on: { click: toggleLight } }));
     }
+    // The organiser's number, so door staff can call during a problem (brainstorm idea 16).
+    var sup = party && (party.support ? party.support.phone : party.support_phone);
+    if (sup) app.appendChild(el("p", { class: "small muted center sc-contact" }, t("sc_organiser") + " ",
+      el("a", { text: sup, attrs: { href: "tel:" + sup.replace(/[^0-9+]/g, ""), dir: "ltr" } })));
     if (shown) {
       var screen = el("div", { class: "verdict full " + shown.kind, attrs: { role: "alert" } },
         el("div", { class: "word", text: shown.word }),

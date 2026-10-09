@@ -91,11 +91,13 @@ async function orderIds(partyId: string, token: string, count: number) {
 const shotsOk = (cap: FilesCapacity) => cap.state === "ok";
 
 /** Registration state at `now` (party rules, migrations/0014). */
-function registration(p: Pick<SignupParty, "registration_opens_at" | "registration_closes_at">, now: number) {
-  const notYet = p.registration_opens_at !== null && p.registration_opens_at > now;
+function registration(p: Pick<SignupParty, "registration_opens_at" | "registration_closes_at" | "support_phone">, now: number) {
+  // Requests open only once the organiser has set a support number (brainstorm idea 16).
+  const needsContact = !p.support_phone;
+  const notYet = needsContact || (p.registration_opens_at !== null && p.registration_opens_at > now);
   const over = p.registration_closes_at !== null && p.registration_closes_at <= now;
-  return { opens_at: p.registration_opens_at, closes_at: p.registration_closes_at, open: !notYet && !over,
-    state: notYet ? "not_open_yet" : over ? "closed" : "open" } as const;
+  return { opens_at: needsContact ? null : p.registration_opens_at, closes_at: p.registration_closes_at, open: !notYet && !over,
+    state: notYet ? "not_open_yet" : over ? "closed" : "open", needs_contact: needsContact } as const;
 }
 
 /** Guest-facing words for a refused request. */
@@ -140,7 +142,7 @@ guestRoutes.get("/parties", async (c) => {
   if (!listCache || now - listCache.at >= LIST_TTL_MS || now < listCache.at) {
     const rows = await new GuestDb(c.var.db.driver).listedParties(now);
     listCache = { at: now, body: { parties: rows.map((p) => {
-      const notYet = p.registration_opens_at !== null && p.registration_opens_at > now;
+      const notYet = !p.support_phone || (p.registration_opens_at !== null && p.registration_opens_at > now);
       const over = p.registration_closes_at !== null && p.registration_closes_at <= now;
       const left = Math.max(0, p.capacity - p.held);
       return {
@@ -148,7 +150,7 @@ guestRoutes.get("/parties", async (c) => {
         from_price: p.from_price, price_count: p.price_count, places_left: left,
         flyers: p.flyers.map((f) => ({ id: f.id, url: flyerUrl(p.id, f.id, f.rev) })),
         state: left === 0 ? "full" : notYet ? "not_open_yet" : over ? "closed" : "open",
-        opens_at: notYet ? p.registration_opens_at : null,
+        opens_at: notYet && p.support_phone ? p.registration_opens_at : null,
       };
     }) } };
   }

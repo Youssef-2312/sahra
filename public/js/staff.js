@@ -150,7 +150,7 @@ var SahraStaff = (function () {
     if (r.status === 503) return t("s_not_confirmed");
     var code = r.body && r.body.error;
     if (typeof code === "string") {
-      var k = code.indexOf("invalid_field:") === 0 ? "e_invalid_field" : "e_" + code;
+      var k = code.indexOf("invalid_field:") === 0 ? (SahraText.en["e_" + code.replace(":", "_")] ? "e_" + code.replace(":", "_") : "e_invalid_field") : "e_" + code;
       if (SahraText.en[k]) return t(k, { field: code.split(":")[1] || "", held: r.body.held, max: r.body.max });
     }
     return Sahra.errorText(r);
