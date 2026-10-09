@@ -22,7 +22,7 @@ describe("request reference and review time", () => {
     const s = await signup(h, party, { name: "Ref Guest" });
     const ref = (s.body as { reference?: string }).reference!;
     expect(ref).toBe(`SAH-${s.body.ticket_id!.slice(0, 6)}`);
-    const page = (await viewTicket(h, s.body.link!)).body as { ticket: { reference: string }; party: { review_time: string } };
+    const page = (await viewTicket(h, s.body.link!)).body as unknown as { ticket: { reference: string }; party: { review_time: string } };
     expect(page.ticket.reference).toBe(ref);
     expect(page.party.review_time).toBe("Usually within 24 hours");
     const form = (await (await h.req(`/api/guest/parties/${party}`)).json()) as { details: { review_time: string } };
