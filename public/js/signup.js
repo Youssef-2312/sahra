@@ -74,13 +74,67 @@
 
   // ------------------------------------------------------------ sections
 
+  // The party: its pictures (a large one and thumbnails to switch), the name, and
+  // when / where / price at a glance.
+  function gallery() {
+    var pics = data.flyers || [];
+    if (!pics.length) return null;
+    var main = el("img", { attrs: { src: pics[0].url, alt: "", decoding: "async" } });
+    var thumbs = null;
+    if (pics.length > 1) {
+      thumbs = el("div", { class: "thumbs" }, pics.map(function (p, i) {
+        var b = el("button", { class: "thumb" + (i === 0 ? " on" : ""),
+          attrs: { type: "button", "aria-label": t("pic_n", { n: i + 1, of: pics.length }), "aria-pressed": i === 0 ? "true" : "false" } },
+          el("img", { attrs: { src: p.url, alt: "", loading: "lazy", decoding: "async" } }));
+        b.addEventListener("click", function () {
+          main.src = p.url;
+          thumbs.querySelectorAll(".thumb").forEach(function (x) { x.classList.toggle("on", x === b); x.setAttribute("aria-pressed", x === b ? "true" : "false"); });
+        });
+        return b;
+      }));
+    }
+    return el("div", { class: "gallery" }, el("div", { class: "main-pic" }, main), thumbs);
+  }
+  function priceFact() {
+    var sale = data.types.filter(function (x) { return x.on_sale; });
+    if (!sale.length) return null;
+    var prices = sale.map(function (x) { return x.price || 0; });
+    var low = Math.min.apply(null, prices);
+    var many = prices.some(function (p) { return p !== low; });
+    if (!low && !many) return t("free");
+    return t(many ? "from_pp" : "price_pp", { amount: Sahra.money(low) });
+  }
+  function whereFact(d) {
+    if (d.venue_name || d.address) return d.venue_name || d.address.split("\n")[0];
+    if (d.reveal && d.reveal.mode === "at_time" && d.reveal.at) return t("addr_at_time", { rel: Sahra.rel(d.reveal.at) });
+    return t("where_later");
+  }
   function partyCard() {
     var d = data.details || {};
     var timeLine = d.starts_at ? Sahra.when(d.starts_at, d.time_zone) + (d.ends_at ? " - " + Sahra.time(d.ends_at, d.time_zone) : "") : null;
-    return el("section", null,
-      el("h1", { text: data.party.name, attrs: { dir: "auto" } }),
-      timeLine ? el("p", { class: "muted", text: timeLine }) : null,
-      d.description ? el("p", { class: "pre", text: d.description, attrs: { dir: "auto" } }) : null);
+    var price = priceFact();
+    var fact = function (k, v) { return v ? el("li", null, el("span", { class: "k", text: t(k) }), el("span", { class: "v", text: v, attrs: { dir: "auto" } })) : null; };
+    var pics = gallery();
+    return el("section", { class: "buy-hero" + (pics ? "" : " no-pic") }, pics,
+      el("div", { class: "buy-head" },
+        el("p", { class: "label-line", text: t("buy_label") }),
+        el("h1", { text: data.party.name, attrs: { dir: "auto" } }),
+        el("ul", { class: "facts" }, fact("fact_when", timeLine), fact("where", data.details ? whereFact(d) : null), fact("fact_price", price)),
+        d.description ? el("p", { class: "desc pre", text: d.description, attrs: { dir: "auto" } }) : null,
+        // How a ticket works here, in three words each (the home page's steps).
+        el("ol", { class: "mini-steps" }, [1, 2, 3].map(function (n) {
+          return el("li", null, el("span", { class: "n", text: String(n), attrs: { "aria-hidden": "true" } }), t("h_step" + n + "_t"));
+        }))));
+  }
+
+  // Desktop: beside the form, kept in view. The order follows the form as it changes.
+  function orderCard() {
+    var row = function (k, attr) { return el("div", { class: "row" }, el("dt", { text: t(k) }), el("dd", { attrs: attr })); };
+    return el("section", { class: "card order", attrs: { "aria-live": "polite" } },
+      el("h2", { text: t("your_order") }),
+      el("dl", null, row("order_ticket", { "data-o-type": "" }), row("order_people", { "data-o-people": "" }), row("order_each", { "data-o-each": "" })),
+      el("div", { class: "total" }, el("span", { text: t("order_total") }), el("span", { attrs: { "data-o-total": "" } })),
+      el("p", { class: "small muted", text: t("order_after") }));
   }
 
   function addressCard() {
@@ -175,8 +229,7 @@
 
   function typesBlock(form) {
     if (!data.types.length) return null;
-    return el("fieldset", { class: "field", attrs: { "aria-label": t("choose_type") } },
-      el("p", { class: "label", text: t("choose_type") }),
+    return el("fieldset", { class: "field types", attrs: { "aria-label": t("choose_type") } },
       data.types.map(function (x) {
         var input = el("input", { attrs: { type: "radio", name: "type_id", value: x.id, disabled: !x.on_sale, required: true } });
         input.addEventListener("change", function () { paymentRefresh(form); });
@@ -221,6 +274,47 @@
     if (how) box.appendChild(el("p", { class: "pre", text: how, attrs: { dir: "auto" } }));
     box.hidden = !box.firstChild;
   }
+  function orderRefresh(form) {
+    var chosen = form.querySelector("input[name=type_id]:checked");
+    var type = chosen ? data.types.filter(function (x) { return x.id === chosen.value; })[0] : null;
+    var people = Math.max(1, Number(form.elements.people.value) || 1);
+    var set = function (k, v) { var n = document.querySelector("[data-o-" + k + "]"); if (n) { n.textContent = v; n.parentElement.hidden = v === null; } };
+    set("type", type ? type.name : null);
+    set("people", String(people));
+    set("each", type ? Sahra.money(type.price) : null);
+    var total = document.querySelector("[data-o-total]");
+    if (total) total.textContent = type ? Sahra.money((type.price || 0) * people) : "-";
+  }
+
+  // The payment screenshot: a large target with the chosen photo's name and preview
+  // (the real file input stays in the form, focusable, for the browser's checks).
+  function uploadField(shot) {
+    var input = el("input", { class: "sr-file", attrs: { type: "file", id: "shot-file", name: "screenshot", accept: "image/jpeg,image/png,image/webp", required: shot === "required" } });
+    var name = el("span", { class: "up-name", text: t("up_none") });
+    var action = el("strong", { text: t("up_choose") });
+    var thumb = el("img", { class: "up-thumb", attrs: { alt: "" } });
+    thumb.hidden = true;
+    input.addEventListener("change", function () {
+      var f = input.files && input.files[0];
+      name.textContent = f ? f.name : t("up_none");
+      action.textContent = t(f ? "up_change" : "up_choose");
+      thumb.hidden = true;
+      if (f && /^image\//.test(f.type) && f.size < 15e6 && window.FileReader) {
+        var r = new FileReader();
+        r.onload = function () { thumb.src = r.result; thumb.hidden = false; };
+        r.readAsDataURL(f);
+      }
+    });
+    return el("div", { class: "field upload-field" },
+      el("p", { class: "label", text: t("screenshot") + (shot === "required" ? "" : " (" + t("optional") + ")") }),
+      input,
+      el("label", { class: "upload", attrs: { for: "shot-file" } }, thumb, el("span", { class: "up-text" }, action, name)),
+      el("span", { class: "hint", text: t("screenshot_hint") + " " + t("screenshot_size") }));
+  }
+
+  function step(title, children) {
+    return el("section", { class: "step" }, el("h2", { class: "step-title" }, el("span", { class: "num", attrs: { "aria-hidden": "true" } }), title), children);
+  }
 
   function formBlock() {
     var shot = data.form.screenshot;
@@ -229,9 +323,9 @@
     try { draft = JSON.parse(sessionStorage.getItem(draftKey) || "{}"); } catch (e) { draft = {}; }
     var people = el("input", { attrs: { type: "number", name: "people", min: 1, max: maxPeople, value: draft.people || 1, inputmode: "numeric", required: true } });
     var typesSlot = el("div");
-    var form = el("form", null,
-      typesSlot,
-      el("h2", { text: t("your_details") }),
+    var form = el("form", { class: "buy-form" },
+      data.types.length ? step(t("choose_type"), typesSlot) : null,
+      step(t("step_details"), [
       el("div", { class: "field" }, el("label", null, t("full_name"),
         el("input", { attrs: { type: "text", name: "name", maxlength: 80, required: true, autocomplete: "name", value: draft.name || "" } }))),
       el("div", { class: "field" }, el("label", null, t("email"),
@@ -239,27 +333,26 @@
         el("span", { class: "hint", text: t("email_hint") }))),
       el("div", { class: "field", hidden: maxPeople <= 1 }, el("label", null, t("people"), people,
         el("span", { class: "hint", text: t("people_hint", { n: maxPeople }) }))),
-      data.form.questions.map(questionField),
-      shot === "none" ? null : el("div", null,
-        el("h2", { text: t("how_to_pay") }),
-        el("div", { class: "card", attrs: { "data-pay": "" } }),
-        el("div", { class: "field" }, el("label", null, t("screenshot") + (shot === "required" ? "" : " (" + t("optional") + ")"),
-          el("input", { attrs: { type: "file", name: "screenshot", accept: "image/jpeg,image/png,image/webp", required: shot === "required" } }),
-          el("span", { class: "hint", text: t("screenshot_hint") + " " + t("screenshot_size") })))),
-      acceptEl = acceptBlock(),
-      el("div", { attrs: { id: "turnstile-signup" } }),
-      el("div", { class: "spacer" }),
-      el("button", { class: "btn primary", text: t("request_ticket"), attrs: { type: "submit" } }),
-      el("div", { attrs: { role: "status", "aria-live": "polite", "data-result": "" } }));
+      data.form.questions.map(questionField)]),
+      shot === "none" ? null : step(t("step_pay"), [
+        el("div", { class: "pay-box", attrs: { "data-pay": "" } }),
+        uploadField(shot)]),
+      step(t("step_confirm"), [
+        acceptEl = acceptBlock(),
+        el("div", { attrs: { id: "turnstile-signup" } }),
+        el("div", { class: "spacer" }),
+        el("button", { class: "btn primary", text: t("request_ticket"), attrs: { type: "submit" } }),
+        el("div", { attrs: { role: "status", "aria-live": "polite", "data-result": "" } })]));
     // The ticket choices need the form for their change handler; the first one on sale is chosen.
     if (data.types.length) {
       typesSlot.appendChild(typesBlock(form));
       var first = data.types.filter(function (x) { return x.on_sale; })[0];
       if (first) form.querySelector("input[value='" + first.id + "']").checked = true;
     }
-    people.addEventListener("input", function () { paymentRefresh(form); });
+    people.addEventListener("input", function () { paymentRefresh(form); orderRefresh(form); });
+    form.addEventListener("change", function () { orderRefresh(form); });
     form.addEventListener("submit", submit);
-    setTimeout(function () { paymentRefresh(form); }, 0);
+    setTimeout(function () { paymentRefresh(form); orderRefresh(form); }, 0);
     return form;
   }
 
@@ -319,10 +412,14 @@
     Sahra.title(data && data.party ? data.party.name : null);
     if (loadError) { app.appendChild(el("p", { class: "notice no", text: loadError })); return; }
     if (done) { app.appendChild(doneView()); return; }
-    // Phones: one column. Desktop: the party on the side, the form beside it.
-    var body = el("div");
-    app.appendChild(el("div", { class: "cols" }, el("div", { class: "side" }, partyCard(), addressCard(), rulesCard()), body));
+    // The party across the top; below it the form and, beside it on desktops, the
+    // order with where, entry rules and cancellation (one column on phones).
+    app.classList.add("buy");
+    var body = el("div", { class: "buy-main" });
     var closed = closedReason();
+    app.appendChild(partyCard());
+    app.appendChild(el("div", { class: "buy-cols" }, body,
+      el("aside", { class: "summary" }, closed ? null : orderCard(), addressCard(), rulesCard())));
     if (closed) {
       body.appendChild(el("p", { class: "notice maybe", text: closed }));
     } else {
