@@ -11,6 +11,20 @@ You are continuing work on **Sahra**, a ticket platform for private house partie
 - Work branch: `claude/p5-frontend`. Pull it and work only on it.
 - Stack: Cloudflare Workers Free, D1 (SQLite), Hono, TypeScript, and plain HTML/CSS/JS in `public/` (no framework, no build step for the frontend).
 
+## IMPORTANT before any staging deploy (updated 9 October 2026)
+
+The code on `claude/p5-frontend` now reads columns added by migrations **0023,
+0024 and 0025** (organiser contact number, manual-admit index, review time).
+Do NOT push to `staging` until the owner has applied them on staging:
+`npx wrangler d1 migrations apply sahra-staging --remote --env staging`
+(on `claude/p5-frontend`, after `git pull origin claude/p5-frontend`). Without
+them, every party read fails. Also: guest requests stay closed for a party until
+it has a contact number (Settings > Contact for guests).
+
+Built since the first handoff: Find my tickets (/find), the organiser contact
+number, Find guest + manual admit on the scanner, request references (SAH-...)
+and review time. See the end of docs/PHASE5.md.
+
 ## Start here
 
 1. `git fetch origin && git checkout claude/p5-frontend && git pull`
