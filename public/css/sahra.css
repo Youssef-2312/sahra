@@ -727,3 +727,20 @@ html[dir="rtl"] .quick .qa-go { transform: rotate(-45deg); }
 .qty-btn:focus-visible { outline: 3px solid var(--accent); outline-offset: -3px; }
 .buy-form .qty .qty-input { width: 64px; min-height: 50px; border: 0; border-inline: 1px solid var(--line); border-radius: 0; background: transparent; text-align: center; font-family: var(--font-head); font-size: 18px; font-weight: 700; -moz-appearance: textfield; appearance: textfield; padding: 0; }
 .qty-input::-webkit-outer-spin-button, .qty-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+
+/* Footer (owner: after Nova's): brand and one line, Site / Get in touch / Legal,
+   then the copyright and the Nova credit. */
+.site-footer { display: block; padding-top: 40px; font-size: 15px; }
+.f-top { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px 24px; }
+.f-brand { grid-column: 1 / -1; }
+.f-brand .brand { color: var(--text); }
+.f-brand p { margin: 12px 0 0; max-width: 24rem; line-height: 1.55; color: #a9adb6; }
+.f-title { margin: 0 0 8px; font-family: var(--font-head); font-size: 14px; font-weight: 600; color: var(--text); }
+.f-col ul { list-style: none; margin: 0; padding: 0; }
+.f-col li { margin: 0; }
+.site-footer .f-col a { display: inline-flex; align-items: center; min-height: 40px; overflow-wrap: anywhere; }
+.f-bottom { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 20px; margin-top: 28px; padding-top: 18px; border-top: 1px solid var(--line); font-size: 14px; }
+@media (min-width: 900px) {
+  .f-top { grid-template-columns: minmax(0, 2fr) repeat(3, minmax(0, 1fr)); gap: 32px; }
+  .f-brand { grid-column: auto; }
+}

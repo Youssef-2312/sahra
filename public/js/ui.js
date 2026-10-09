@@ -216,20 +216,31 @@ var Sahra = (function () {
     return svg;
   }
 
+  // The footer (owner: after Nova's): Sahra and one line on what it is, then Site,
+  // Get in touch and Legal; below, the copyright and the Nova credit.
+  var WHATSAPP = "201119990639", EMAIL = "novadevco@icloud.com";
   function footer(node) {
     clear(node);
-    var logo = el("img", { attrs: { src: NOVA_LOGO, alt: "", width: 28, height: 28 } });
+    var logo = el("img", { attrs: { src: NOVA_LOGO, alt: "", width: 24, height: 24 } });
     logo.addEventListener("error", function () { logo.remove(); });
-    node.appendChild(el("div", null,
-      el("div", { class: "links" },
-        el("a", { text: t("about"), attrs: { href: "/about.html" } }),
-        el("a", { text: t("contact"), attrs: { href: "/contact.html" } }),
-        el("a", { text: t("privacy"), attrs: { href: "/privacy.html" } }),
-        el("a", { text: t("terms"), attrs: { href: "/terms.html" } })),
-      el("div", { text: "\u00a9 " + new Date().getFullYear() + " Sahra" })));
-    node.appendChild(el("div", { class: "nova" },
-      el("a", { class: "credit", attrs: { href: NOVA_URL, target: "_blank", rel: "noopener" } }, logo, el("span", { text: t("built_by") })),
-      el("a", { class: "icon-link", attrs: { href: NOVA_INSTAGRAM, target: "_blank", rel: "noopener", "aria-label": "Nova on Instagram" } }, instagramIcon())));
+    var col = function (title, links) {
+      return el("nav", { class: "f-col", attrs: { "aria-label": title } }, el("p", { class: "f-title", text: title }),
+        el("ul", null, links.map(function (l) {
+          return el("li", null, el("a", { text: l[0], attrs: { href: l[1], dir: l[2] ? "ltr" : null, target: l[3] ? "_blank" : null, rel: l[3] ? "noopener" : null } }));
+        })));
+    };
+    node.appendChild(el("div", { class: "f-top" },
+      el("div", { class: "f-brand" },
+        el("a", { class: "brand", attrs: { href: "/" } }, el("img", { attrs: { src: "/img/sahra-mark.svg", alt: "", width: 28, height: 28 } }), "Sahra"),
+        el("p", { text: t("f_desc") })),
+      col(t("f_site"), [[t("tab_home"), "/"], [t("about"), "/about.html"], [t("contact"), "/contact.html"], [t("sign_in"), "/signin.html"]]),
+      col(t("f_touch"), [[t("f_wa"), "https://wa.me/" + WHATSAPP, false, true], [t("email"), "mailto:" + EMAIL], [t("f_ig"), NOVA_INSTAGRAM, false, true]]),
+      col(t("f_legal"), [[t("privacy"), "/privacy.html"], [t("terms"), "/terms.html"]])));
+    node.appendChild(el("div", { class: "f-bottom" },
+      el("span", { text: "\u00a9 " + new Date().getFullYear() + " Sahra. " + t("f_rights") }),
+      el("span", { class: "nova" },
+        el("a", { class: "credit", attrs: { href: NOVA_URL, target: "_blank", rel: "noopener" } }, logo, el("span", { text: t("built_by") })),
+        el("a", { class: "icon-link", attrs: { href: NOVA_INSTAGRAM, target: "_blank", rel: "noopener", "aria-label": "Nova on Instagram" } }, instagramIcon()))));
   }
 
   /** A fresh random token (256 bits, base64url): the sign-up token. */
