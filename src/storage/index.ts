@@ -12,8 +12,9 @@
 // health check says so (filesCapacity, src/health).
 //
 // Retention (purgeOldScreenshots, run by the daily health run): the bytes of a
-// screenshot are deleted 30 days after its party ended, or 30 days after its
-// ticket was rejected or cancelled; a screenshot no ticket points to (a sign-up
+// screenshot are deleted 7 days after its party ended (with the guest's other
+// details, src/guests/retention.ts), or 30 days after its ticket was rejected or
+// cancelled, whichever comes first; a screenshot no ticket points to (a sign-up
 // that then found the party full) after 1 day. A tombstone row stays
 // (file_tombstones), so the queue can say why; the nightly Drive backup keeps the
 // bytes.
@@ -191,8 +192,10 @@ export async function getFlyerFile(env: FilesEnv, key: string, partyId: string, 
 
 const DAY = 86_400_000;
 export const RETENTION = {
-  /** After the party ended, and after a rejection or cancellation. */
+  /** After a rejection or cancellation (and party pictures after their party). */
   keepDays: 30,
+  /** Payment screenshots after the party ended: with the guest's other details (src/guests/retention.ts, owner decision). */
+  partyEndedDays: 7,
   /** A screenshot no ticket points to (the sign-up failed after the upload). */
   orphanDays: 1,
   /** Screenshots deleted per database per run. */
@@ -202,7 +205,7 @@ export const RETENTION = {
 };
 
 export const DELETED_REASON = {
-  party_ended: "screenshot deleted 30 days after the party (kept in the Drive backup)",
+  party_ended: "screenshot deleted 7 days after the party",
   rejected: "screenshot deleted 30 days after the request was rejected (kept in the Drive backup)",
   cancelled: "screenshot deleted 30 days after the ticket was cancelled (kept in the Drive backup)",
   orphan: "screenshot of a request that was not stored",
@@ -232,7 +235,7 @@ function chunks<T>(xs: T[], n: number): T[][] {
  * one read of the live files (covering index, no BLOBs read), one read of their
  * tickets in the main database (by party, tickets_party_status index), one write
  * batch. The decision uses the main database as read just before; screenshots are
- * only ever removed after their 30 days (or 1 day for a file no ticket points to).
+ * only ever removed after their 7 or 30 days (or 1 day for a file no ticket points to).
  */
 export async function purgeOldScreenshots(env: FilesEnv, main: SqlDriver, now: number): Promise<PurgeReport> {
   const report: PurgeReport = { databases: [], main_rows_read: 0, files_rows_read: 0, files_rows_written: 0 };
@@ -258,7 +261,7 @@ export async function purgeOldScreenshots(env: FilesEnv, main: SqlDriver, now: n
     const parties = [...new Set(live.filter((f) => !isFlyerOwner(f.ticket_id)).map((f) => f.party_id))];
     if (parties.length) {
       const rs = await main.batch(chunks(parties, RETENTION.chunk).map((ps) => sql`SELECT t.id, t.party_id, t.screenshot_key, t.status,
-          t.rejected_at, t.cancelled_at, p.ends_at
+          t.rejected_at, t.cancelled_at, COALESCE(p.ends_at, p.starts_at + 43200000) AS ends_at
         FROM tickets t JOIN parties p ON p.id = t.party_id
         WHERE t.party_id IN (${inList(ps)}) AND t.screenshot_key IS NOT NULL`));
       for (const r of rs) for (const t of r.results as Record<string, unknown>[]) tickets.set(String(t.id), t as never);
@@ -285,7 +288,7 @@ export async function purgeOldScreenshots(env: FilesEnv, main: SqlDriver, now: n
       let reason: keyof typeof DELETED_REASON | null = null;
       if (!t || t.party_id !== f.party_id || !k || k.shard !== shard || k.id !== f.id) {
         if (f.created_at < now - RETENTION.orphanDays * DAY) reason = "orphan";
-      } else if (t.ends_at != null && t.ends_at < old) {
+      } else if (t.ends_at != null && t.ends_at < now - RETENTION.partyEndedDays * DAY) {
         reason = "party_ended";
       } else if (t.status === "rejected" && t.rejected_at != null && t.rejected_at < old) {
         reason = "rejected";

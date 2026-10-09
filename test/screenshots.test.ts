@@ -117,7 +117,7 @@ describe("retention", () => {
     return s.body.ticket_id!;
   }
 
-  it("deletes screenshots 30 days after the party, rejection or cancellation, and orphans after 1 day; keeps a tombstone", async () => {
+  it("deletes screenshots 7 days after the party, 30 days after rejection or cancellation, and orphans after 1 day; keeps a tombstone", async () => {
     const h = await harness();
     const now = h.clock.now();
     const ended = await guestParty(h);
@@ -158,7 +158,7 @@ describe("retention", () => {
     // The queue explains it.
     const r = await shot(h, ended.os, a);
     expect(r.status).toBe(410);
-    expect(await r.json()).toEqual({ error: "screenshot_deleted", message: "screenshot deleted 30 days after the party (kept in the Drive backup)" });
+    expect(await r.json()).toEqual({ error: "screenshot_deleted", message: "screenshot deleted 7 days after the party" });
     expect((await shot(h, current.os, keep)).status).toBe(200);
 
     // A second run deletes nothing more.

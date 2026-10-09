@@ -42,6 +42,7 @@ import { ACCOUNT_DAILY_WRITES, BUDGET_STOP_AT, dayOf, DAY_MS } from "../limits";
 import { schedule } from "../backup/export";
 import { outboxInsert } from "../outbox";
 import { PLATFORM, SITE_OWNER_EMAIL } from "../platform/db";
+import type { EraseReport } from "../guests/retention";
 import { filesCapacity, FILES_FULL_AT, type FilesEnv, type PurgeReport } from "../storage";
 import { bothTimes, deliverDiscord, DISCORD, discordInsert, discordStatus, discordView, type DiscordReport, type DiscordStatus } from "./discord";
 
@@ -115,6 +116,8 @@ export interface HealthDeps {
   origin: string;
   /** Daily: deletes old screenshots (src/storage/ purgeOldScreenshots). Optional. */
   purgeScreenshots?: (now: number) => Promise<PurgeReport>;
+  /** Daily: deletes guest details 7 days after the party (src/guests/retention.ts). Optional. */
+  eraseGuests?: (now: number) => Promise<EraseReport>;
   /** Optional Discord webhook (secret); used only if discordStatus() says "configured". */
   discordUrl?: string;
   fetch?: (input: string, init?: RequestInit) => Promise<Response>;
@@ -129,6 +132,7 @@ export interface HealthReport {
   usage_est?: number;
   discord?: DiscordReport | "not_configured" | "error";
   screenshots_purged?: PurgeReport | "error";
+  guests_erased?: EraseReport | "error";
   main: { queries: number; rows_read: number; rows_written: number };
   ledger: { queries: number; rows_read: number; rows_written: number };
 }
@@ -210,6 +214,16 @@ export async function runHealth(deps: HealthDeps): Promise<HealthReport> {
     } catch (e) {
       purge = "error";
       console.error(JSON.stringify({ evt: "screenshot_purge_error", message: errText(e) }));
+    }
+  }
+  // Daily: guest details 7 days after the party. Same rule: a failure is retried the next day.
+  let erased: EraseReport | "error" | undefined;
+  if (daily && deps.eraseGuests) {
+    try {
+      erased = await deps.eraseGuests(now);
+    } catch (e) {
+      erased = "error";
+      console.error(JSON.stringify({ evt: "guest_erase_error", message: errText(e) }));
     }
   }
   // Is the backup schedule hourly right now? Asked only when the latest backup is
@@ -300,6 +314,7 @@ export async function runHealth(deps: HealthDeps): Promise<HealthReport> {
     ...report(), daily, checks: runReport.checks, alerts: changes.length * owners.length,
     admissions_checked: admissions.checked, usage_est: est.usage_est, discord: discordReport,
     ...(purge ? { screenshots_purged: purge } : {}),
+    ...(erased ? { guests_erased: erased } : {}),
   };
   console.log(JSON.stringify({ evt: "health", ...out }));
   return out;

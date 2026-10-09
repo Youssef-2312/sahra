@@ -341,7 +341,6 @@ the `staging` branch; a finished piece the owner should try is pushed there too.
   unchanged. Retries are the same row. Older requests and staff-issued tickets
   stay NULL (unknown). No IP address is stored for it; it is not a marketing
   opt-in. Tests: test/terms.test.ts.
-
 - One sign-in button (owner: "merge them together"): "Continue with Google"
   checks the account's party-team access and its organiser / site-owner access
   in the same callback. Platform access only: the platform page. Party access
@@ -361,6 +360,15 @@ the `staging` branch; a finished piece the owner should try is pushed there too.
   cancellation policy"); the accepted rules_version is a hash of both texts.
   A party without either shows "I agree to Sahra's Terms" only.
 - Instagram: @novadev.co everywhere.
+- Guest details deleted 7 days after the party (owner decision; migration 0019,
+  src/guests/retention.ts, daily health run): guest name, email, answers and
+  rejection reason on every ticket of a party over by 7 days, the same fields
+  in every change-log copy (so recovery still matches), rejection reasons in
+  the audit log, and the party's email texts (unsent ones cancelled). Ticket
+  rows stay without names (status, people, type, price, check-in time, accepted
+  Terms). Payment screenshots: 7 days after the party (was 30), or 30 days
+  after a rejection or cancellation. Party pictures stay at 30 days. Tests:
+  test/retention.test.ts.
 
 ## Next
 
