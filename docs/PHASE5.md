@@ -275,7 +275,7 @@ the `staging` branch; a finished piece the owner should try is pushed there too.
   buttons are solid Nova blue with no gradient, inset highlight, glow or shine;
   cards, tiles, request cards, the sign-in panel and the page background are
   flat colours with no soft shadows; the unused blueprint grid is gone.
-- Nova's site is now https://novadev.co/ (footer credit and About page).
+- Nova's site link (footer credit and About page): https://bynova.vercel.app/ (owner); Instagram stays @novadev.co.
 - Home refinement (owner spec): headline "A great *sahra* starts here.";
   one container for the parties, steps, organiser row, footer and header
   (1120 px content, 24 px desktop / 20 px phone gutters); 40 px hero to

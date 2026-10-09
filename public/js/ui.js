@@ -22,9 +22,9 @@ var Sahra = (function () {
   // in only when it is set, so guests never make that request; the server's
   // answer decides, and a refused session clears it.
   var SESSION_KEY = "sahra_session";
-  var NOVA_URL = "https://novadev.co/";
+  var NOVA_URL = "https://bynova.vercel.app/";
   var NOVA_INSTAGRAM = "https://www.instagram.com/novadev.co/";
-  // Nova's logo: a copy of Nova's favicon (novadev.co, formerly bynova.vercel.app) kept in the project (nothing loads from Nova at run time).
+  // Nova's logo: a copy of Nova's favicon (bynova.vercel.app) kept in the project (nothing loads from Nova at run time).
   var NOVA_LOGO = "/img/nova-logo.svg";
   var csrf = null;
   var renderFn = null;
