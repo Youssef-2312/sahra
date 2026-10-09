@@ -375,7 +375,6 @@ var SahraText = {
     q_selected: "{n} selected",
     q_select: "Select",
     q_more: "Load more",
-    q_tools: "Request tools",
     q_export: "Download guest list (CSV)",
     q_people: "{n} people",
     q_n_tickets: "{n} tickets",
@@ -386,7 +385,6 @@ var SahraText = {
     q_clear: "Clear",
     q_bulk_done: "{done} done, {refused} not possible.",
     q_max: "Up to {n} at a time.",
-    q_back: "Dashboard",
     q_reason: "Reason: {reason}",
   },
 
@@ -750,7 +748,6 @@ var SahraText = {
     q_selected: "تم اختيار {n}",
     q_select: "اختيار",
     q_more: "المزيد",
-    q_tools: "أدوات الطلبات",
     q_export: "تنزيل قائمة الضيوف (CSV)",
     q_people: "{n} أشخاص",
     q_n_tickets: "{n} تذاكر",
@@ -761,7 +758,6 @@ var SahraText = {
     q_clear: "مسح الاختيار",
     q_bulk_done: "تم {done}، وغير ممكن {refused}.",
     q_max: "حتى {n} في المرة الواحدة.",
-    q_back: "لوحة التحكم",
     q_reason: "السبب: {reason}",
   },
 };

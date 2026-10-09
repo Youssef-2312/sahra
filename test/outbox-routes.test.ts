@@ -72,6 +72,19 @@ describe("outbox endpoints", () => {
     expect((await h.req("/api/outbox/approve", api(os, { ids: Array.from({ length: 501 }, newId) }))).status).toBe(400);
   });
 
+  it("guest messages and change notices can be approved or cancelled one by one (their ids are not UUIDs)", async () => {
+    const { h, party, os } = await setup();
+    const ids = [`announce:${newId()}:GEW0SJ0R1990BWYY`, `notice:${newId()}:7Q2M9XK4HZ01ABCD`, `announce:${newId()}:GEW0SJ0R1990BWYZ`];
+    await new D1Driver(env.DB).batch(ids.map((id, i) => outboxInsert({
+      id, partyId: party, kind: "party_notice", toEmail: `g${i}@example.com`, subject: "Notice", bodyText: "Text.", now: h.clock.now(), createdBy: null, needsApproval: true,
+    }, sql`1`)));
+    expect(await (await h.req(`/api/outbox/${encodeURIComponent(ids[0]!)}/approve`, api(os))).json()).toEqual({ approved: 1 });
+    expect(await (await h.req("/api/outbox/cancel", api(os, { ids: [ids[1]] }))).json()).toEqual({ cancelled: 1 });
+    expect([await status(ids[0]!), await status(ids[1]!), await status(ids[2]!)]).toEqual(["queued", "cancelled", "awaiting_approval"]);
+    for (const bad of ["announce:x:GEW0SJ0R1990BWYY", `other:${newId()}:GEW0SJ0R1990BWYY`, `announce:${newId()}:abc`, `announce:${newId()}:GEW0SJ0R1990BWYI`, `announce:${newId()}:GEW0SJ0R1990BWYY:x`])
+      expect((await h.req("/api/outbox/approve", api(os, { ids: [bad] }))).status).toBe(400);
+  });
+
   it("an admin can approve and cancel; door staff see and change nothing", async () => {
     const { h, party } = await setup();
     const admin = await seedOwner(party, undefined, "admin");

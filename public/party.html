@@ -1,102 +1,21 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48"><title>Party settings | Sahra</title></head>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<title>Settings | Sahra</title>
+<link rel="stylesheet" href="/css/sahra.css">
+</head>
 <body>
-<header><span id="account"><a href="/">Sign in</a></span> | <a href="https://nova.example/" id="nova" rel="noopener">Made by Nova</a></header>
-<main>
-<h1>Party details (Phase 4 test page)</h1>
-<p><a href="/dashboard.html">Dashboard</a></p>
-<pre id="current">Loading...</pre>
-
-<section id="editor" hidden>
-<h2>Edit</h2>
-<p>Times are entered in the party's time zone. Empty fields are cleared.</p>
-<form id="edit">
-<p><label>Name <input name="name" maxlength="80" required></label></p>
-<p><label>Description<br><textarea name="description" rows="3" cols="60" maxlength="2000"></textarea></label></p>
-<p><label>Time zone (IANA) <input name="time_zone" placeholder="Africa/Cairo" required></label></p>
-<p><label>Starts <input name="starts_at_local" type="datetime-local"></label>
-<label>Ends <input name="ends_at_local" type="datetime-local"></label></p>
-<p><label>Venue <input name="venue_name" maxlength="120"></label></p>
-<p><label>Address<br><textarea name="address" rows="2" cols="60" maxlength="300"></textarea></label></p>
-<p><label>Map link (https) <input name="map_url" type="url" size="60"></label></p>
-<p><label>Entry rules / dress code<br><textarea name="rules" rows="3" cols="60" maxlength="2000"></textarea></label></p>
-<p><label>Cancellation and refund policy (guests agree to it when they ask for a ticket)<br><textarea name="cancellation_policy" rows="3" cols="60" maxlength="2000"></textarea></label></p>
-<p><label>Payment instructions<br><textarea name="payment_instructions" rows="2" cols="60" maxlength="1000"></textarea></label></p>
-<p><label>Capacity <input name="capacity" type="number" min="0" max="100000"></label>
-<label>People per ticket <input name="max_people_per_ticket" type="number" min="1" max="50"></label></p>
-<p><label>Address mode <select name="address_mode">
-<option value="public">Public</option><option value="with_ticket">Sent with ticket</option>
-<option value="at_time">Revealed at a time</option><option value="manual">Manual reveal</option></select></label>
-<label>Reveal at <input name="reveal_at_local" type="datetime-local"></label></p>
-<p><label>Lock the place from <input name="address_locked_at_local" type="datetime-local"></label></p>
-<p><label>Requests open from <input name="registration_opens_at_local" type="datetime-local"></label>
-<label>Requests close at <input name="registration_closes_at_local" type="datetime-local"></label>
-<label>Max tickets per email <input name="max_tickets_per_email" type="number" min="1" max="100" placeholder="no limit"></label></p>
-<p><label><input name="notify_guests" type="checkbox"> Queue a notice to ticket holders (time or place change; sent only after approval)</label></p>
-<button>Save</button>
-</form>
-<h3>Guest emails</h3>
-<p>Leave a box empty to use Sahra's default text. Ticket email placeholders: {guest_name} {party_name} {link} {people_note} ({link} is required). Link email: {party_name} {links} ({links} is required). Plain text, no emojis.</p>
-<form id="emails">
-<p><label>Ticket email subject<br><input name="email_ticket_subject" size="60" maxlength="150"></label></p>
-<p><label>Ticket email text<br><textarea name="email_ticket_body" rows="8" cols="60" maxlength="2000"></textarea></label></p>
-<p><label>Ticket link email subject<br><input name="email_link_subject" size="60" maxlength="150"></label></p>
-<p><label>Ticket link email text<br><textarea name="email_link_body" rows="6" cols="60" maxlength="2000"></textarea></label></p>
-<button>Save emails</button>
-</form>
-<p><button id="reveal" type="button">Reveal now (manual mode)</button></p>
-
-<h3>Ticket types</h3>
-<p>Prices are whole Egyptian pounds (EGP) per person. Places: empty = only the party capacity limits it.
-A sales window (for example an early-bird price until a date) and an entry time at the door (the scanner refuses this type
-before it) are both optional; "Early" means what you set here. Staff-only types are not on the sign-up form: staff issue them.
-When a party has types, every guest request must choose one.</p>
-<pre id="types"></pre>
-<form id="type">
-<input name="id" type="hidden">
-<p><label>Name <input name="name" maxlength="60" required></label>
-<label>Price (EGP per person) <input name="price" type="number" min="0" max="1000000" value="0" required></label>
-<label>Places <input name="quantity" type="number" min="1" max="100000" placeholder="no own limit"></label>
-<label>Order <input name="sort" type="number" min="0" max="1000" value="0"></label></p>
-<p><label>People per ticket: at least <input name="min_people" type="number" min="1" max="50" placeholder="1"></label>
-<label>at most <input name="max_people" type="number" min="1" max="50" placeholder="the party's"></label>
-(for example 1 and 1 for a normal ticket, 2 and 6 for a group ticket; empty = the party's setting)</p>
-<p><label>On sale from <input name="sales_opens_at_local" type="datetime-local"></label>
-<label>On sale until <input name="sales_closes_at_local" type="datetime-local"></label>
-<label>Entry from (door) <input name="entry_from_local" type="datetime-local"></label></p>
-<p><label><input name="staff_only" type="checkbox"> Staff only (complimentary / guest list)</label>
-<label><input name="archived" type="checkbox"> Archived (no new tickets)</label></p>
-<p><label>Description<br><textarea name="description" rows="2" cols="60" maxlength="500"></textarea></label></p>
-<p><label>Payment instructions for this type (empty = the party's)<br><textarea name="payment_instructions" rows="2" cols="60" maxlength="1000"></textarea></label></p>
-<button>Save type</button> <button id="type-new" type="button">New type</button> <button id="type-early" type="button">New "Early" type</button>
-<button id="type-normal" type="button">New "Normal" type (1 person)</button> <button id="type-group" type="button">New "Group" type (2 to 6)</button>
-</form>
-<form id="type-pick">Edit type <select name="id"></select> <button>Load</button></form>
-
-<h2>Guest form</h2>
-<p>What the ticket request form asks for. Each is checked by the server.</p>
-<form id="asks">
-<p><label>Proof of payment <select name="screenshot"><option value="required">Required</option><option value="optional">Optional</option><option value="none">Not asked</option></select></label></p>
-<p><label>ID photo <select name="id_photo"><option value="none">Not asked</option><option value="optional">Optional</option><option value="required">Required</option></select></label>
-(only owners and admins can see it; deleted 7 days after the party)</p>
-<p><label>Instagram handle <select name="instagram"><option value="none">Not asked</option><option value="optional">Optional</option><option value="required">Required</option></select></label></p>
-<button>Save guest form</button>
-</form>
-
-<h2>Preview</h2>
-<form id="preview">
-<select name="viewer"><option value="public">Public page</option><option value="ticket">Ticket holder</option></select>
-ticket status <select name="status"><option>approved</option><option>pending</option><option>cancelled</option></select>
-<label><input name="released" type="checkbox" checked> released</label>
-<label><input name="on_hold" type="checkbox"> on hold</label>
-<button>Preview</button>
-</form>
-<pre id="view"></pre>
-</section>
-<pre id="out" role="status"></pre>
-</main>
-<script src="/js/common.js"></script>
+<main id="app"><p class="muted">Loading...</p></main>
+<script src="/js/i18n.js"></script>
+<script src="/js/i18n-staff.js"></script>
+<script src="/js/ui.js"></script>
+<script src="/js/staff.js"></script>
 <script src="/js/party.js"></script>
 </body>
 </html>

@@ -96,6 +96,7 @@
     if (!me) { app.appendChild(el("p", { class: "notice maybe", text: t("d_sign_in") })); return; }
     if (!stats) { app.appendChild(el("p", { class: "muted", text: t("loading") })); return; }
     app.classList.add("dash");
+    if (window.SahraStaff) app.appendChild(SahraStaff.nav("dashboard", me.staff.role));
     var when = party && party.starts_at ? Sahra.when(party.starts_at, party.time_zone) : null;
     app.appendChild(el("header", { class: "dash-head" },
       el("div", null,

@@ -1,46 +1,21 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48"><title>Guests | Sahra</title></head>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<title>Guests | Sahra</title>
+<link rel="stylesheet" href="/css/sahra.css">
+</head>
 <body>
-<header><span id="account"><a href="/">Sign in</a></span> | <a href="https://nova.example/" id="nova" rel="noopener">Made by Nova</a></header>
-<main>
-<h1>Guests (test page)</h1>
-<p><a href="/dashboard.html">Dashboard</a> | <a href="/queue.html">Approval queue</a> | <a href="/party.html">Party details</a></p>
-
-<h2>Live numbers</h2>
-<p><button id="stats-reload" type="button">Refresh</button> (refreshes itself once a minute)</p>
-<pre id="stats">Loading...</pre>
-
-<section id="managers" hidden>
-<h2>Find a guest</h2>
-<form id="search"><input name="q" placeholder="name, email or ticket id" minlength="2" maxlength="80" required size="40"> <button>Search</button></form>
-<table id="found"><thead><tr><th>Name</th><th>Email</th><th>Type</th><th>People</th><th>Status</th><th></th></tr></thead><tbody></tbody></table>
-
-<h2>Issue a ticket</h2>
-<p>Approved at once (complimentary or the guest list). Same capacity and type places as guest requests.</p>
-<form id="issue">
-<p><label>Name <input name="name" maxlength="80" required></label> <label>Email <input name="email" type="email"></label>
-<label>People <input name="people" type="number" min="1" value="1"></label>
-<label>Type <select name="type_id"><option value="">(no type)</option></select></label></p>
-<p><label><input name="complimentary" type="checkbox" checked> Complimentary (price 0)</label>
-<label><input name="release" type="checkbox" checked> Send the QR now</label></p>
-<button>Issue</button>
-</form>
-
-<h2>Announcement to guests</h2>
-<p>Queued in the outbox; nothing is sent until it is approved there. Plain text, no emojis.</p>
-<form id="announce">
-<p><label>Subject <input name="subject" maxlength="150" required size="50"></label></p>
-<p><label>Message<br><textarea name="body" rows="6" cols="60" maxlength="3000" required></textarea></label></p>
-<p><label>To <select name="audience"><option value="released">guests whose QR was sent</option><option value="approved">all approved guests</option>
-<option value="everyone">everyone with a request (pending too)</option></select></label>
-<label>Only type <select name="type_id"><option value="">(all types)</option></select></label></p>
-<button>Queue announcement</button>
-</form>
-</section>
-<pre id="out" role="status"></pre>
-</main>
-<script src="/js/common.js"></script>
+<main id="app"><p class="muted">Loading...</p></main>
+<script src="/js/i18n.js"></script>
+<script src="/js/i18n-staff.js"></script>
+<script src="/js/ui.js"></script>
+<script src="/js/staff.js"></script>
 <script src="/js/guests.js"></script>
 </body>
 </html>

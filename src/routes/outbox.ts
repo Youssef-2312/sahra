@@ -5,7 +5,7 @@
 import { Hono } from "hono/tiny";
 import { json, readJson, requireAuth, type AppEnv, type Ctx } from "../context";
 import { OUTBOX_BULK_MAX, OutboxAdmin, type Cursor, type Selection } from "../email/admin";
-import { isUuid } from "../lib/crypto";
+import { isBase32, isUuid } from "../lib/crypto";
 import { chargeStaff } from "../limits";
 
 export const outboxRoutes = new Hono<AppEnv>();
@@ -18,11 +18,23 @@ function cursor(v: string | undefined): Cursor | null | false {
   return m && isUuid(m[2]) ? { at: Number(m[1]), id: m[2]! } : false;
 }
 
+/**
+ * An outbox row id as Sahra writes them: a UUID, or a guest message or change
+ * notice, "announce:<op>:<ticket>" / "notice:<op>:<ticket>" (src/party/notice.ts).
+ * The statements also check the party and the status, so an id only names a row.
+ */
+export function isOutboxId(v: unknown): v is string {
+  if (isUuid(v)) return true;
+  if (typeof v !== "string") return false;
+  const m = /^(?:announce|notice):([0-9a-f-]{36}):([0-9A-Z]{16})$/.exec(v);
+  return !!m && isUuid(m[1]) && isBase32(m[2]!, 16);
+}
+
 function selection(b: Record<string, unknown> | null): Selection | null {
   if (!b) return null;
   if (b.all_awaiting === true && b.ids === undefined) return { allAwaiting: true };
   const ids = b.ids;
-  if (!Array.isArray(ids) || ids.length < 1 || ids.length > OUTBOX_BULK_MAX || !ids.every(isUuid)) return null;
+  if (!Array.isArray(ids) || ids.length < 1 || ids.length > OUTBOX_BULK_MAX || !ids.every(isOutboxId)) return null;
   return { ids: [...new Set(ids as string[])] };
 }
 
@@ -55,9 +67,9 @@ outboxRoutes.post("/approve", requireAuth(["owner", "admin"]), async (c) => chan
 outboxRoutes.post("/cancel", requireAuth(["owner", "admin"]), async (c) => change(c, "cancel", selection(await readJson(c))));
 outboxRoutes.post("/:id/approve", requireAuth(["owner", "admin"]), async (c) => {
   const id = c.req.param("id");
-  return change(c, "approve", isUuid(id) ? { ids: [id] } : null);
+  return change(c, "approve", isOutboxId(id) ? { ids: [id] } : null);
 });
 outboxRoutes.post("/:id/cancel", requireAuth(["owner", "admin"]), async (c) => {
   const id = c.req.param("id");
-  return change(c, "cancel", isUuid(id) ? { ids: [id] } : null);
+  return change(c, "cancel", isOutboxId(id) ? { ids: [id] } : null);
 });

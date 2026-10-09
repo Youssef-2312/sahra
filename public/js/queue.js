@@ -241,8 +241,10 @@
     Sahra.clear(app);
     Sahra.title(t("q_title"));
     if (!me) { app.appendChild(el("p", { class: "notice maybe", text: t("d_sign_in") })); return; }
-    app.appendChild(el("a", { class: "btn link", text: t("q_back"), attrs: { href: "/dashboard.html" } }));
-    app.appendChild(el("div", { class: "row" }, el("h1", { text: t("q_title") }), el("span", { class: "small muted", text: me.party.name, attrs: { dir: "auto" } })));
+    app.classList.add("staff");
+    app.appendChild(SahraStaff.nav("queue", me.staff.role));
+    app.appendChild(el("header", { class: "staff-head" }, el("div", null,
+      el("p", { class: "label-line", text: me.party.name }), el("h1", { text: t("q_title") }))));
     app.appendChild(el("div", { class: "tabs", attrs: { role: "group" } }, TABS.map(function (x) {
       return el("button", { text: t(x[1]), attrs: { type: "button", "aria-pressed": tab === x[0] ? "true" : "false" },
         on: { click: function () { if (tab !== x[0]) { tab = x[0]; load(false); } } } });
@@ -260,11 +262,46 @@
       app.appendChild(el("div", { class: "reqs" }, grouped(rows).map(card)));
     }
     if (next) app.appendChild(el("button", { class: "btn", text: t("q_more"), attrs: { type: "button", disabled: busy }, on: { click: function () { load(true); } } }));
-    app.appendChild(el("div", { class: "stack buttons page-tools" },
-      el("button", { class: "btn", text: t("q_export"), attrs: { type: "button" }, on: { click: exportCsv } }),
-      el("a", { class: "btn", text: t("q_tools"), attrs: { href: "/queue-tools.html" } })));
+    app.appendChild(el("div", { class: "page-tools" },
+      el("div", { class: "stack buttons" }, el("button", { class: "btn", text: t("q_export"), attrs: { type: "button" }, on: { click: exportCsv } })),
+      tab === "pending" ? staleTool() : null));
     var bar = bulkbar();
     if (bar) app.appendChild(bar);
+  }
+
+  // "Reject every waiting request older than N hours" (requests are only cleaned up by hand):
+  // one bounded batch per call, repeated while some remain. The reason is shown to the guests.
+  var stale = { open: false, note: null };
+  function staleTool() {
+    var box = el("p", { class: "say", attrs: { role: "status" } });
+    if (stale.note) SahraStaff.say(box, stale.note[0], stale.note[1]);
+    var f = el("form", { attrs: { novalidate: true } },
+      el("div", { class: "s-two" },
+        SahraStaff.field(t("q_stale_hours"), SahraStaff.input("hours", "number", { min: 1, max: 720, value: 72, inputmode: "numeric" }), t("q_stale_hours_h")),
+        SahraStaff.field(t("q_stale_reason"), SahraStaff.input("reason", "text", { maxlength: 300, value: t("q_stale_reason_default"), dir: "auto" }), t("q_stale_reason_h"))),
+      el("div", { class: "s-save" }, el("button", { class: "btn no small-btn", text: t("q_stale_go"), attrs: { type: "submit", disabled: busy } }), box));
+    f.addEventListener("submit", async function (e) {
+      e.preventDefault();
+      var hours = Number(f.elements.hours.value), reason = f.elements.reason.value.trim();
+      if (!(hours >= 1 && hours <= 720) || !reason) { SahraStaff.say(box, "no", t("q_stale_needed")); return; }
+      if (!window.confirm(t("q_stale_confirm", { h: hours }))) return;
+      busy = true;
+      var total = 0, r;
+      for (var round = 0; round < 100; round++) {
+        r = await post("/api/tickets/reject-stale", { hours: hours, reason: reason });
+        if (!r.ok) break;
+        total += r.body.rejected;
+        if (!r.body.remaining || !r.body.rejected) break;
+      }
+      busy = false;
+      stale.note = r.ok ? ["yes", SahraStaff.tn("q_stale_done", total)] : ["no", SahraStaff.why(r) + (total ? " " + SahraStaff.tn("q_stale_done", total) : "")];
+      stale.open = true;
+      await load(false);
+    });
+    var d = el("details", { class: "card q-stale" }, el("summary", { text: t("q_stale") }), el("p", { class: "small muted", text: t("q_stale_p") }), f);
+    d.open = stale.open;
+    d.addEventListener("toggle", function () { stale.open = d.open; });
+    return d;
   }
 
   async function load(append) {
