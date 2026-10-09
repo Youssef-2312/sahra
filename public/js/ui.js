@@ -17,6 +17,11 @@
 "use strict";
 var Sahra = (function () {
   var KEY = "sahra_lang";
+  // Which kind of staff session this browser last confirmed ("party" or
+  // "platform"; nothing else is kept). Public pages ask the server who is signed
+  // in only when it is set, so guests never make that request; the server's
+  // answer decides, and a refused session clears it.
+  var SESSION_KEY = "sahra_session";
   var NOVA_URL = "https://novadev.co/";
   var NOVA_INSTAGRAM = "https://www.instagram.com/nova.dev26/";
   // Nova's logo: a copy of Nova's favicon (novadev.co, formerly bynova.vercel.app) kept in the project (nothing loads from Nova at run time).
@@ -80,8 +85,9 @@ var Sahra = (function () {
     /** Staff pages: who is signed in, and the CSRF token for later posts. null when signed out. */
     me: async function () {
       var r = await call("GET", "/api/me");
-      if (!r.ok) return null;
+      if (!r.ok) { if (r.status === 401) store.del(SESSION_KEY); return null; }
       csrf = r.body.csrf;
+      store.set(SESSION_KEY, "party");
       return r.body;
     },
   };
@@ -147,7 +153,7 @@ var Sahra = (function () {
     var sw = el("button", { class: "lang-switch", attrs: { type: "button" } });
     var foot = el("footer", { class: "site-footer" });
     function label() {
-      account.textContent = me ? me.staff.name : t("sign_in");
+      account.textContent = me ? (me.staff ? me.staff.name : me.name) : t("sign_in");
       sw.textContent = t("lang_other");
       sw.setAttribute("lang", lang() === "en" ? "ar" : "en");
       footer(foot);
@@ -159,11 +165,31 @@ var Sahra = (function () {
       if (renderFn) renderFn();
     });
     label();
+    if (!me) signedIn(function (who) { me = who; account.textContent = who.name; account.setAttribute("href", who.href); });
     document.body.insertBefore(el("div", { class: "topbar-shell" }, el("header", { class: "topbar" }, brand, el("span", { class: "topbar-end" }, sw, account))), document.body.firstChild);
     motion();
     // The door scanner shows only the camera and the result (brainstorm idea 12): no footer there.
     if (!opts || opts.footer !== false) document.body.appendChild(foot);
     if (renderFn) renderFn();
+  }
+
+  /**
+   * On pages opened without a session check (home, About, sign-in...): when this
+   * browser holds a staff session, show who is signed in, linking back to their
+   * page, instead of "Sign in". Asks only when a session was confirmed here before.
+   */
+  async function signedIn(show) {
+    var kind = store.get(SESSION_KEY);
+    if (kind === "party") {
+      var r = await call("GET", "/api/me");
+      if (r.ok && r.body.staff) { csrf = r.body.csrf; show({ name: r.body.staff.name, href: r.body.staff.role === "door" ? "/scan.html" : "/dashboard.html" }); return; }
+      if (r.status === 401) store.del(SESSION_KEY);
+    } else if (kind === "platform") {
+      var p = await call("GET", "/api/platform/me");
+      var who = p.ok && (p.body.site_owner || p.body.organiser);
+      if (who) { show({ name: who.name, href: "/platform" }); return; }
+      if (p.status === 401) store.del(SESSION_KEY);
+    }
   }
 
   /** The top bar gets a shadow once the page scrolls (it then floats over the content). */
@@ -216,5 +242,5 @@ var Sahra = (function () {
   }
 
   return { t: t, el: el, clear: clear, api: api, errorText: errorText, money: money, amount: amount, when: when, time: time, rel: rel,
-    lang: lang, boot: boot, store: store, token: token, title: title };
+    lang: lang, boot: boot, store: store, SESSION_KEY: SESSION_KEY, token: token, title: title };
 })();

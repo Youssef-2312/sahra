@@ -33,7 +33,10 @@
   }
 
   var r = await fetch("/api/platform/me", { credentials: "same-origin" });
-  if (!r.ok) { document.getElementById("signin").hidden = false; return; }
+  // Lets the public pages show who is signed in (js/ui.js, "sahra_session").
+  var mark = function (v) { try { if (v) localStorage.setItem("sahra_session", v); else localStorage.removeItem("sahra_session"); } catch (e) {} };
+  if (!r.ok) { if (r.status === 401) mark(null); document.getElementById("signin").hidden = false; return; }
+  mark("platform");
   var me = await r.json();
   csrf = me.csrf;
   document.getElementById("signedin").hidden = false;
@@ -41,6 +44,7 @@
   document.getElementById("account").textContent = (me.site_owner || me.organiser).name + (me.site_owner ? " (site owner)" : " (organiser)");
   document.getElementById("logout").addEventListener("click", async function () {
     await post("/api/platform/logout");
+    mark(null);
     location.href = "/platform";
   });
 

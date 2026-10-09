@@ -8,6 +8,7 @@
 
   document.getElementById("logout").addEventListener("click", async function () {
     await Sahra.post("/api/auth/logout");
+    try { localStorage.removeItem("sahra_session"); } catch (e) {}
     location.href = "/";
   });
 
