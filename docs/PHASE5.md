@@ -765,3 +765,9 @@ from its own address. Three accounts plus Brevo: up to 1630 emails per 24 hours.
 Speed is unchanged: 3 emails per one-minute run (the Workers Free CPU limit), so
 about 180 per hour; 1500 emails take about 8 hours. No migration (provider names
 are free text). Test: `test/email-sender.test.ts` (three accounts).
+- Owner's helper: `email-accounts.bat` (project folder; runs `scripts/email-accounts.mjs`).
+  The owner lists up to three accounts in `email-accounts.txt` (never committed, in
+  .gitignore; see `email-accounts.example.txt`), double-clicks the .bat, picks staging
+  or production and confirms. One `wrangler secret bulk` call sets all six secrets;
+  slots not in the list are deleted. Passwords are never printed; the temporary JSON
+  file is mode 600 and removed right after. Checked with a stand-in for Wrangler.

@@ -1,0 +1,11 @@
+# Sahra email accounts. Copy this file to email-accounts.txt (same folder) and
+# replace the examples with your accounts. email-accounts.txt is never uploaded.
+#
+# One account per line: the Gmail address, a space, its app password.
+# Up to 3 accounts, used in this order (each about 450 emails per day).
+# App password: Google Account > Security > 2-Step Verification on > App passwords.
+# Never use a party owner's Gmail, only Sahra's own accounts.
+
+sahra.tickets1@gmail.com abcd efgh ijkl mnop
+sahra.tickets2@gmail.com abcd efgh ijkl mnop
+sahra.tickets3@gmail.com abcd efgh ijkl mnop
