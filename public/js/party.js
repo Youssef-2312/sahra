@@ -428,7 +428,7 @@
   function questionRow(q, i) {
     var label = S.input("q_label", "text", { maxlength: 200, value: q.label, dir: "auto" });
     label.addEventListener("input", function () { q.label = label.value; });
-    var type = S.select("q_type", [["text", t("s_q_text")], ["choice", t("s_q_choice")]], q.type);
+    var type = S.select("q_type", [["text", t("s_q_text")], ["choice", t("s_q_choice")], ["photo", t("photo_question")]], q.type);
     var opts = textarea("q_options", (q.options || []).join("\n"), 2100, 3);
     var optsField = S.field(t("s_q_options"), opts, t("s_q_options_h"));
     optsField.hidden = q.type !== "choice";
@@ -459,12 +459,15 @@
     add.addEventListener("click", function () { questions.push({ id: "", label: "", type: "text", required: false, options: [] }); rebuild("form"); });
     var row = saveRow(t("s_save_form"), box);
     var f = el("form", { attrs: { novalidate: true } },
-      el("p", { class: "small muted", text: t("s_form_always") }), asks,
+      el("p", { class: "small muted", text: t("s_form_always") }),
+      asks,
       el("h3", { class: "s-sub", text: t("s_questions") }),
+      el("p", { class: "small muted", text: t("photo_question_limit") }),
       questions.length ? el("ol", { class: "s-questions" }, questions.map(questionRow)) : el("p", { class: "s-empty muted", text: t("s_no_questions") }),
       add, row.node);
     f.addEventListener("submit", async function (e) {
       e.preventDefault();
+      if (questions.filter(function (q) { return q.type === "photo"; }).length > 3) { S.say(box, "no", t("photo_question_limit")); return; }
       var taken = {};
       questions.forEach(function (q) { if (q.id) taken[q.id] = true; });
       for (var i = 0; i < questions.length; i++) {

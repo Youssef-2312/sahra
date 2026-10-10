@@ -16,8 +16,8 @@
   var mine = [];          // [{ link, status, party_id, party_name, starts_at, time_zone }]
   var heroBox = document.getElementById("hero");
   var filter = "all";     // the chips above the parties (this page only, not remembered)
-  // The owner's sixteen photos (6 and 7 look alike when blurred, so they are kept apart).
-  var HERO = [1, 13, 8, 2, 14, 9, 3, 15, 10, 4, 16, 11, 6, 12, 5, 7];
+  // Twenty-two distinct photos, with similar scenes spaced apart.
+  var HERO = [1, 17, 8, 18, 14, 19, 3, 20, 10, 16, 22, 6, 5, 24, 13, 2, 15, 9, 4, 11, 12, 7];
 
   function remembered() {
     try {
@@ -56,11 +56,11 @@
   // tilted on a diagonal; the whole sheet slides along the diagonal as one, so
   // the arrangement never changes and a photo never touches a copy of itself.
   // Row r starts step() photos further along,
-  // and every other row is shifted half a photo. With 12 photos a full
-  // screen still shows each a few times; more photos, fewer repeats.
+  // and every other row is shifted half a photo. Larger tiles and the expanded
+  // photo pool keep the visible sections distinct.
   var LANES = 7;    // enough tilted rows to cover the corners of a wide screen
-  // Row offsets that looked best for 16 photos (measured: no photo twice on screen at 1440 px with 6, at 390 px with 10).
-  function step() { return window.matchMedia && window.matchMedia("(min-width: 900px)").matches ? 6 : 10; }
+  // Stagger rows so nearby tiles draw from different parts of the photo pool.
+  function step() { return 9; }
   function collage() {
     var lanes = [];
     for (var r = 0; r < LANES; r++) {
@@ -212,7 +212,7 @@
         el("p", { class: "lede", text: t("h_story_p") }),
         el("a", { class: "btn", text: t("h_story_link"), attrs: { href: "#parties" } })),
       el("div", { class: "home-photos", attrs: { "aria-hidden": "true" } },
-        [13, 8, 3].map(function (n) { return el("div", null, photo(n, false)); })));
+        [18, 19, 24].map(function (n) { return el("div", null, photo(n, false)); })));
   }
 
   function guide(kind) {
@@ -268,7 +268,7 @@
       guide("hosts"),
       // For organisers: a panel over one of the party photos (darkened, flat; no gradient).
       el("div", { class: "host host-panel" },
-        photo(5, false),
+        photo(22, false),
         el("div", { class: "shade", attrs: { "aria-hidden": "true" } }),
         el("div", { class: "host-copy" },
           el("p", { class: "label-line", text: t("h_host_label") }),

@@ -9,6 +9,7 @@
   var stats = null, types = [], found = null, query = "", party = null;
   var ops = {};        // "action:ticket" -> op id, kept until the server confirms (a retry is the same change)
   var notes = {};      // ticket id -> [cls, text, link?]
+  var searchSeq = 0;
   var open = {};       // ticket id -> which tool is open ("transfer")
   var drafts = { issue: null, announce: null };
 
@@ -40,9 +41,11 @@
 
   async function search(q) {
     query = q;
+    var seq = ++searchSeq;
     found = "loading";
     redrawFind();
     var r = await Sahra.api.get("/api/tickets/search?q=" + encodeURIComponent(q));
+    if (seq !== searchSeq) return;
     found = r.ok ? r.body.tickets : { error: r };
     redrawFind();
   }
@@ -84,6 +87,11 @@
         el("span", { class: "muted small", text: meta, attrs: { dir: "auto" } }),
         el("span", { class: "faint small mono", text: Sahra.ref(x.id), attrs: { dir: "ltr" } })),
       actions);
+    var photos = Object.keys(x.answers || {}).filter(function (id) { return typeof x.answers[id] === "string" && /^photo:f[1-4]:[1-9][0-9]*$/.test(x.answers[id]); });
+    if (photos.length) li.appendChild(el("ul", { class: "facts" }, photos.map(function (id) {
+      return el("li", null, el("span", { text: id + ": ", attrs: { dir: "auto" } }),
+        el("a", { class: "btn small-btn", text: t("view_answer_photo"), attrs: { href: "/api/tickets/" + encodeURIComponent(x.id) + "/answers/" + encodeURIComponent(id) + "/photo", target: "_blank", rel: "noopener" } }));
+    })));
     if (open[x.id] === "transfer") li.appendChild(transferForm(x));
     if (open[x.id] === "email") li.appendChild(emailForm(x));
     if (note) {
@@ -131,7 +139,10 @@
   var findNode = null;
   function findCard() {
     var input = S.input("q", "search", { minlength: 2, maxlength: 80, placeholder: t("g_search_ph"), value: query, autocomplete: "off", enterkeyhint: "search" });
-    var f = el("form", { class: "g-search", attrs: { role: "search" } }, input, el("button", { class: "btn primary small-btn", text: t("g_search"), attrs: { type: "submit" } }));
+    var clear = el("button", { class: "btn small-btn", text: t("clear_search"), attrs: { type: "button", disabled: !query && found === null } });
+    input.addEventListener("input", function () { query = input.value; clear.disabled = !query && found === null; });
+    clear.addEventListener("click", function () { searchSeq++; query = ""; found = null; redrawFind(); findNode.querySelector("input[name=q]").focus(); });
+    var f = el("form", { class: "g-search", attrs: { role: "search", "aria-busy": found === "loading" ? "true" : "false" } }, input, el("button", { class: "btn primary small-btn", text: found === "loading" ? t("loading") : t("g_search"), attrs: { type: "submit", disabled: found === "loading" } }), clear);
     f.addEventListener("submit", function (e) {
       e.preventDefault();
       var q = input.value.trim();
@@ -143,6 +154,8 @@
     else if (found.error) body = el("p", { class: "notice no", text: S.why(found.error) });
     else if (!found.length) body = el("p", { class: "s-empty muted", text: t("g_none", { q: query }) });
     else body = el("ul", { class: "g-list" }, found.map(guestRow));
+    body.setAttribute("role", "status");
+    body.setAttribute("aria-live", "polite");
     findNode = S.section("find", t("g_find"), null, f, body);
     return findNode;
   }

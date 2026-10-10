@@ -47,7 +47,7 @@
     Sahra.title(title);
     app.appendChild(Sahra.problem({
       kicker: lost ? t("nt_kicker_404") : t("nt_kicker_signin"), big: lost ? "404" : null, title: title, text: text,
-      photo: lost ? "/img/hero/hero-1.jpg" : null, extra: a.extra, actions: a.list, code: detail,
+      photo: lost ? "/img/hero/hero-19.jpg" : null, extra: a.extra, actions: a.list, code: detail,
       hint: key === "no_access" || lost ? t("nt_guest_hint") : null,
     }));
   }

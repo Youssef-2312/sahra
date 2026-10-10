@@ -48,6 +48,17 @@ export function peopleOk(typeId: string | null, people: number): Sql {
 }
 export const MAX_TYPE_PEOPLE = 50;
 
+/**
+ * A type of one fixed group size above 1 (min_people = max_people, e.g. "Duo" 2 to 2)
+ * is priced as a package: its price is for the whole ticket. Every other type is
+ * priced per person. `tt` is the type's alias.
+ */
+export const isPackage = (tt: string) => raw(`(${tt}.min_people > 1 AND ${tt}.min_people = ${tt}.max_people)`);
+
+/** What one ticket costs in whole EGP: its price, times its people unless its type is a package. `t` is the ticket's alias. */
+export const ticketTotal = (t: string) => raw(`(COALESCE(${t}.price, 0) * CASE WHEN EXISTS (SELECT 1 FROM ticket_types pk
+  WHERE pk.id = ${t}.type_id AND pk.min_people > 1 AND pk.min_people = pk.max_people) THEN 1 ELSE ${t}.people END)`);
+
 export const TYPE_FIELDS = [
   "name", "description", "price", "quantity", "sales_opens_at", "sales_closes_at", "entry_from", "staff_only",
   "payment_instructions", "sort", "min_people", "max_people",
@@ -161,7 +172,7 @@ export function parseType(b: Record<string, unknown>, timeZone: string | null, c
 
 export type TypeChange =
   | { status: "created" | "changed" | "already" }
-  | { status: "rejected"; reason: "not_allowed" | "not_found" | "too_many_types" | "sales_close_before_open" | "quantity_below_held" | "people_min_above_max"; held?: number };
+  | { status: "rejected"; reason: "not_allowed" | "not_found" | "too_many_types" | "sales_close_before_open" | "quantity_below_held" | "people_min_above_max" | "package_change_held"; held?: number };
 
 export class TypeDb {
   constructor(readonly driver: SqlDriver) {}
@@ -252,21 +263,27 @@ export class TypeDb {
       OR ${merged("sales_closes_at")} > ${merged("sales_opens_at")})`;
     const qtyOk = "quantity" in v && v.quantity != null ? sql`${v.quantity} >= ${typeHeld(sql`${id}`)}` : sql`1`;
     const rangeOk = sql`(${merged("min_people")} IS NULL OR ${merged("max_people")} IS NULL OR ${merged("min_people")} <= ${merged("max_people")})`;
+    // A sold ticket's total follows its type's pricing (ticketTotal), so a type cannot switch
+    // between package and per-person pricing while it has tickets held.
+    const pkgOk = "min_people" in v || "max_people" in v
+      ? sql`(${typeHeld(sql`${id}`)} = 0 OR COALESCE(min_people > 1 AND min_people = max_people, 0)
+          = COALESCE(${merged("min_people")} > 1 AND ${merged("min_people")} = ${merged("max_people")}, 0))`
+      : sql`1`;
     const roomOk = archived === false
       ? sql`(archived_at IS NULL OR (SELECT COUNT(*) FROM ticket_types WHERE party_id = ${p} AND archived_at IS NULL) < ${MAX_ACTIVE_TYPES})`
       : sql`1`;
     const action = archived === true ? "type_archived" : archived === false && fields.length === 0 ? "type_restored" : "type_changed";
     const rs = await this.driver.batch([
       sql`UPDATE ticket_types SET ${join(sets, ", ")}, rev = rev + 1, last_op = ${op}, last_action = ${action}
-        WHERE id = ${id} AND party_id = ${p} AND ${ok} AND ${differs} AND ${windowOk} AND ${qtyOk} AND ${roomOk} AND ${rangeOk}`,
+        WHERE id = ${id} AND party_id = ${p} AND ${ok} AND ${differs} AND ${windowOk} AND ${qtyOk} AND ${roomOk} AND ${rangeOk} AND ${pkgOk}`,
       audit(now, actor, action, "ticket_type", sql`SELECT party_id, id, rev FROM ticket_types WHERE id = ${id} AND last_op = ${op}`,
         fields.join(",") || null),
-      sql`SELECT ${ok} AS session_ok, ${differs} AS differs, ${windowOk} AS window_ok, ${roomOk} AS room_ok, ${rangeOk} AS range_ok,
+      sql`SELECT ${ok} AS session_ok, ${differs} AS differs, ${windowOk} AS window_ok, ${roomOk} AS room_ok, ${rangeOk} AS range_ok, ${pkgOk} AS pkg_ok,
           ${typeHeld(sql`${id}`)} AS held
         FROM ticket_types WHERE id = ${id} AND party_id = ${p}`,
     ]);
     if (rs[0]!.meta.changes === 1) return { status: "changed" };
-    const d = rs[2]!.results[0] as undefined | { session_ok: number; differs: number; window_ok: number; room_ok: number; range_ok: number; held: number };
+    const d = rs[2]!.results[0] as undefined | { session_ok: number; differs: number; window_ok: number; room_ok: number; range_ok: number; pkg_ok: number; held: number };
     if (!d) return { status: "rejected", reason: "not_found" };
     if (!d.session_ok) return { status: "rejected", reason: "not_allowed" };
     if (!d.differs) return { status: "already" };
@@ -274,6 +291,7 @@ export class TypeDb {
     if (!d.room_ok) return { status: "rejected", reason: "too_many_types" };
     if ("quantity" in v && v.quantity != null && (v.quantity as number) < d.held) return { status: "rejected", reason: "quantity_below_held", held: d.held };
     if (!d.range_ok) return { status: "rejected", reason: "people_min_above_max" };
+    if (!d.pkg_ok) return { status: "rejected", reason: "package_change_held", held: d.held };
     return { status: "rejected", reason: "not_allowed" };
   }
 }

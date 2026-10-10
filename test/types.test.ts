@@ -389,6 +389,40 @@ describe("search, resend, announcements, stats", () => {
   });
 });
 
+describe("package prices", () => {
+  it("a type of one fixed group size is priced per ticket in totals, stats, the list and the export; others per person", async () => {
+    const h = await harness();
+    const { party, os } = await openParty(h);
+    await env.DB.prepare("UPDATE parties SET max_people_per_ticket = 4 WHERE id = ?").bind(party).run();
+    const duo = (await newType(h, os, { name: "Duo", price: 2100, min_people: 2, max_people: 2 })).body.type!.id;
+    const group = (await newType(h, os, { name: "Group", price: 300, min_people: 2, max_people: 4 })).body.type!.id;
+    const info = (await (await h.req(`/api/guest/parties/${party}`, { method: "GET" })).json()) as { types: { id: string; package: boolean }[] };
+    expect(info.types.find((x) => x.id === duo)!.package).toBe(true);
+    expect(info.types.find((x) => x.id === group)!.package).toBe(false);
+    const a = await typedSignup(h, party, duo, { people: 2 });
+    await typedSignup(h, party, group, { people: 3 });
+    const stats = (await (await h.req("/api/party/stats", api(os, undefined, "GET"))).json()) as { money_pending: number };
+    expect(stats.money_pending).toBe(2100 + 900);
+    const list = (await (await h.req("/api/tickets?status=pending", api(os, undefined, "GET"))).json()) as { tickets: { id: string; total: number }[] };
+    expect(list.tickets.find((x) => x.id === a.body.ticket_id)!.total).toBe(2100);
+    const exp = (await (await h.req("/api/tickets/export?limit=50", api(os, undefined, "GET"))).json()) as { tickets: { type_name: string; total_price: number }[] };
+    expect(exp.tickets.map((x) => [x.type_name, x.total_price]).sort()).toEqual([["Duo", 2100], ["Group", 900]]);
+    // With tickets held, the type cannot switch between package and per-person pricing (old totals would change);
+    // other changes still work, and a type with no tickets may switch.
+    const sw = await editType(h, os, duo, { min_people: 1 });
+    expect(sw.status).toBe(409);
+    expect(sw.body).toMatchObject({ error: "package_change_held" });
+    expect((await editType(h, os, duo, { price: 2000 })).status).toBe(200);
+    expect((await editType(h, os, group, { max_people: 3 })).status).toBe(200);
+    const spare = (await newType(h, os, { name: "Trio", price: 900, min_people: 3, max_people: 3 })).body.type!.id;
+    expect((await editType(h, os, spare, { max_people: 4 })).status).toBe(200);
+    // Refunds when the party is cancelled: the package price, not price x people (the price paid stays 2100).
+    expect((await h.req("/api/party/cancel", api(os, { op: newId(), reason: "Venue closed.", mark_refunds: true, email_guests: false }))).status).toBe(200);
+    const due = await env.DB.prepare("SELECT amount FROM refunds WHERE ticket_id = ?").bind(a.body.ticket_id).first("amount");
+    expect(due).toBe(2100);
+  });
+});
+
 describe("roles", () => {
   it("an admin (not owner) can manage types too", async () => {
     const h = await harness();

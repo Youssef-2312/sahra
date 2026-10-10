@@ -26,7 +26,7 @@ import { base32, isBase32, isUuid, newId, sha256, sha256hex } from "../lib/crypt
 import { chargeStaff } from "../limits";
 import type { OutboxRow } from "../outbox";
 import { PartyDb } from "../party/db";
-import { getIdPhoto, getScreenshot } from "../storage";
+import { getIdPhoto, getScreenshot, getAnswerPhoto } from "../storage";
 import { guestEmail } from "./guests";
 
 export const ticketRoutes = new Hono<AppEnv>();
@@ -332,6 +332,21 @@ ticketRoutes.get("/:id/id-photo", requireAuth(MANAGERS), async (c) => {
   return new Response(f.bytes, {
     headers: { "content-type": f.type, "cache-control": "no-store, private", "content-disposition": "inline", "x-content-type-options": "nosniff" },
   });
+});
+
+/** Private custom-question photo; party and current manager session checked in SQL. */
+ticketRoutes.get("/:id/answers/:question/photo", requireAuth(MANAGERS), async (c) => {
+  const id = c.req.param("id"), question = c.req.param("question");
+  if (!isTicketId(id) || !/^[a-z0-9_]{1,32}$/.test(question)) return json(c, 404, { error: "not_found" });
+  const { sess, now } = sessOf(c);
+  const key = await new GuestDb(c.var.db.driver).questionPhotoKey(sess, id, question, now);
+  if (!key) return json(c, 404, { error: "not_found" });
+  const photo = await getAnswerPhoto(c.env, key, sess.partyId, id, question);
+  if (photo === "not_configured") return json(c, 503, { error: "uploads_not_configured" });
+  if (!photo) return json(c, 404, { error: "not_found" });
+  if ("deleted" in photo) return json(c, 410, { error: "answer_photo_deleted" });
+  return new Response(photo.bytes, { headers: { "content-type": photo.type, "cache-control": "no-store, private",
+    "content-disposition": "inline", "x-content-type-options": "nosniff" } });
 });
 
 ticketRoutes.post("/approve", requireAuth(MANAGERS), async (c) => {

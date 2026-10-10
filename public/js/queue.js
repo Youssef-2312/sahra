@@ -173,7 +173,11 @@
           return el("li", null, el("span", { class: "muted", text: t("ticket_n", { n: i + 1 }) + ": " }), el("span", { text: m.guest_name || "-", attrs: { dir: "auto" } }));
         }) : null,
         answers.map(function (k) {
-          return el("li", null, el("span", { class: "muted", text: k + ": ", attrs: { dir: "auto" } }), el("span", { class: "pre", text: String(row.answers[k]), attrs: { dir: "auto" } }));
+          var a = row.answers[k];
+          if (typeof a === "string" && /^photo:f[1-4]:[1-9][0-9]*$/.test(a)) return el("li", null,
+            el("span", { class: "muted", text: k + ": ", attrs: { dir: "auto" } }),
+            el("a", { class: "btn small-btn", text: t("view_answer_photo"), attrs: { href: "/api/tickets/" + encodeURIComponent(row.id) + "/answers/" + encodeURIComponent(k) + "/photo", target: "_blank", rel: "noopener" } }));
+          return el("li", null, el("span", { class: "muted", text: k + ": ", attrs: { dir: "auto" } }), el("span", { class: "pre", text: String(a), attrs: { dir: "auto" } }));
         })));
 
     var actions = el("div", { class: "actions" });
@@ -205,7 +209,7 @@
             el("span", { class: "small muted", text: [ids.length > 1 ? t("q_n_tickets", { n: ids.length }) : null, row.type_name, people(row.people)].filter(Boolean).join(" · "), attrs: { dir: "auto" } }), el("br"),
             el("span", { class: "small faint mono", text: Sahra.ref(row.id), attrs: { dir: "ltr" } }))),
         status),
-      row.price ? el("p", { class: "price", text: t("q_expected", { amount: Sahra.amount(row.price * row.people * ids.length) }) }) : null,
+      row.price ? el("p", { class: "price", text: t("q_expected", { amount: Sahra.amount((row.total != null ? row.total : row.price * row.people) * ids.length) }) }) : null,
       row.payment === "cash" ? el("p", null, el("span", { class: "pill", text: t("q_paid_cash") })) : null,
       row.same_email ? el("p", { class: "notice maybe small", text: t("q_same_email", { n: row.same_email }) }) : null,
       tab === "rejected" && row.reject_reason ? el("p", { class: "small muted", text: t("q_reason", { reason: row.reject_reason }), attrs: { dir: "auto" } }) : null,
@@ -349,7 +353,7 @@
     all.forEach(function (x) {
       lines.push([x.id, x.status, x.guest_name, x.guest_email, x.instagram ? "@" + x.instagram : "", x.people, x.type_name, x.price, x.total_price, x.payment === "cash" ? "cash" : "", iso(x.created_at), iso(x.approved_at), x.approved_by,
         iso(x.rejected_at), x.rejected_by, x.reject_reason, iso(x.released_at), x.released_by, iso(x.used_at), x.scanned_by]
-        .concat(qs.map(function (q) { return (x.answers || {})[q]; })).map(csvCell).join(","));
+        .concat(qs.map(function (q) { var a = (x.answers || {})[q]; return typeof a === "string" && a.indexOf("photo:") === 0 ? t("photo_question") : a; })).map(csvCell).join(","));
     });
     var a = el("a", { attrs: { href: URL.createObjectURL(new Blob([lines.join("\r\n")], { type: "text/csv" })), download: "guests.csv" } });
     document.body.appendChild(a);

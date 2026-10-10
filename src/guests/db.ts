@@ -18,7 +18,7 @@ import { audit, sessionValid, type SessionRef } from "../db/index";
 import { inList, join, sql, type Sql } from "../db/sql";
 import { isBase32 } from "../lib/crypto";
 import { outboxInsert, type OutboxRow } from "../outbox";
-import { hasPublicTypes, onSale, peopleOk, typeApproved, typeHeld } from "./types";
+import { hasPublicTypes, onSale, peopleOk, ticketTotal, typeApproved, typeHeld } from "./types";
 
 const MANAGERS = ["owner", "admin"] as const;
 
@@ -61,7 +61,7 @@ export interface SignupParty {
 
 /** Why a sign-up was not stored (the same rules as the insert, read in the same batch). */
 export type SignupRefusal = "registration_not_open" | "registration_closed" | "email_limit" | "type_required" | "type_unavailable"
-  | "type_full" | "full" | "terms_changed" | "people_out_of_range" | "refused";
+  | "type_full" | "full" | "form_changed" | "terms_changed" | "people_out_of_range" | "refused";
 
 /** The registration rules of a party row aliased `p`, at `now`, for one email (all inside SQL). */
 function registrationRules(now: number, email: string, count = 1) {
@@ -157,7 +157,7 @@ export class GuestDb {
   async signup(a: {
     id: string; partyId: string; people: number; name: string; email: string; answers: string | null;
     screenshotKey: string | null; idPhotoKey?: string | null; instagram?: string | null; typeId: string | null; now: number; op: string;
-    rules: string | null; cancellation: string | null; accepted: { terms: string; rules: string | null; privacy: string };
+    guestForm?: string | null; rules: string | null; cancellation: string | null; accepted: { terms: string; rules: string | null; privacy: string };
     more?: { id: string; name: string; idPhotoKey?: string | null }[];
   }): Promise<"created" | "already" | SignupRefusal> {
     const more = a.more ?? [];
@@ -166,6 +166,7 @@ export class GuestDb {
     const ty = typeRules(a.typeId, a.people * count, a.now);
     const roomOk = sql`${held(sql`p.id`)} + ${a.people * count} <= p.capacity`;
     const rulesOk = sql`(p.rules IS ${a.rules} AND p.cancellation_policy IS ${a.cancellation})`;
+    const formOk = a.guestForm === undefined ? sql`1` : sql`p.guest_form IS ${a.guestForm}`;
     const orderId = count > 1 ? a.id : null;
     // Each ticket's own ID photo (the buyer's, and each friend's when the party asks for ID).
     const rows = join([sql`(0, ${a.id}, ${a.name}, ${a.idPhotoKey ?? null})`, ...more.map((m, i) => sql`(${i + 1}, ${m.id}, ${m.name}, ${m.idPhotoKey ?? null})`)], ", ");
@@ -179,7 +180,7 @@ export class GuestDb {
           o.idk, CASE WHEN o.i = 0 THEN ${a.instagram ?? null} END, ${a.typeId}, ${ty.price},
           ${orderId}, ${a.accepted.terms}, ${a.accepted.rules}, ${a.accepted.privacy}, ${a.now}, ${a.now}, ${a.op}, 'ticket_requested'
         FROM o, parties p
-        WHERE p.id = ${a.partyId} AND ${peopleOk(a.typeId, a.people)} AND ${roomOk} AND ${rulesOk}
+        WHERE p.id = ${a.partyId} AND ${peopleOk(a.typeId, a.people)} AND ${roomOk} AND ${rulesOk} AND ${formOk}
           AND ${reg.opened} AND ${reg.notClosed} AND ${reg.emailOk} AND ${ty.chosenOk} AND ${ty.placesOk}
           AND NOT EXISTS (SELECT 1 FROM tickets x WHERE x.id IN (${inList(ids)}))
         ORDER BY o.i`,
@@ -188,6 +189,7 @@ export class GuestDb {
       sql`SELECT (SELECT party_id FROM tickets WHERE id = ${a.id}) AS existing_party,
           CASE
             WHEN NOT ${rulesOk} THEN 'terms_changed'
+            WHEN NOT ${formOk} THEN 'form_changed'
             WHEN NOT ${reg.opened} THEN 'registration_not_open'
             WHEN NOT ${reg.notClosed} THEN 'registration_closed'
             WHEN NOT ${reg.emailOk} THEN 'email_limit'
@@ -324,7 +326,7 @@ export class GuestDb {
     // same_email: the address's other pending/approved tickets (the duplicate warning; index tickets_party_email).
     const r = await this.driver.all(sql`SELECT t.id, t.status, t.people, t.guest_name, t.guest_email, t.answers,
         t.screenshot_key IS NOT NULL AS has_screenshot, t.id_photo_key IS NOT NULL AS has_id_photo, t.instagram, t.order_id, t.created_at, t.approved_at, t.released_at, t.reject_reason, t.hold_at,
-        t.used_at, t.qr_version, t.rev, t.type_id, (SELECT name FROM ticket_types WHERE id = t.type_id) AS type_name, t.price, t.payment,
+        t.used_at, t.qr_version, t.rev, t.type_id, (SELECT name FROM ticket_types WHERE id = t.type_id) AS type_name, t.price, ${ticketTotal("t")} AS total, t.payment,
         CASE WHEN t.guest_email IS NULL THEN 0 ELSE (SELECT COUNT(*) FROM tickets d WHERE d.party_id = t.party_id
           AND d.guest_email = t.guest_email AND d.id != t.id AND d.status IN ('pending', 'approved')) END AS same_email
       FROM tickets t WHERE t.party_id = ${sess.partyId} AND t.status = ${status} ${cash} ${cursor}
@@ -338,6 +340,15 @@ export class GuestDb {
     const r = await this.driver.all<{ id_photo_key: string | null }>(sql`SELECT id_photo_key FROM tickets
       WHERE id = ${id} AND party_id = ${sess.partyId} AND ${sessionValid(sess, MANAGERS, now)}`);
     return r.results[0]?.id_photo_key ?? null;
+  }
+
+  async questionPhotoKey(sess: SessionRef, id: string, question: string, now: number): Promise<string | null> {
+    const r = await this.driver.all<{ answers: string | null }>(sql`SELECT answers FROM tickets
+      WHERE id = ${id} AND party_id = ${sess.partyId} AND ${sessionValid(sess, MANAGERS, now)}`);
+    try {
+      const answer = JSON.parse(r.results[0]?.answers ?? "{}")[question];
+      return typeof answer === "string" && /^photo:f[1-4]:[1-9][0-9]*$/.test(answer) ? answer.slice(6) : null;
+    } catch { return null; }
   }
 
   /** The screenshot key of one of the party's tickets (owner/admin only; checked in the query). */
@@ -458,7 +469,7 @@ export class GuestDb {
     const r = await this.driver.all(sql`SELECT t.id, t.status, t.people, t.guest_name, t.guest_email, t.instagram, t.answers, t.created_at,
         t.approved_at, ap.name AS approved_by, t.rejected_at, rj.name AS rejected_by, t.reject_reason,
         t.released_at, rl.name AS released_by, t.used_at, us.name AS scanned_by, t.qr_version, t.hold_at,
-        ty.name AS type_name, t.price, t.price * t.people AS total_price, t.payment
+        ty.name AS type_name, t.price, CASE WHEN t.price IS NOT NULL THEN ${ticketTotal("t")} END AS total_price, t.payment
       FROM tickets t
         LEFT JOIN ticket_types ty ON ty.id = t.type_id
         LEFT JOIN staff ap ON ap.id = t.approved_by LEFT JOIN staff rj ON rj.id = t.rejected_by
@@ -576,9 +587,9 @@ export class GuestDb {
           COALESCE(SUM(CASE WHEN t.status = 'approved' AND t.released_at IS NOT NULL THEN t.people END), 0) AS released,
           COALESCE(SUM(CASE WHEN t.used_at IS NOT NULL THEN t.people END), 0) AS admitted,
           COALESCE(SUM(CASE WHEN t.used_at IS NOT NULL THEN 1 END), 0) AS admitted_tickets,
-          COALESCE(SUM(CASE WHEN t.status = 'approved' THEN COALESCE(t.price, 0) * t.people END), 0) AS money_approved,
-          COALESCE(SUM(CASE WHEN t.status = 'pending' THEN COALESCE(t.price, 0) * t.people END), 0) AS money_pending,
-          COALESCE(SUM(CASE WHEN t.status = 'approved' AND t.payment = 'cash' THEN COALESCE(t.price, 0) * t.people END), 0) AS money_cash
+          COALESCE(SUM(CASE WHEN t.status = 'approved' THEN ${ticketTotal("t")} END), 0) AS money_approved,
+          COALESCE(SUM(CASE WHEN t.status = 'pending' THEN ${ticketTotal("t")} END), 0) AS money_pending,
+          COALESCE(SUM(CASE WHEN t.status = 'approved' AND t.payment = 'cash' THEN ${ticketTotal("t")} END), 0) AS money_cash
         FROM parties p LEFT JOIN tickets t ON t.party_id = p.id LEFT JOIN ticket_types ty ON ty.id = t.type_id
         WHERE p.id = ${sess.partyId} AND ${ok}
         GROUP BY t.type_id`,

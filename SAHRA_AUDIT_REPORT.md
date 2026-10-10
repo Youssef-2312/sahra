@@ -76,3 +76,37 @@ None that block production. Not testable from here, and why:
 2. Run `backupNow` once in the production Apps Script and check a
    `sahra-backup-...` folder appears in Drive.
 3. Before the first real party, a two-phone rehearsal at the door with real QR codes.
+
+## Follow-up: 10 October 2026, picture questions and quality of life
+
+The earlier production snapshot above is historical. Production now has a party.
+Public read-only diagnosis found guest requests closed by an expired closing date:
+`1761339600000`, 25 October 2025 at 00:00 Africa/Cairo. Opening QR admission does
+not override this guest request window. Overview now explains the distinction and
+links to Settings > Requests. No production party settings were changed.
+
+The current local audit passes 534 tests across 44 files and the typecheck.
+English/Arabic browser checks at 390, 768 and 1440 px pass 54 staff layouts,
+18 platform-role layouts, 30 public layouts, 66 guest layouts, six complete
+stubbed guest flows, six quality-of-life flows and six contact layouts. Each
+reports zero horizontal overflow and no unexpected console/page errors.
+The camera scanner returned `admit`, then `used`, for the same QR.
+
+Picture questions are tested for private owner/admin viewing, door/other-party
+refusal, required uploads, invalid type and oversize refusal, missing storage,
+idempotent retries, backup downloads, seven-day retention, orphan cleanup and
+an edit racing the guest upload. Full details and measurements are in the new
+entry in `docs/PHASE5.md`; decorative photo references are in
+`docs/PHOTO-SOURCES.md`. Photo collage checks passed 96 animation samples with
+no repeated visible tile (intersection greater than 40 px on each axis).
+
+Real Google sign-in, email delivery, physical phone cameras and a backup running
+in the owner's Google account remain outside the local checks. No real email was
+sent, and no production guest data was created or changed.
+
+The full local backup/restore drill passed: nightly and hourly, two file stores,
+five changes replayed with zero holds, corrupt-file refusal, daily-budget
+behaviour, three older backup folders permanently deleted after guest erasure,
+and one simulated wrong-key alert. The synchronous Apps Script simulation now
+runs off the Miniflare host event loop, with correlated HTTP responses. No Google
+account or real alert email was used. Full dependency audit: zero vulnerabilities.

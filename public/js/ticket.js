@@ -118,6 +118,7 @@
       timeLine ? el("p", { text: timeLine }) : null,
       k.entry_from ? el("p", { class: "pill maybe", text: t("entry_from", { when: Sahra.when(k.entry_from, p.time_zone) }) }) : null));
 
+    body.appendChild(el("div", { class: "g-actions" }, Sahra.copyButton(location.origin + "/ticket#t=" + link, t("copy_ticket_link"))));
     body.appendChild(addressCard(p));
     if (p.rules) body.appendChild(el("section", { class: "card" }, el("p", { class: "small muted", text: t("rules") }), el("p", { class: "pre", text: p.rules, attrs: { dir: "auto" } })));
     if (p.cancellation_policy) body.appendChild(el("section", { class: "card" }, el("p", { class: "small muted", text: t("cancel_title") }), el("p", { class: "pre", text: p.cancellation_policy, attrs: { dir: "auto" } })));

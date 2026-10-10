@@ -201,9 +201,9 @@ details > summary::-webkit-details-marker { display: none; }
 .hero-bg { position: absolute; inset: 0; z-index: -2; overflow: hidden; }
 .hero-bg .tilt { position: absolute; top: 50%; left: 50%; display: flex; flex-direction: column; transform: translate(-50%, -50%) rotate(-14deg); }
 .hero-bg .lane { display: flex; width: max-content; animation: lane 150s linear infinite; will-change: transform; }
-.hero-bg .ph { flex: none; width: 210px; height: 148px; overflow: hidden; background: var(--surface); }
+.hero-bg .ph { flex: none; width: 320px; height: 224px; overflow: hidden; background: var(--surface); }
 /* Edge to edge (owner: "stuck to each other"), every other row shifted half a photo like brickwork, so no grid lines run through. */
-.hero-bg .lane:nth-child(even) { margin-inline-start: -105px; }
+.hero-bg .lane:nth-child(even) { margin-inline-start: -160px; }
 .hero-bg img { width: 100%; height: 100%; object-fit: cover; display: block; }
 @keyframes lane { from { transform: translateX(0); } to { transform: translateX(-33.3333%); } }  /* one copy of three */
 .hero::before { content: ""; position: absolute; inset: 0; z-index: -1; background: rgba(12, 13, 16, 0.6); }  /* one flat veil: readable words, photos still visible; no gradients (owner) */
@@ -301,8 +301,8 @@ html[dir="rtl"] .mine { display: grid; gap: 10px; }
   .site-footer { padding-inline: 32px; }
   h1 { font-size: 2.2rem; }
   .hero { min-height: min(88vh, 860px); padding: 96px 32px 88px; }
-  .hero-bg .ph { width: 340px; height: 238px; }
-  .hero-bg .lane:nth-child(even) { margin-inline-start: -170px; }
+  .hero-bg .ph { width: 480px; height: 336px; }
+  .hero-bg .lane:nth-child(even) { margin-inline-start: -240px; }
   .hero .copy { max-width: 64rem; }
   .hero h1 { font-size: 4.6rem; }
   .hero p { font-size: 1.2rem; }
@@ -1082,4 +1082,41 @@ html[lang="ar"] .home-story h2, html[lang="ar"] .home-guide h2 { letter-spacing:
 @media (min-width: 900px) {
   /* The title and facts stay in view beside a long description. */
   .buy-hero:not(.no-pic) > .buy-head { position: sticky; top: 88px; align-self: start; }
+}
+
+/* Shared dropdowns: a consistent closed control and dark options. New browsers
+   style the native picker too; older browsers keep their accessible system menu. */
+select:not([multiple]) { appearance: none; min-width: 0; max-width: 100%; padding-inline-end: 46px; background-image: url('/img/chevron-down.svg'); background-repeat: no-repeat; background-position: right 15px center; background-size: 14px 14px; cursor: pointer; color-scheme: dark; }
+[dir="rtl"] select:not([multiple]) { background-position: left 15px center; }
+select option, select optgroup { background: var(--surface); color: var(--text); font: inherit; }
+select:disabled { opacity: 0.55; cursor: default; }
+.contact-form .field select { padding: 12px 14px; }
+@supports (appearance: base-select) {
+  select:not([multiple]), select:not([multiple])::picker(select) { appearance: base-select; }
+  select:not([multiple]) { background-image: none; padding-inline-end: 14px; align-items: center; gap: 12px; }
+  select:not([multiple])::picker-icon { color: var(--muted); margin-inline-start: auto; }
+  select:not([multiple])::picker(select) { padding: 6px; margin-block: 6px; border: 1px solid var(--line-strong); border-radius: 14px; background: var(--surface); color: var(--text); box-shadow: var(--shadow); max-height: min(360px, 55vh); overflow-y: auto; }
+  select:not([multiple]) option { padding: 12px; min-height: 44px; border-radius: 8px; white-space: normal; overflow-wrap: anywhere; }
+  select:not([multiple]) option:hover, select:not([multiple]) option:focus { background: var(--accent-soft); }
+  select:not([multiple]) option:checked { background: var(--accent-soft); font-weight: 600; }
+  select:not([multiple]) option:disabled { color: var(--muted); }
+}
+.g-actions .copy-btn, .tl-actions .copy-btn { margin-top: 0; }
+.g-row > .g-actions, .g-row > .facts { flex-basis: 100%; }
+@media (forced-colors: active) { select:not([multiple]) { appearance: auto; background-image: none; } }
+
+/* One interaction language across public pages, ticket forms and staff cards. */
+:where(a, button, summary, input, select, textarea):focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+:where(input, select, textarea)[aria-invalid="true"] { border-color: var(--no); }
+[aria-busy="true"] { cursor: progress; }
+[aria-busy="true"] button:disabled { cursor: progress; }
+:where(.s-card, .buy-form, .contact-form) :where(input, select, textarea) { scroll-margin-block: 100px; }
+.g-search { flex-wrap: wrap; }
+.g-search input { flex: 1 1 210px; }
+.g-search .btn { flex: none; margin: 0; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; } }
+/* Larger monitors show bigger photo tiles rather than more repeated images. */
+@media (min-width: 1600px) {
+  .hero-bg .ph { width: 640px; height: 448px; }
+  .hero-bg .lane:nth-child(even) { margin-inline-start: -320px; }
 }

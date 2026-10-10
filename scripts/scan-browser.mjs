@@ -52,7 +52,7 @@ try {
   assert.ok(issued.status === 201, `issuing a ticket failed: ${issued.status} ${JSON.stringify(issued.body)}`);
   const link = /#t=(.+)$/.exec(issued.body.link)[1];
 
-  browser = await chromium.launch({ args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", `--use-file-for-fake-video-capture=${join(dir, "qr.y4m")}`] });
+  browser = await chromium.launch({ executablePath: process.env.CHROMIUM_EXECUTABLE || undefined, args: [...(process.env.CHROMIUM_EXECUTABLE ? ["--no-sandbox"] : []), "--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", `--use-file-for-fake-video-capture=${join(dir, "qr.y4m")}`] });
 
   // The ticket's own QR image, as the guest sees it, made into 8 s of camera video.
   const guest = await browser.newPage({ viewport: { width: 390, height: 844 } });

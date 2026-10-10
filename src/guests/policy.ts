@@ -23,7 +23,7 @@ import { sha256hex } from "../lib/crypto";
 import type { Env } from "../env";
 
 export const TERMS_VERSION = "2026-10-09";
-export const PRIVACY_VERSION = "2026-10-09";
+export const PRIVACY_VERSION = "2026-10-10";
 
 /** True when ticket emails can actually be sent (the same settings src/email/sender.ts uses). */
 export function emailConfigured(env: Pick<Env, "GMAIL_ADDRESS" | "GMAIL_APP_PASSWORD" | "GMAIL_ADDRESS_2" | "GMAIL_APP_PASSWORD_2"
