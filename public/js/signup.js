@@ -239,7 +239,7 @@
         input.addEventListener("change", function () { paymentRefresh(form); });
         return el("label", { class: "choice" + (x.on_sale ? "" : " off") }, input,
           el("span", { class: "grow" },
-            el("span", { class: "row" }, el("strong", { text: x.name, attrs: { dir: "auto" } }), el("span", { class: "price", text: x.price ? Sahra.money(x.price) + " " + t("per_person") : t("free") })),
+            el("span", { class: "row" }, el("strong", { text: x.name, attrs: { dir: "auto" } }), el("span", { class: "price", text: x.price ? Sahra.money(x.price) + " " + priceUnit(x) : t("free") })),
             el("span", { class: "small muted", text: peopleText(x) }),
             x.description ? el("span", { class: "small muted pre", text: x.description, attrs: { dir: "auto" } }) : null,
             el("span", null, typeStatus(x))));
@@ -267,15 +267,21 @@
   }
 
   // Payment instructions and the total follow the chosen ticket and the number of people.
+  // A type of a fixed group size (Duo: exactly 2) is priced as a package: its price
+  // is for the whole ticket. Other types are priced per person.
+  function isPackage(x) { return x.min_people > 1 && x.min_people === x.max_people; }
+  function priceUnit(x) { return isPackage(x) ? t("per_package", { n: x.min_people }) : t("per_person"); }
+  function ticketPrice(x, people) { return (x.price || 0) * (isPackage(x) ? 1 : people); }
+
   function paymentRefresh(form) {
     var box = form.querySelector("[data-pay]");
     if (!box) return;
     var chosen = form.querySelector("input[name=type_id]:checked");
     var type = chosen ? data.types.filter(function (x) { return x.id === chosen.value; })[0] : null;
     var how = type ? type.payment_instructions : data.payment_instructions;
-    var people = Math.max(1, Number(form.elements.people.value) || 1) * Math.max(1, Number(form.elements.tickets.value) || 1);
+    var people = Math.max(1, Number(form.elements.people.value) || 1), n = Math.max(1, Number(form.elements.tickets.value) || 1);
     Sahra.clear(box);
-    if (type && type.price) box.appendChild(el("p", { class: "price", text: t("total_due", { amount: Sahra.money(type.price * people) }) }));
+    if (type && type.price) box.appendChild(el("p", { class: "price", text: t("total_due", { amount: Sahra.money(ticketPrice(type, people) * n) }) }));
     if (how) box.appendChild(el("p", { class: "pre", text: how, attrs: { dir: "auto" } }));
     box.hidden = !box.firstChild;
   }
@@ -289,8 +295,10 @@
     set("count", String(n));
     set("people", people > 1 ? String(people) : null);
     set("each", type ? Sahra.money(type.price) : null);
+    var each = document.querySelector("[data-o-each]");
+    if (each) each.parentElement.firstChild.textContent = t(type && isPackage(type) ? "order_each_package" : "order_each");
     var total = document.querySelector("[data-o-total]");
-    if (total) total.textContent = type ? Sahra.money((type.price || 0) * people * n) : "-";
+    if (total) total.textContent = type ? Sahra.money(ticketPrice(type, people) * n) : "-";
   }
 
   // The payment screenshot: a large target with the chosen photo's name and preview
@@ -371,6 +379,7 @@
   function peopleText(type) {
     var r = peopleRange(type);
     if (r.max <= 1) return t("one_person");
+    if (r.min === r.max) return t("people_package", { n: r.max });
     return r.min > 1 ? t("people_range", { min: r.min, max: r.max }) : t("people_upto", { n: r.max });
   }
 

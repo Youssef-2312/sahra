@@ -306,7 +306,7 @@
 
   function typeRow(x) {
     var tz = party.time_zone;
-    var bits = [Sahra.money(x.price) + (x.price ? " " + t("s_pp") : ""), peopleLine(x),
+    var bits = [Sahra.money(x.price) + (!x.price ? "" : x.min_people > 1 && x.min_people === x.max_people ? " " + t("s_per_package", { n: x.min_people }) : " " + t("s_pp")), peopleLine(x),
       x.quantity !== null ? t("s_type_places", { held: x.held, of: x.quantity }) : t("s_type_held", { held: x.held })];
     var tags = [];
     if (x.staff_only) tags.push(["", t("s_staff_only")]);
