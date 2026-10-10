@@ -110,3 +110,12 @@ behaviour, three older backup folders permanently deleted after guest erasure,
 and one simulated wrong-key alert. The synchronous Apps Script simulation now
 runs off the Miniflare host event loop, with correlated HTTP responses. No Google
 account or real alert email was used. Full dependency audit: zero vulnerabilities.
+
+PR #14 merged as `b76e45acbde2fb59b72b323a6a071929a2f35c24`, and Workers Builds
+completed successfully. At 20:35:09 UTC, production served the new home script;
+ten additional release files (CSS, shared UI, settings, sign-up and six photos)
+matched byte-for-byte. The post-release read-only browser sweep passed 102 layouts
+(17 addresses, both languages, three widths), with zero overflow, broken images
+or unexpected errors. Expected signed-out and invalid-link 401/404 responses were
+kept separate. A signed-out picture request returned 401, no-store and nosniff.
+No production form was submitted or record changed.
