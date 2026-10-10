@@ -39,9 +39,9 @@ export function discordText(s: string): string {
   return clean.length > DISCORD.maxChars ? `${clean.slice(0, DISCORD.maxChars - 3)}...` : clean;
 }
 
-/** "2026-10-01 18:00 UTC / 2026-10-01 21:00 Cairo". */
+/** "Thu 01/10/2026, 18:00 UTC / Thu 01/10/2026, 21:00 Cairo" (DD/MM/YYYY, owner). */
 export function bothTimes(t: number): string {
-  return `${new Date(t).toISOString().slice(0, 16).replace("T", " ")} UTC / ${formatHuman(t, "Africa/Cairo").replace(" (Africa/Cairo)", "")} Cairo`;
+  return `${formatHuman(t, "UTC").replace(" (UTC)", "")} UTC / ${formatHuman(t, "Africa/Cairo").replace(" (Africa/Cairo)", "")} Cairo`;
 }
 
 /** An INSERT for a batch, added only when `guard` holds (idempotent by id). */

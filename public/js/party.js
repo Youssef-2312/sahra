@@ -96,6 +96,13 @@
     });
   }
 
+  /** The date picker starts at today (a start, end or close can not be in the past; the server checks too),
+   *  unless the saved value is already in the past (then it stays editable as it is). */
+  function notPast(saved, tz) {
+    var now = Date.now();
+    return saved !== null && saved !== undefined && saved < now ? null : S.local(now, tz);
+  }
+
   function textarea(name, value, max, rows) {
     var a = el("textarea", { attrs: { name: name, maxlength: max, rows: rows || 3, dir: "auto" } });
     a.value = value || "";
@@ -120,8 +127,8 @@
     return formCard("time", t("s_time"), t("s_time_p"), [
       zoneField,
       el("div", { class: "s-two" },
-        S.field(t("s_starts"), S.input("starts_at_local", "datetime-local", { value: S.local(party.starts_at, tz) })),
-        S.field(t("s_ends"), S.input("ends_at_local", "datetime-local", { value: S.local(party.ends_at, tz) }), t("s_ends_h"))),
+        S.field(t("s_starts"), S.input("starts_at_local", "datetime-local", { value: S.local(party.starts_at, tz), min: notPast(party.starts_at, tz) })),
+        S.field(t("s_ends"), S.input("ends_at_local", "datetime-local", { value: S.local(party.ends_at, tz), min: notPast(party.ends_at, tz) }), t("s_ends_h"))),
       notifyBox(),
     ], function (f, box) {
       var body = { time_zone: val(f, "time_zone"), starts_at_local: localOrNull(f, "starts_at_local"), ends_at_local: localOrNull(f, "ends_at_local") };
@@ -204,7 +211,7 @@
         S.field(t("s_people"), S.input("max_people_per_ticket", "number", { min: 1, max: 50, value: p.max_people_per_ticket, inputmode: "numeric" }), t("s_people_h"))),
       el("div", { class: "s-two" },
         S.field(t("s_opens"), S.input("registration_opens_at_local", "datetime-local", { value: S.local(p.registration_opens_at, tz) }), t("s_opens_h")),
-        S.field(t("s_closes"), S.input("registration_closes_at_local", "datetime-local", { value: S.local(p.registration_closes_at, tz) }), t("s_closes_h"))),
+        S.field(t("s_closes"), S.input("registration_closes_at_local", "datetime-local", { value: S.local(p.registration_closes_at, tz), min: notPast(p.registration_closes_at, tz) }), t("s_closes_h"))),
       S.field(t("s_review_time"), S.input("review_time", "text", { maxlength: 80, value: p.review_time || "", dir: "auto" }), t("s_review_time_h")),
       S.field(t("s_per_email"), S.input("max_tickets_per_email", "number", { min: 1, max: 100, value: p.max_tickets_per_email === null ? "" : p.max_tickets_per_email, placeholder: t("s_no_limit"), inputmode: "numeric" }), t("s_per_email_h")),
     ], function (f, box) {

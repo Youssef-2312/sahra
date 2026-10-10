@@ -591,7 +591,7 @@ main.buy { padding-top: 20px; }
 .facts li:first-child { border-top: 0; }
 .facts .k { color: var(--muted); font-size: 15px; flex: none; }
 .facts .v { font-weight: 600; text-align: end; }
-.buy-head .desc { color: #c3c6cd; font-size: 16px; line-height: 1.6; margin: 0; }
+.buy-head .desc, .buy-desc { color: #c3c6cd; font-size: 16px; line-height: 1.6; margin: 0; }
 .buy-cols { display: grid; gap: 24px; }
 .buy-form { counter-reset: step; background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 4px 18px 20px; }
 .buy-form .step { counter-increment: step; padding: 20px 0 4px; border-top: 1px solid var(--line); }
@@ -628,6 +628,10 @@ main.buy { padding-top: 20px; }
   main.buy { max-width: calc(1120px + 64px); padding-top: 36px; }
   .buy-hero { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: 40px; align-items: start; margin-bottom: 40px; }
   .buy-hero.no-pic { grid-template-columns: minmax(0, 1fr); max-width: 760px; }
+  /* Picture top left, title and facts on the right, the description under the picture (no gap beside a long text). */
+  .buy-hero:not(.no-pic) > .gallery { grid-column: 1; grid-row: 1; }
+  .buy-hero:not(.no-pic) > .buy-head { grid-column: 2; grid-row: 1 / span 2; }
+  .buy-hero:not(.no-pic) > .buy-desc { grid-column: 1; grid-row: 2; margin: 0; }
   .buy-head { padding-top: 6px; }
   .buy-head h1 { font-size: 40px; }
   .buy-cols { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: 40px; align-items: start; }
@@ -1075,3 +1079,7 @@ html[lang="ar"] .home-story h2, html[lang="ar"] .home-guide h2 { letter-spacing:
 /* Settings > ticket types: Copy and Edit side by side. */
 .s-type-acts { display: inline-flex; gap: 8px; flex: none; }
 .s-type-acts .btn + .btn { margin-top: 0; }
+@media (min-width: 900px) {
+  /* The title and facts stay in view beside a long description. */
+  .buy-hero:not(.no-pic) > .buy-head { position: sticky; top: 88px; align-self: start; }
+}

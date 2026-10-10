@@ -283,7 +283,7 @@ describe("door: entry time per type", () => {
 
     logs = [];
     const v = await scan(h, door, qr1);
-    expect(v).toMatchObject({ verdict: "stop", reason: "too early: Regular enters from 2026-10-01 22:00 (Africa/Cairo)", type: "Regular" });
+    expect(v).toMatchObject({ verdict: "stop", reason: "too early: Regular enters from Thu 01/10/2026, 22:00 (Africa/Cairo)", type: "Regular" });
     expect([lastReq().rows_written, lastReq().ledger_rows_written]).toEqual([1, 0]);
     expect((await ticket(t1.body.ticket_id!))!.used_at).toBeNull();
     expect(await scan(h, door, qr2)).toMatchObject({ verdict: "admit", type: "Early" });

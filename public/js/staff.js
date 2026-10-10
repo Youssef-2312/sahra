@@ -170,6 +170,7 @@ var SahraStaff = (function () {
 
   var FIELD_LABELS = { name: "s_name", description: "s_description", venue_name: "s_venue", address: "s_address", map_url: "s_map",
     rules: "s_entry_rules", cancellation_policy: "s_cancellation", payment_instructions: "s_payment", capacity: "s_capacity",
+    starts_at: "s_starts", ends_at: "s_ends", registration_closes_at: "s_closes",
     max_people_per_ticket: "s_people", review_time: "s_review_time", support_phone: "s_contact_phone", support_email: "s_contact_email" };
 
   /** Words for a refused staff action: the server's code when known, else a general line. */
@@ -177,7 +178,8 @@ var SahraStaff = (function () {
     if (r.status === 503) return t("s_not_confirmed");
     var code = r.body && r.body.error;
     if (typeof code === "string") {
-      var k = code.indexOf("invalid_field:") === 0 ? (SahraText.en["e_" + code.replace(":", "_")] ? "e_" + code.replace(":", "_") : "e_invalid_field") : "e_" + code;
+      var k = code.indexOf("invalid_field:") === 0 ? (SahraText.en["e_" + code.replace(":", "_")] ? "e_" + code.replace(":", "_") : "e_invalid_field")
+        : code.indexOf("in_the_past:") === 0 ? "e_in_the_past" : "e_" + code;
       // The field by its label on the page ("Entry rules and dress code"), not its code name.
       var f = code.split(":")[1] || "", label = FIELD_LABELS[f];
       if (SahraText.en[k]) return t(k, { field: label ? t(label) : f, held: r.body.held, max: r.body.max });

@@ -154,7 +154,7 @@ describe("time zones", () => {
     expect(zonedToUtc("2026-13-01T01:30", "UTC")).toBeNull();
     expect(zonedToUtc("2026-10-31 21:00", "UTC")).toBeNull();
     expect(formatLocal(Date.UTC(2026, 9, 31, 19, 0), "Africa/Cairo")).toBe("2026-10-31T21:00");
-    expect(formatHuman(Date.UTC(2026, 9, 31, 19, 0), "Asia/Tokyo")).toBe("2026-11-01 04:00 (Asia/Tokyo)");
+    expect(formatHuman(Date.UTC(2026, 9, 31, 19, 0), "Asia/Tokyo")).toBe("Sun 01/11/2026, 04:00 (Asia/Tokyo)");
   });
 });
 
@@ -426,7 +426,7 @@ describe("party details routes", () => {
     expect(rows.map((x) => x.ticket_id).sort()).toEqual([t1, t2].sort());
     for (const x of rows) {
       expect(x).toMatchObject({ kind: "party_notice", status: "awaiting_approval", subject: "Update: Halloween Night" });
-      expect(x.body_text).toContain("Starts: 2026-10-31 22:00 (Africa/Cairo)");
+      expect(x.body_text).toContain("Starts: Sat 31/10/2026, 22:00 (Africa/Cairo)");
       expect(x.body_text).not.toContain("New place");
       expect(x.body_text).not.toContain(VENUE);
     }

@@ -41,9 +41,13 @@ export function formatLocal(t: number, tz: string): string {
   return `${String(p.year).padStart(4, "0")}-${d2(p.month)}-${d2(p.day)}T${d2(p.hour)}:${d2(p.minute)}`;
 }
 
-/** For emails and pages: "2026-10-31 21:00 (Africa/Cairo)". */
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+/** For emails and pages (owner: DD/MM/YYYY): "Sat 31/10/2026, 21:00 (Africa/Cairo)". */
 export function formatHuman(t: number, tz: string): string {
-  return `${formatLocal(t, tz).replace("T", " ")} (${tz})`;
+  const p = parts(t, tz);
+  const d2 = (n: number) => String(n).padStart(2, "0");
+  const weekday = WEEKDAYS[new Date(Date.UTC(p.year, p.month - 1, p.day)).getUTCDay()];
+  return `${weekday} ${d2(p.day)}/${d2(p.month)}/${p.year}, ${d2(p.hour)}:${d2(p.minute)} (${tz})`;
 }
 
 function offsetMs(t: number, tz: string): number {

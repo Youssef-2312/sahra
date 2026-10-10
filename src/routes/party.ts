@@ -52,6 +52,17 @@ partyRoutes.post("/details", requireAuth(["owner", "admin"]), async (c) => {
   const a = c.var.auth;
   const now = c.var.deps.now();
   const db = partyDb(c);
+  // A start, end or close of requests can not be set in the past (owner: a date picked a year back was accepted).
+  // Only a changed value is checked, so editing other details during the party still works.
+  const PAST_GRACE = 5 * 60_000;
+  const timed = (["starts_at", "ends_at", "registration_closes_at"] as const).filter((f) => typeof parsed.values[f] === "number");
+  if (timed.length) {
+    const cur = await db.get(a.info.party_id);
+    for (const f of timed) {
+      const v = parsed.values[f] as number;
+      if (v < now - PAST_GRACE && (!cur || (cur as unknown as Record<string, unknown>)[f] !== v)) return json(c, 400, { error: `in_the_past:${f}` });
+    }
+  }
   let notice: null | { subject: string; body: string } = null;
   if (parsed.notify) {
     if (!TIME_OR_PLACE.some((f) => f in parsed.values)) return json(c, 400, { error: "notify_needs_time_or_place_change" });

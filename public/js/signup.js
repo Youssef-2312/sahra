@@ -122,11 +122,12 @@
         el("p", { class: "label-line", text: t("buy_label") }),
         el("h1", { text: data.party.name, attrs: { dir: "auto" } }),
         el("ul", { class: "facts" }, fact("fact_when", timeLine), fact("where", data.details ? whereFact(d) : null), fact("fact_price", price)),
-        d.description ? el("p", { class: "desc pre", text: d.description, attrs: { dir: "auto" } }) : null,
         // How a ticket works here, in three words each (the home page's steps).
         el("ol", { class: "mini-steps" }, [1, 2, 3].map(function (n) {
           return el("li", null, el("span", { class: "n", text: String(n), attrs: { "aria-hidden": "true" } }), t("h_step" + n + "_t"));
-        }))));
+        }))),
+      // Its own block: on desktop under the picture (owner: a long description left a big gap there), on phones after the facts.
+      d.description ? el("p", { class: "desc pre buy-desc", text: d.description, attrs: { dir: "auto" } }) : null);
   }
 
   // Desktop: beside the form, kept in view. The order follows the form as it changes.

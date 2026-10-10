@@ -110,12 +110,24 @@ var Sahra = (function () {
   function money(n) { return n ? amount(n) : t("free"); }
 
   /** A moment in the party's own time zone: "Sat 31 Oct, 22:00". */
+  // Dates read DD/MM/YYYY everywhere (owner), with the weekday and the time: "Thu 29/10/2026, 20:00".
+  function dmy(ms, tz) {
+    var o = { day: "2-digit", month: "2-digit", year: "numeric" };
+    try {
+      var p = {};
+      new Intl.DateTimeFormat("en-GB", Object.assign(o, tz ? { timeZone: tz } : {})).formatToParts(ms).forEach(function (x) { p[x.type] = x.value; });
+      return p.day + "/" + p.month + "/" + p.year;
+    } catch (e) { var d = new Date(ms); return ("0" + d.getDate()).slice(-2) + "/" + ("0" + (d.getMonth() + 1)).slice(-2) + "/" + d.getFullYear(); }
+  }
+  function weekday(ms, tz) {
+    try { return new Intl.DateTimeFormat(locale(), Object.assign({ weekday: "short" }, tz ? { timeZone: tz } : {})).format(ms); } catch (e) { return ""; }
+  }
   function when(ms, tz) {
     if (ms === null || ms === undefined) return "";
-    var o = { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" };
-    try { return new Intl.DateTimeFormat(locale(), Object.assign(o, tz ? { timeZone: tz } : {})).format(ms); }
-    catch (e) { return new Date(ms).toLocaleString(); }
+    return (weekday(ms, tz) + " " + dmy(ms, tz)).trim() + (lang() === "ar" ? "، " : ", ") + time(ms, tz);
   }
+  /** Just the date: "29/10/2026". */
+  function date(ms, tz) { return ms === null || ms === undefined ? "" : dmy(ms, tz); }
   function time(ms, tz) {
     var o = { hour: "2-digit", minute: "2-digit", hourCycle: "h23" };
     try { return new Intl.DateTimeFormat(locale(), Object.assign(o, tz ? { timeZone: tz } : {})).format(ms); }
@@ -363,6 +375,6 @@ var Sahra = (function () {
     return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
   }
 
-  return { t: t, el: el, clear: clear, api: api, errorText: errorText, money: money, amount: amount, when: when, time: time, rel: rel,
+  return { t: t, el: el, clear: clear, api: api, errorText: errorText, money: money, amount: amount, when: when, date: date, time: time, rel: rel,
     lang: lang, boot: boot, store: store, SESSION_KEY: SESSION_KEY, token: token, title: title, problem: problem, signinView: signinView, confirm: confirmBox, notify: notify, ask: ask, contactCard: contactCard, ref: function (id) { return id ? "SAH-" + String(id).slice(0, 6) : ""; } };
 })();
