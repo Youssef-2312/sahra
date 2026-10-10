@@ -269,6 +269,23 @@ platformRoutes.post("/parties/:id/manage", requirePlatform(["site_owner"]), asyn
 // ------------------------------------------------------------ one sign-in
 
 /**
+ * The signed-in person's own name, shown on the sign-in button and to their teams
+ * (owner: a normal name, not a Gmail address). 1 to 80 characters, not an email.
+ */
+platformRoutes.post("/me/name", requirePlatform(["site_owner", "organiser"]), async (c) => {
+  const b = await readJson(c as never);
+  const name = cleanName(b?.name);
+  if (!name) return j(c, 400, { error: "invalid_request" });
+  if (name.includes("@")) return j(c, 400, { error: "name_is_email" });
+  const p = c.var.platform;
+  const now = c.var.deps.now();
+  const r = await c.var.pdb.setMyName(p.hash, (p.info.site_owner_id ?? p.info.organiser_id)!, name, now, newId());
+  if (r === "rejected") return j(c, 401, { error: "not_signed_in" });
+  await flushChangeLog(c.var.db, c.var.ledger, now);
+  return j(c, 200, { status: r, name });
+});
+
+/**
  * The parties this Google account is on the team of (owner or admin), for the
  * "My parties" page: one sign-in, then open any of them.
  */

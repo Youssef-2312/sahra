@@ -705,3 +705,34 @@ describe("removing a site owner", () => {
     expect(await (await h.req(`/api/platform/site-owners/${b.id}/remove`, papi(a.s))).json()).toMatchObject({ status: "removed" });
   });
 });
+
+describe("your own name", () => {
+  it("sets a normal name on every row of the account (owner, team rows), audited and logged; refuses an email or a bad session", async () => {
+    const h = await harness();
+    const o = await organiser(h);
+    const id = pid();
+    const staffId = newId();
+    expect((await createParty(h, o.s, id, staffId)).status).toBe(200);
+    // An email address or an empty name is refused; nothing changes.
+    expect(await (await h.req("/api/platform/me/name", papi(o.s, { name: "someone.long.address@gmail.com" }))).json()).toEqual({ error: "name_is_email" });
+    expect((await h.req("/api/platform/me/name", papi(o.s, { name: "   " }))).status).toBe(400);
+
+    const r = await h.req("/api/platform/me/name", papi(o.s, { name: "  Youssef   W " }));
+    expect(await r.json()).toEqual({ status: "changed", name: "Youssef W" });
+    expect(await env.DB.prepare("SELECT name FROM organisers WHERE id = ?").bind(o.id).first("name")).toBe("Youssef W");
+    const st = await env.DB.prepare("SELECT name, rev, logged_rev FROM staff WHERE id = ?").bind(staffId).first<{ name: string; rev: number; logged_rev: number }>();
+    expect(st).toMatchObject({ name: "Youssef W" });
+    expect(st!.logged_rev).toBe(st!.rev);
+    expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM audit WHERE action = 'name_changed'").first("n")).toBe(2);
+    // The same name again changes nothing.
+    expect(await (await h.req("/api/platform/me/name", papi(o.s, { name: "Youssef W" }))).json()).toEqual({ status: "already", name: "Youssef W" });
+    // My parties shows it; another account's rows are untouched.
+    const me = (await (await h.req("/api/platform/me", papi(o.s, undefined, "GET"))).json()) as { organiser: { name: string } };
+    expect(me.organiser.name).toBe("Youssef W");
+    const other = await organiser(h);
+    expect(await env.DB.prepare("SELECT name FROM organisers WHERE id = ?").bind(other.id).first("name")).not.toBe("Youssef W");
+    // Signed out: refused.
+    await h.req("/api/platform/logout", papi(o.s, {}));
+    expect((await h.req("/api/platform/me/name", papi(o.s, { name: "Later" }))).status).toBe(401);
+  });
+});

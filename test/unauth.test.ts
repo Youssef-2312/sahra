@@ -159,6 +159,7 @@ const cases: Case[] = [
   ["platform me, no session", "GET", "/api/platform/me", (h) => h.req("/api/platform/me")],
   ["platform me, junk session", "GET", "/api/platform/me", (h) => h.req("/api/platform/me", { cookies: junkPlatform })],
   ["platform logout, junk session", "POST", "/api/platform/logout", (h) => h.req("/api/platform/logout", { method: "POST", headers: JSON_H, cookies: junkPlatform })],
+  ["your name, junk session", "POST", "/api/platform/me/name", (h) => h.req("/api/platform/me/name", { method: "POST", headers: JSON_H, cookies: junkPlatform, body: JSON.stringify({ name: "X" }) })],
   ["my parties list, junk session", "GET", "/api/platform/teams", (h) => h.req("/api/platform/teams", { cookies: junkPlatform })],
   ["open a party, junk session", "POST", "/api/platform/parties/:id/open", (h) => h.req(`/api/platform/parties/${GP}/open`, { method: "POST", headers: JSON_H, cookies: junkPlatform, body: "{}" })],
   ["organiser list, junk session", "GET", "/api/platform/organisers", (h) => h.req("/api/platform/organisers", { cookies: junkPlatform })],

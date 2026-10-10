@@ -420,6 +420,34 @@ o.party_limit, ${activeParties(sql`o.id`)} AS active_parties,
     return row.party_limit === limit ? ("already" as const) : ("rejected" as const);
   }
 
+  /**
+   * The signed-in person's own display name (owner: a normal name on the sign-in
+   * button, not their Gmail address), on every row of their Google account: site
+   * owner, party-owner permission and their active party team rows. Only while the
+   * platform session `hash` is live (checked in each statement); audited, and the
+   * revs go up so the change log records it.
+   */
+  async setMyName(hash: string, actor: string, name: string, now: number, op: string) {
+    const mine = sql`google_sub IN (SELECT s.google_sub FROM platform_sessions s WHERE ${liveSession(hash, now)})`;
+    const rs = await this.driver.batch([
+      sql`UPDATE platform_admins SET name = ${name}, rev = rev + 1, last_op = ${op}, last_action = 'name_changed'
+        WHERE ${mine} AND disabled_at IS NULL AND name != ${name}`,
+      sql`UPDATE organisers SET name = ${name}, rev = rev + 1, last_op = ${op}, last_action = 'name_changed'
+        WHERE ${mine} AND disabled_at IS NULL AND name != ${name}`,
+      sql`UPDATE staff SET name = ${name}, rev = rev + 1, last_op = ${op}, last_action = 'name_changed'
+        WHERE ${mine} AND disabled_at IS NULL AND name != ${name}`,
+      paudit(now, actor, "name_changed", "platform_admin", sql`SELECT id, rev FROM platform_admins WHERE last_op = ${op}`, "own name"),
+      paudit(now, actor, "name_changed", "organiser", sql`SELECT id, rev FROM organisers WHERE last_op = ${op}`, "own name"),
+      // Each team row's audit names that row itself as the actor (the person changed their own name).
+      sql`INSERT INTO audit (party_id, at, actor_staff_id, action, entity_type, entity_id, entity_rev, detail)
+        SELECT party_id, ${now}, id, 'name_changed', 'staff', id, rev, 'own name' FROM staff WHERE last_op = ${op}`,
+      sql`SELECT COUNT(*) AS n FROM platform_sessions s WHERE ${liveSession(hash, now)}`,
+    ]);
+    if (Number((rs[6]!.results[0] as { n: number }).n) !== 1) return "rejected" as const;
+    const changed = rs[0]!.meta.changes + rs[1]!.meta.changes + rs[2]!.meta.changes;
+    return changed > 0 ? ("changed" as const) : ("already" as const);
+  }
+
   async listSiteOwners(hash: string, ownerId: string, now: number) {
     const ok = siteOwnerValid(hash, ownerId, now);
     const r = await this.driver.all(sql`SELECT id, name, email, google_sub IS NOT NULL AS linked, invite_expires_at, created_at, disabled_at

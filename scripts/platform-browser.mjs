@@ -82,8 +82,8 @@ try {
   console.log(`PASS ${checks} role/language/width combinations; health UI and API requests restricted to site-owner view`);
 
   const f = await fixture('organiser');
-  await f.page.locator('[name=id]').fill('retry-party');
-  await f.page.locator('[name=name]').fill('Retry party');
+  await f.page.locator('#create [name=id]').fill('retry-party');
+  await f.page.locator('#create [name=name]').fill('Retry party');
   f.state.pending = true;
   await f.page.locator('#create button').click();
   await f.page.waitForFunction(() => document.querySelector('#create button').textContent === Sahra.t('p_retry_action'));
