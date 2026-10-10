@@ -2,4 +2,3 @@ STATUS=SUCCESS
 DEPLOYMENT=VERIFIED
 DEPLOYED_COMMIT=0d7aac2d7823db991e62005c12665946f37cf2ba
 COMPLETED_AT=2026-10-09T23:00:41Z
-VERIFICATION=Production serves the stylesheet from 0d7aac2 (live 2026-10-09T22:56:42Z); post-deploy smoke 66 page loads, 0 page errors, 0 overflow, axe no serious/critical findings; API answers and security headers as expected.
