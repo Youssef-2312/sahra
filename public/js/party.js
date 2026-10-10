@@ -61,6 +61,8 @@
     if (r.body.party) party = r.body.party;
     var text = t("s_saved");
     if (r.body.notices_queued) text += " " + S.tn("s_notices_queued", r.body.notices_queued);
+    // Emojis are taken out of party texts (they cannot go into guest emails): say so, and keep the note up.
+    if (r.body.emojis_removed) { rebuild(id, ["maybe", text + " " + t("s_emojis_removed")]); return true; }
     rebuild(id, ["yes", text]);
     return true;
   }
@@ -74,9 +76,9 @@
     var box = noteFor(id);
     var row = saveRow(null, box);
     var f = el("form", { attrs: { novalidate: true } }, fields, row.node);
-    f.addEventListener("submit", function (e) {
+    f.addEventListener("submit", async function (e) {
       e.preventDefault();
-      var body = collect(f, box);
+      var body = await collect(f, box);
       if (body) save(id, body, row.button, box);
     });
     return S.section(id, title, intro, f);
@@ -92,6 +94,13 @@
       if (!val(f, "name")) { S.say(box, "no", t("s_name_needed")); return null; }
       return { name: val(f, "name"), description: textOrNull(f, "description") };
     });
+  }
+
+  /** The date picker starts at today (a start, end or close can not be in the past; the server checks too),
+   *  unless the saved value is already in the past (then it stays editable as it is). */
+  function notPast(saved, tz) {
+    var now = Date.now();
+    return saved !== null && saved !== undefined && saved < now ? null : S.local(now, tz);
   }
 
   function textarea(name, value, max, rows) {
@@ -118,8 +127,8 @@
     return formCard("time", t("s_time"), t("s_time_p"), [
       zoneField,
       el("div", { class: "s-two" },
-        S.field(t("s_starts"), S.input("starts_at_local", "datetime-local", { value: S.local(party.starts_at, tz) })),
-        S.field(t("s_ends"), S.input("ends_at_local", "datetime-local", { value: S.local(party.ends_at, tz) }), t("s_ends_h"))),
+        S.field(t("s_starts"), S.input("starts_at_local", "datetime-local", { value: S.local(party.starts_at, tz), min: notPast(party.starts_at, tz) })),
+        S.field(t("s_ends"), S.input("ends_at_local", "datetime-local", { value: S.local(party.ends_at, tz), min: notPast(party.ends_at, tz) }), t("s_ends_h"))),
       notifyBox(),
     ], function (f, box) {
       var body = { time_zone: val(f, "time_zone"), starts_at_local: localOrNull(f, "starts_at_local"), ends_at_local: localOrNull(f, "ends_at_local") };
@@ -180,7 +189,7 @@
       var box = S.sayBox();
       var b = el("button", { class: "btn small-btn", text: t("s_reveal_now"), attrs: { type: "button" } });
       b.addEventListener("click", async function () {
-        if (!window.confirm(t("s_reveal_confirm"))) return;
+        if (!(await Sahra.confirm(t("s_reveal_confirm")))) return;
         b.disabled = true;
         var r = await S.act("/api/party/reveal", {});
         b.disabled = false;
@@ -202,7 +211,7 @@
         S.field(t("s_people"), S.input("max_people_per_ticket", "number", { min: 1, max: 50, value: p.max_people_per_ticket, inputmode: "numeric" }), t("s_people_h"))),
       el("div", { class: "s-two" },
         S.field(t("s_opens"), S.input("registration_opens_at_local", "datetime-local", { value: S.local(p.registration_opens_at, tz) }), t("s_opens_h")),
-        S.field(t("s_closes"), S.input("registration_closes_at_local", "datetime-local", { value: S.local(p.registration_closes_at, tz) }), t("s_closes_h"))),
+        S.field(t("s_closes"), S.input("registration_closes_at_local", "datetime-local", { value: S.local(p.registration_closes_at, tz), min: notPast(p.registration_closes_at, tz) }), t("s_closes_h"))),
       S.field(t("s_review_time"), S.input("review_time", "text", { maxlength: 80, value: p.review_time || "", dir: "auto" }), t("s_review_time_h")),
       S.field(t("s_per_email"), S.input("max_tickets_per_email", "number", { min: 1, max: 100, value: p.max_tickets_per_email === null ? "" : p.max_tickets_per_email, placeholder: t("s_no_limit"), inputmode: "numeric" }), t("s_per_email_h")),
     ], function (f, box) {
@@ -222,9 +231,9 @@
       el("div", { class: "s-two" },
         S.field(t("s_contact_email"), S.input("support_email", "email", { maxlength: 254, value: p.support_email || "", dir: "ltr" }), t("s_optional")),
         S.field(t("s_contact_note"), S.input("support_note", "text", { maxlength: 120, value: p.support_note || "", placeholder: t("s_contact_note_ph"), dir: "auto" }), t("s_optional"))),
-    ], function (f, box) {
+    ], async function (f, box) {
       var phone = val(f, "support_phone");
-      if (!phone && party.support_phone && !window.confirm(t("s_contact_clear_confirm"))) return null;
+      if (!phone && party.support_phone && !(await Sahra.confirm(t("s_contact_clear_confirm"), { danger: true }))) return null;
       return { support_phone: phone || null, support_email: textOrNull(f, "support_email"), support_note: textOrNull(f, "support_note") };
     });
     return card;
@@ -248,7 +257,7 @@
     var grid = el("ul", { class: "s-pics" }, list.map(function (f, i) {
       var del = el("button", { class: "btn no small-btn", text: t("s_remove"), attrs: { type: "button" } });
       del.addEventListener("click", async function () {
-        if (!window.confirm(t("s_remove_pic_confirm"))) return;
+        if (!(await Sahra.confirm(t("s_remove_pic_confirm"), { danger: true }))) return;
         del.disabled = true;
         var r = await S.act("/api/party/flyers/" + encodeURIComponent(f.id) + "/delete", { op: crypto.randomUUID() });
         if (!r.ok) { del.disabled = false; S.say(box, "no", S.why(r)); return; }
@@ -297,7 +306,7 @@
 
   function typeRow(x) {
     var tz = party.time_zone;
-    var bits = [Sahra.money(x.price) + (x.price ? " " + t("s_pp") : ""), peopleLine(x),
+    var bits = [Sahra.money(x.price) + (!x.price ? "" : x.min_people > 1 && x.min_people === x.max_people ? " " + t("s_per_package", { n: x.min_people }) : " " + t("s_pp")), peopleLine(x),
       x.quantity !== null ? t("s_type_places", { held: x.held, of: x.quantity }) : t("s_type_held", { held: x.held })];
     var tags = [];
     if (x.staff_only) tags.push(["", t("s_staff_only")]);
@@ -307,11 +316,20 @@
     if (x.entry_from) tags.push(["", t("s_entry_from", { when: Sahra.time(x.entry_from, tz) })]);
     var edit = el("button", { class: "btn small-btn", text: t("s_edit"), attrs: { type: "button" } });
     edit.addEventListener("click", function () { editing = x.id; preset = null; rebuild("types"); focusEditor(); });
+    // Copy: a new type with the same settings, named "... (copy)", to adjust and save (nothing is saved until Add).
+    var copy = el("button", { class: "btn small-btn", text: t("s_type_copy"), attrs: { type: "button" } });
+    copy.addEventListener("click", function () {
+      editing = "new";
+      preset = { name: t("s_type_copy_of", { name: x.name }).slice(0, 80), price: x.price, quantity: x.quantity, min_people: x.min_people, max_people: x.max_people,
+        sales_opens_at: x.sales_opens_at, sales_closes_at: x.sales_closes_at, entry_from: x.entry_from, staff_only: x.staff_only,
+        description: x.description, payment_instructions: x.payment_instructions };
+      rebuild("types"); focusEditor();
+    });
     return el("li", { class: x.archived ? "off" : null },
       el("div", { class: "s-type-text" }, el("strong", { text: x.name, attrs: { dir: "auto" } }),
         el("span", { class: "muted small", text: bits.join(" · ") }),
         tags.length ? el("span", { class: "s-tags" }, tags.map(function (g) { return el("span", { class: "pill " + g[0], text: g[1] }); })) : null),
-      edit);
+      el("span", { class: "s-type-acts" }, copy, edit));
   }
 
   function focusEditor() {
@@ -512,7 +530,7 @@
       el("div", { class: "s-save" }, go, box));
     f.addEventListener("submit", async function (e) {
       e.preventDefault();
-      var typed = window.prompt(t("s_cancel_confirm", { name: party.name }));
+      var typed = await Sahra.ask(t("s_cancel_confirm", { name: party.name }), { ok: t("s_cancel_go") });
       if (typed === null) return;
       if (typed.trim() !== party.name.trim()) { S.say(box, "no", t("s_cancel_mismatch")); return; }
       cancelOp = cancelOp || crypto.randomUUID();

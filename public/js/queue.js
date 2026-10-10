@@ -229,8 +229,8 @@
       list.push(el("button", { class: "btn small-btn", text: t("q_approve"), attrs: { type: "button", disabled: dis },
         on: { click: function () { run(ids, function (x) { return approve(x, false); }); } } }));
       list.push(el("button", { class: "btn no small-btn", text: t("q_reject"), attrs: { type: "button", disabled: dis },
-        on: { click: function () {
-          var reason = window.prompt(t("q_reject_reason"), "");
+        on: { click: async function () {
+          var reason = await Sahra.ask(t("q_reject_reason"), { ok: t("q_reject") });
           if (reason === null) return;
           run(ids, function (x) { return reject(x, reason.trim()); });
         } } }));
@@ -293,7 +293,7 @@
       e.preventDefault();
       var hours = Number(f.elements.hours.value), reason = f.elements.reason.value.trim();
       if (!(hours >= 1 && hours <= 720) || !reason) { SahraStaff.say(box, "no", t("q_stale_needed")); return; }
-      if (!window.confirm(t("q_stale_confirm", { h: hours }))) return;
+      if (!(await Sahra.confirm(t("q_stale_confirm", { h: hours }), { danger: true }))) return;
       busy = true;
       var total = 0, r;
       for (var round = 0; round < 100; round++) {
@@ -335,7 +335,7 @@
     var all = [], after = "";
     for (var page = 0; page < 50; page++) {
       var r = await Sahra.api.get("/api/tickets/export?limit=500" + (after ? "&after=" + encodeURIComponent(after) : ""));
-      if (!r.ok) { window.alert(Sahra.errorText(r)); return; }
+      if (!r.ok) { await Sahra.notify(Sahra.errorText(r)); return; }
       all = all.concat(r.body.tickets);
       if (!r.body.next) break;
       after = r.body.next;

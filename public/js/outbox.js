@@ -33,7 +33,7 @@
   }
 
   async function change(which, body, confirmText) {
-    if (busy || (confirmText && !window.confirm(confirmText))) return;
+    if (busy || (confirmText && !(await Sahra.confirm(confirmText)))) return;
     busy = true;
     S.redraw();
     var r = await S.act("/api/outbox/" + which, body);

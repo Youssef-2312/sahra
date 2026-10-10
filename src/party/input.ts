@@ -34,8 +34,18 @@ export const MAX_CAPACITY = 100_000;
 export const MAX_PEOPLE_PER_TICKET = 50;
 export const MAX_TICKETS_PER_EMAIL = 100;
 
-// Same ranges as src/outbox.ts assertPlainText (rule 6: no emojis), plus control characters.
-const EMOJI = /[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{FE0F}]/u;
+// Emojis (rule 6: none in the site's pages or emails; the ranges src/outbox.ts refuses, plus joiners and
+// keycap/symbol blocks). Owner text keeps everything else: emojis are removed, not the whole save refused
+// (owner: a Halloween emoji made the rules card refuse to save).
+const EMOJI_ALL = /[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}\u{200D}\u{20E3}]/gu;
+const EMOJI_ANY = /[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}\u{200D}\u{20E3}]/u;
+/** True when `v` is a string with an emoji in it (so a save can say they were removed). */
+export function hasEmoji(v: unknown): boolean {
+  return typeof v === "string" && EMOJI_ANY.test(v);
+}
+function withoutEmoji(s: string): string {
+  return s.replace(EMOJI_ALL, "").replace(/[ \t]{2,}/g, " ").replace(/[ \t]+\n/g, "\n").replace(/\n[ \t]+/g, "\n");
+}
 
 /**
  * A phone or WhatsApp number as typed: digits, spaces and + - ( ) only, 6 to 20
@@ -61,9 +71,9 @@ export function cleanContactEmail(v: unknown): string | null | undefined {
 export function text(v: unknown, max: number, multiline: boolean): string | null | undefined {
   if (v === null) return null;
   if (typeof v !== "string") return undefined;
-  let s = v.replace(/\r\n?/g, "\n").trim();
+  let s = withoutEmoji(v.replace(/\r\n?/g, "\n")).trim();
   if (!multiline) s = s.replace(/\s+/g, " ");
-  if (EMOJI.test(s) || /[\u0000-\u0008\u000B-\u001F\u007F]/.test(s)) return undefined;
+  if (/[\u0000-\u0008\u000B-\u001F\u007F]/.test(s)) return undefined;
   if (s.length > max) return undefined;
   return s === "" ? null : s;
 }

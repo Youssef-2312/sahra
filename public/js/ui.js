@@ -110,12 +110,24 @@ var Sahra = (function () {
   function money(n) { return n ? amount(n) : t("free"); }
 
   /** A moment in the party's own time zone: "Sat 31 Oct, 22:00". */
+  // Dates read DD/MM/YYYY everywhere (owner), with the weekday and the time: "Thu 29/10/2026, 20:00".
+  function dmy(ms, tz) {
+    var o = { day: "2-digit", month: "2-digit", year: "numeric" };
+    try {
+      var p = {};
+      new Intl.DateTimeFormat("en-GB", Object.assign(o, tz ? { timeZone: tz } : {})).formatToParts(ms).forEach(function (x) { p[x.type] = x.value; });
+      return p.day + "/" + p.month + "/" + p.year;
+    } catch (e) { var d = new Date(ms); return ("0" + d.getDate()).slice(-2) + "/" + ("0" + (d.getMonth() + 1)).slice(-2) + "/" + d.getFullYear(); }
+  }
+  function weekday(ms, tz) {
+    try { return new Intl.DateTimeFormat(locale(), Object.assign({ weekday: "short" }, tz ? { timeZone: tz } : {})).format(ms); } catch (e) { return ""; }
+  }
   function when(ms, tz) {
     if (ms === null || ms === undefined) return "";
-    var o = { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" };
-    try { return new Intl.DateTimeFormat(locale(), Object.assign(o, tz ? { timeZone: tz } : {})).format(ms); }
-    catch (e) { return new Date(ms).toLocaleString(); }
+    return (weekday(ms, tz) + " " + dmy(ms, tz)).trim() + (lang() === "ar" ? "، " : ", ") + time(ms, tz);
   }
+  /** Just the date: "29/10/2026". */
+  function date(ms, tz) { return ms === null || ms === undefined ? "" : dmy(ms, tz); }
   function time(ms, tz) {
     var o = { hour: "2-digit", minute: "2-digit", hourCycle: "h23" };
     try { return new Intl.DateTimeFormat(locale(), Object.assign(o, tz ? { timeZone: tz } : {})).format(ms); }
@@ -133,6 +145,38 @@ var Sahra = (function () {
   }
 
   /** The browser tab, Nova's way: "Page | Sahra"; the home page is "Sahra | Private party tickets". */
+  // ------------------------------------------------------------- dialogs
+  // The site's own confirm / alert / prompt (owner: no plain browser pop-ups): a
+  // modal <dialog> in the site's look, so focus stays inside, Escape cancels and
+  // Arabic reads right to left. Each returns a promise.
+  //   Sahra.confirm(text, { ok, danger })  -> true / false
+  //   Sahra.notify(text)                   -> resolves when closed
+  //   Sahra.ask(text, { value, ok })        -> the typed text, or null if cancelled
+  function dialog(o) {
+    return new Promise(function (done) {
+      var input = o.input ? el("input", { class: "dlg-input", attrs: { type: "text", dir: "auto", value: o.value || "", "aria-label": o.text } }) : null;
+      var ok = el("button", { class: "btn small-btn " + (o.danger ? "no" : "primary"), text: o.ok || t("dlg_ok"), attrs: { type: "submit", value: "ok" } });
+      var cancel = o.alert ? null : el("button", { class: "btn small-btn", text: t("dlg_cancel"), attrs: { type: "button" } });
+      var form = el("form", { attrs: { method: "dialog" } },
+        el("p", { class: "dlg-text", text: o.text }), input,
+        el("div", { class: "dlg-actions" }, cancel, ok));
+      var d = el("dialog", { class: "dlg", attrs: { "aria-label": o.text } }, form);
+      var answered = false;
+      function finish(v) { if (answered) return; answered = true; d.close(); d.remove(); done(v); }
+      form.addEventListener("submit", function (e) { e.preventDefault(); finish(o.input ? input.value : true); });
+      if (cancel) cancel.addEventListener("click", function () { finish(o.input ? null : false); });
+      // Escape, or the browser closing it: the same as Cancel.
+      d.addEventListener("cancel", function (e) { e.preventDefault(); finish(o.alert ? true : o.input ? null : false); });
+      document.body.appendChild(d);
+      d.showModal();
+      (input || ok).focus();
+      if (input) input.select();
+    });
+  }
+  function confirmBox(text, opts) { return dialog({ text: text, ok: opts && opts.ok, danger: opts && opts.danger }); }
+  function notify(text) { return dialog({ text: text, alert: true }); }
+  function ask(text, opts) { return dialog({ text: text, input: true, value: opts && opts.value, ok: opts && opts.ok }); }
+
   /**
    * The one sign-in (brainstorm idea 27; owner: one sign-in for everyone who runs
    * parties): a photo panel and one "Continue with Google". The server finds what
@@ -331,6 +375,6 @@ var Sahra = (function () {
     return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
   }
 
-  return { t: t, el: el, clear: clear, api: api, errorText: errorText, money: money, amount: amount, when: when, time: time, rel: rel,
-    lang: lang, boot: boot, store: store, SESSION_KEY: SESSION_KEY, token: token, title: title, problem: problem, signinView: signinView, contactCard: contactCard, ref: function (id) { return id ? "SAH-" + String(id).slice(0, 6) : ""; } };
+  return { t: t, el: el, clear: clear, api: api, errorText: errorText, money: money, amount: amount, when: when, date: date, time: time, rel: rel,
+    lang: lang, boot: boot, store: store, SESSION_KEY: SESSION_KEY, token: token, title: title, problem: problem, signinView: signinView, confirm: confirmBox, notify: notify, ask: ask, contactCard: contactCard, ref: function (id) { return id ? "SAH-" + String(id).slice(0, 6) : ""; } };
 })();

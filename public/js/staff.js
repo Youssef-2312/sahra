@@ -153,19 +153,36 @@ var SahraStaff = (function () {
   }
 
   /** The answer under a form; an empty text clears it. */
+  // A success line goes away by itself (owner: about 3 seconds; a long one a little
+  // later so it can be read); errors and warnings stay until the next action.
+  function sayMs(text) { return Math.min(8000, 3000 + Math.max(0, String(text).length - 40) * 50); }
   function say(node, cls, text) {
+    clearTimeout(node._sayTimer);
     node.className = "say" + (text ? " " + cls : "");
     node.textContent = text || "";
+    if (text && cls === "yes") {
+      node._sayTimer = setTimeout(function () {
+        if (node.textContent === text) { node.className = "say"; node.textContent = ""; }
+      }, sayMs(text));
+    }
   }
   function sayBox() { return el("p", { class: "say", attrs: { role: "status", "aria-live": "polite" } }); }
+
+  var FIELD_LABELS = { name: "s_name", description: "s_description", venue_name: "s_venue", address: "s_address", map_url: "s_map",
+    rules: "s_entry_rules", cancellation_policy: "s_cancellation", payment_instructions: "s_payment", capacity: "s_capacity",
+    starts_at: "s_starts", ends_at: "s_ends", registration_closes_at: "s_closes",
+    max_people_per_ticket: "s_people", review_time: "s_review_time", support_phone: "s_contact_phone", support_email: "s_contact_email" };
 
   /** Words for a refused staff action: the server's code when known, else a general line. */
   function why(r) {
     if (r.status === 503) return t("s_not_confirmed");
     var code = r.body && r.body.error;
     if (typeof code === "string") {
-      var k = code.indexOf("invalid_field:") === 0 ? (SahraText.en["e_" + code.replace(":", "_")] ? "e_" + code.replace(":", "_") : "e_invalid_field") : "e_" + code;
-      if (SahraText.en[k]) return t(k, { field: code.split(":")[1] || "", held: r.body.held, max: r.body.max });
+      var k = code.indexOf("invalid_field:") === 0 ? (SahraText.en["e_" + code.replace(":", "_")] ? "e_" + code.replace(":", "_") : "e_invalid_field")
+        : code.indexOf("in_the_past:") === 0 ? "e_in_the_past" : "e_" + code;
+      // The field by its label on the page ("Entry rules and dress code"), not its code name.
+      var f = code.split(":")[1] || "", label = FIELD_LABELS[f];
+      if (SahraText.en[k]) return t(k, { field: label ? t(label) : f, held: r.body.held, max: r.body.max });
     }
     return Sahra.errorText(r);
   }
@@ -190,12 +207,12 @@ var SahraStaff = (function () {
     var b = el("button", { class: "btn small-btn", text: label || t("s_copy"), attrs: { type: "button" } });
     b.addEventListener("click", async function () {
       try { await navigator.clipboard.writeText(text); b.textContent = t("copied"); }
-      catch (e) { window.prompt(t("s_copy"), text); }
+      catch (e) { await Sahra.ask(t("s_copy"), { value: text }); }
       setTimeout(function () { b.textContent = label || t("s_copy"); }, 2000);
     });
     return b;
   }
 
   return { start: start, act: act, field: field, input: input, select: select, check: check, section: section,
-    say: say, sayBox: sayBox, why: why, local: local, copyButton: copyButton, sleep: sleep, nav: nav, redraw: redraw, tn: tn };
+    say: say, sayMs: sayMs, sayBox: sayBox, why: why, local: local, copyButton: copyButton, sleep: sleep, nav: nav, redraw: redraw, tn: tn };
 })();

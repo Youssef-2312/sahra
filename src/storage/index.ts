@@ -194,6 +194,21 @@ export async function getFlyerFile(env: FilesEnv, key: string, partyId: string, 
  */
 export const idPhotoOwner = (ticketId: string) => `idphoto:${ticketId}`;
 const isIdPhotoOwner = (ticketId: string) => ticketId.startsWith("idphoto:");
+/** A picture answer to a sign-up question (src/guests/form.ts "photo"): its own file per ticket and question. */
+export const answerPhotoOwner = (ticketId: string, questionId: string) => `answer:${ticketId}:${questionId}`;
+const answerPhotoParts = (owner: string): { ticketId: string; questionId: string } | null => {
+  const m = /^answer:([0-9A-Z]{16}):([a-z0-9_]{1,32})$/.exec(owner);
+  return m ? { ticketId: m[1]!, questionId: m[2]! } : null;
+};
+
+/** A picture answer by its stored key (the answer keeps "photo:<key>"). */
+export async function getAnswerPhoto(env: FilesEnv, key: string, partyId: string, ticketId: string, questionId: string): Promise<StoredFile | null | "not_configured"> {
+  const k = parseFileKey(key);
+  if (!k) return null;
+  const store = FileStore.for(env, k.shard);
+  if (!store) return "not_configured";
+  return store.get(k.id, partyId, answerPhotoOwner(ticketId, questionId));
+}
 
 /** A ticket's ID photo by its stored key. */
 export async function getIdPhoto(env: FilesEnv, key: string, partyId: string, ticketId: string): Promise<StoredFile | null | "not_configured"> {
@@ -234,6 +249,10 @@ export const DELETED_REASON = {
   id_rejected: "ID photo deleted 7 days after the request was rejected",
   id_cancelled: "ID photo deleted 7 days after the ticket was cancelled",
   id_orphan: "ID photo of a request that was not stored",
+  photo_party_ended: "picture answer deleted 7 days after the party",
+  photo_rejected: "picture answer deleted 7 days after the request was rejected",
+  photo_cancelled: "picture answer deleted 7 days after the ticket was cancelled",
+  photo_orphan: "picture answer of a request that was not stored",
 } as const;
 
 export interface PurgeReport {
@@ -269,7 +288,7 @@ export async function purgeOldScreenshots(env: FilesEnv, main: SqlDriver, now: n
     const live = (await fd.all<{ id: number; party_id: string; ticket_id: string; created_at: number }>(
       sql`SELECT f.id, f.party_id, f.ticket_id, f.created_at FROM files f INDEXED BY files_meta
         WHERE NOT EXISTS (SELECT 1 FROM file_tombstones d WHERE d.id = f.id)`)).results;
-    const tickets = new Map<string, { party_id: string; screenshot_key: string | null; id_photo_key: string | null; status: string; rejected_at: number | null;
+    const tickets = new Map<string, { party_id: string; screenshot_key: string | null; id_photo_key: string | null; answers: string | null; status: string; rejected_at: number | null;
       cancelled_at: number | null; ends_at: number | null }>();
     // Party pictures are decided by their own rows (party_flyers), screenshots by their tickets.
     const flyerFiles = live.filter((f) => isFlyerOwner(f.ticket_id));
@@ -282,10 +301,11 @@ export async function purgeOldScreenshots(env: FilesEnv, main: SqlDriver, now: n
     }
     const parties = [...new Set(live.filter((f) => !isFlyerOwner(f.ticket_id)).map((f) => f.party_id))];
     if (parties.length) {
-      const rs = await main.batch(chunks(parties, RETENTION.chunk).map((ps) => sql`SELECT t.id, t.party_id, t.screenshot_key, t.id_photo_key, t.status,
+      const rs = await main.batch(chunks(parties, RETENTION.chunk).map((ps) => sql`SELECT t.id, t.party_id, t.screenshot_key, t.id_photo_key,
+          CASE WHEN t.answers LIKE '%"photo:%' THEN t.answers END AS answers, t.status,
           t.rejected_at, t.cancelled_at, COALESCE(p.ends_at, p.starts_at + 43200000) AS ends_at
         FROM tickets t JOIN parties p ON p.id = t.party_id
-        WHERE t.party_id IN (${inList(ps)}) AND (t.screenshot_key IS NOT NULL OR t.id_photo_key IS NOT NULL)`));
+        WHERE t.party_id IN (${inList(ps)}) AND (t.screenshot_key IS NOT NULL OR t.id_photo_key IS NOT NULL OR t.answers LIKE '%"photo:%')`));
       for (const r of rs) for (const t of r.results as Record<string, unknown>[]) tickets.set(String(t.id), t as never);
     }
     const old = now - RETENTION.keepDays * DAY;
@@ -303,6 +323,27 @@ export async function purgeOldScreenshots(env: FilesEnv, main: SqlDriver, now: n
           reason = "flyer_party_ended";
         }
         if (reason) due.push({ id: f.id, party_id: f.party_id, ticket_id: f.ticket_id, reason });
+        continue;
+      }
+      // A picture answer: kept while its ticket's answers point to it, then the ID photo schedule (7 days).
+      const ap = answerPhotoParts(f.ticket_id);
+      if (ap) {
+        const at = tickets.get(ap.ticketId);
+        let held: string | null = null;
+        try { const a = at?.answers ? (JSON.parse(at.answers) as Record<string, unknown>)[ap.questionId] : null; held = typeof a === "string" ? a : null; } catch { held = null; }
+        const pk = held && held.startsWith("photo:") ? parseFileKey(held.slice("photo:".length)) : null;
+        const pOld = now - RETENTION.idDays * DAY;
+        let why: keyof typeof DELETED_REASON | null = null;
+        if (!at || at.party_id !== f.party_id || !pk || pk.shard !== shard || pk.id !== f.id) {
+          if (f.created_at < now - RETENTION.orphanDays * DAY) why = "photo_orphan";
+        } else if (at.ends_at != null && at.ends_at < pOld) {
+          why = "photo_party_ended";
+        } else if (at.status === "rejected" && at.rejected_at != null && at.rejected_at < pOld) {
+          why = "photo_rejected";
+        } else if (at.status === "cancelled" && at.cancelled_at != null && at.cancelled_at < pOld) {
+          why = "photo_cancelled";
+        }
+        if (why) due.push({ id: f.id, party_id: f.party_id, ticket_id: f.ticket_id, reason: why });
         continue;
       }
       if (isIdPhotoOwner(f.ticket_id)) {

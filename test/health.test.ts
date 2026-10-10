@@ -495,7 +495,7 @@ describe("Discord (extra channel for health messages)", () => {
     const p = dc.posts[0]!;
     expect(p.url).toBe(HOOK);
     expect(p.body.allowed_mentions).toEqual({ parse: [] });
-    expect(p.body.content).toBe(`Sahra health: PROBLEM - Database size\nPast 70%: main 400.0 MB of 500.0 MB.\n2026-10-01 18:00 UTC / 2026-10-01 21:00 Cairo\n${ORIGIN}/platform`);
+    expect(p.body.content).toBe(`Sahra health: PROBLEM - Database size\nPast 70%: main 400.0 MB of 500.0 MB.\nThu 01/10/2026, 18:00 UTC / Thu 01/10/2026, 21:00 Cairo\n${ORIGIN}/platform`);
     for (let i = 0; i < 4; i++) { clock.advance(15 * 60_000); await drun(); }
     const sizePosts = () => dc.posts.map((x) => x.body.content.split("\n")[0]).filter((x) => x!.includes("Database size"));
     expect(sizePosts()).toHaveLength(1);
@@ -575,7 +575,7 @@ describe("Discord (extra channel for health messages)", () => {
     clock.advance(15 * 60_000);
     await drun();
     expect(dc.posts).toHaveLength(1);
-    expect(dc.posts[0]!.body.content).toMatch(/^Sahra daily check: all ok\n2026-10-01 18:00 UTC \/ 2026-10-01 21:00 Cairo\n- Change log/);
+    expect(dc.posts[0]!.body.content).toMatch(/^Sahra daily check: all ok\nThu 01\/10\/2026, 18:00 UTC \/ Thu 01\/10\/2026, 21:00 Cairo\n- Change log/);
   });
 
   it("a URL that is not a Discord webhook is ignored and shown as not used; MAINTENANCE posts nothing", async () => {

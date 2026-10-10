@@ -15,6 +15,7 @@
 //  7. Change log (ledger). Not confirmed -> 503 pending; the retry (same sign-up
 //     token, new Turnstile token) finishes it without a second ticket.
 
+import { formatHuman } from "../party/time";
 import { Hono } from "hono/tiny";
 import { flushChangeLog } from "../changelog";
 import { json, readJson, type AppEnv, type Ctx } from "../context";
@@ -565,11 +566,10 @@ guestRoutes.post("/find", async (c) => {
   return json(c, 200, { status: "ok", message: "If this address has tickets, an email with their links is on the way." });
 });
 
-/** "Sat 31 Oct, 22:00" in the party's time zone (English: the email is in English). */
+/** "Sat 31/10/2026, 22:00" in the party's time zone (English: the email is in English; owner: DD/MM/YYYY). */
 function dateIn(ms: number, tz: string | null): string {
   try {
-    return new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
-      timeZone: tz ?? "Africa/Cairo" }).format(ms);
+    return formatHuman(ms, tz ?? "Africa/Cairo").replace(/ \([^)]*\)$/, "");
   } catch {
     return new Date(ms).toISOString().slice(0, 16).replace("T", " ") + " UTC";
   }
