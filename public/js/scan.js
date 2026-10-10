@@ -125,9 +125,9 @@
     if (box) box.focus();
   }
 
-  function manual(x) {
+  async function manual(x) {
     var who = x.name || t("sc_no_name");
-    if (!window.confirm(t("sc_manual_confirm", { name: who, n: x.people > 1 ? t("sc_people", { n: x.people }) : t("one_person") }))) return;
+    if (!(await Sahra.confirm(t("sc_manual_confirm", { name: who, n: x.people > 1 ? t("sc_people", { n: x.people }) : t("one_person") }), { ok: t("sc_manual_go") }))) return;
     lookup = null;
     submit("/api/scan/manual", { ticket_id: x.id });
   }

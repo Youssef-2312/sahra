@@ -468,6 +468,8 @@ var SahraText = {
     q_max: "Up to {n} at a time.",
     q_reason: "Reason: {reason}",
     // Pages the server answers itself: sign-in results and page not found (public/js/notice.js).
+    dlg_ok: "OK",
+    dlg_cancel: "Cancel",
     nt_kicker_signin: "Sign in",
     nt_kicker_404: "Error 404",
     nt_back_signin: "Back to sign in",
@@ -971,6 +973,8 @@ var SahraText = {
     q_bulk_done: "تم {done}، وغير ممكن {refused}.",
     q_max: "حتى {n} في المرة الواحدة.",
     q_reason: "السبب: {reason}",
+    dlg_ok: "موافق",
+    dlg_cancel: "إلغاء",
     nt_kicker_signin: "تسجيل الدخول",
     nt_kicker_404: "خطأ 404",
     nt_back_signin: "العودة إلى تسجيل الدخول",

@@ -153,9 +153,18 @@ var SahraStaff = (function () {
   }
 
   /** The answer under a form; an empty text clears it. */
+  // A success line goes away by itself (owner: about 3 seconds; a long one a little
+  // later so it can be read); errors and warnings stay until the next action.
+  function sayMs(text) { return Math.min(8000, 3000 + Math.max(0, String(text).length - 40) * 50); }
   function say(node, cls, text) {
+    clearTimeout(node._sayTimer);
     node.className = "say" + (text ? " " + cls : "");
     node.textContent = text || "";
+    if (text && cls === "yes") {
+      node._sayTimer = setTimeout(function () {
+        if (node.textContent === text) { node.className = "say"; node.textContent = ""; }
+      }, sayMs(text));
+    }
   }
   function sayBox() { return el("p", { class: "say", attrs: { role: "status", "aria-live": "polite" } }); }
 
@@ -190,12 +199,12 @@ var SahraStaff = (function () {
     var b = el("button", { class: "btn small-btn", text: label || t("s_copy"), attrs: { type: "button" } });
     b.addEventListener("click", async function () {
       try { await navigator.clipboard.writeText(text); b.textContent = t("copied"); }
-      catch (e) { window.prompt(t("s_copy"), text); }
+      catch (e) { await Sahra.ask(t("s_copy"), { value: text }); }
       setTimeout(function () { b.textContent = label || t("s_copy"); }, 2000);
     });
     return b;
   }
 
   return { start: start, act: act, field: field, input: input, select: select, check: check, section: section,
-    say: say, sayBox: sayBox, why: why, local: local, copyButton: copyButton, sleep: sleep, nav: nav, redraw: redraw, tn: tn };
+    say: say, sayMs: sayMs, sayBox: sayBox, why: why, local: local, copyButton: copyButton, sleep: sleep, nav: nav, redraw: redraw, tn: tn };
 })();

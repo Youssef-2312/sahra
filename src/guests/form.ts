@@ -2,19 +2,22 @@
 // answers against it. Everything here is pure (no database).
 //
 //   { "questions": [ { "id": "instagram", "label": "Instagram handle", "type": "text", "required": true },
-//                    { "id": "size", "label": "T-shirt size", "type": "choice", "options": ["S", "M", "L"], "required": false } ],
+//                    { "id": "size", "label": "T-shirt size", "type": "choice", "options": ["S", "M", "L"], "required": false },
+//                    { "id": "costume", "label": "A picture of your costume", "type": "photo", "required": false } ],
 //     "screenshot": "required" | "optional" | "none",
 //     "id_photo": "required" | "optional" | "none",      (default "none")
 //     "instagram": "required" | "optional" | "none" }    (default "none")
 //
 // A party without a form asks only name, email and people, and requires a payment
 // screenshot. The ID photo and Instagram handle are their own fields (stored on the
-// ticket, migrations/0020), not questions.
+// ticket, migrations/0020), not questions. A "photo" question is answered with an
+// uploaded picture (sign-up field q_<id>), stored like an ID photo; the answer keeps
+// "photo:<file key>" (src/routes/guests.ts), shown to staff as a picture.
 
 export interface Question {
   id: string;
   label: string;
-  type: "text" | "choice";
+  type: "text" | "choice" | "photo";
   required: boolean;
   options?: string[];
 }
@@ -46,6 +49,10 @@ export function cleanInstagram(v: unknown): string | null {
 }
 
 const MAX_QUESTIONS = 20;
+/** Picture questions per form (each one more upload in a sign-up). */
+export const MAX_PHOTO_QUESTIONS = 3;
+/** How a picture answer is kept in a ticket's answers: "photo:" + the file key. */
+export const PHOTO_ANSWER = "photo:";
 const MAX_LABEL = 200;
 const MAX_OPTIONS = 20;
 const MAX_OPTION = 100;
@@ -75,7 +82,7 @@ export function parseForm(v: unknown): GuestForm | null {
     if (typeof r.id !== "string" || !/^[a-z0-9_]{1,32}$/.test(r.id) || ids.has(r.id)) return null;
     ids.add(r.id);
     const label = cleanText(r.label, MAX_LABEL);
-    if (!label || (r.type !== "text" && r.type !== "choice")) return null;
+    if (!label || (r.type !== "text" && r.type !== "choice" && r.type !== "photo")) return null;
     if (r.required !== undefined && typeof r.required !== "boolean") return null;
     const question: Question = { id: r.id, label, type: r.type, required: r.required === true };
     if (r.type === "choice") {
@@ -88,6 +95,7 @@ export function parseForm(v: unknown): GuestForm | null {
     }
     out.push(question);
   }
+  if (out.filter((q) => q.type === "photo").length > MAX_PHOTO_QUESTIONS) return null;
   return { questions: out, screenshot, id_photo: idPhoto, instagram };
 }
 
@@ -115,6 +123,11 @@ export function checkAnswers(form: GuestForm, v: unknown): Record<string, string
   const out: Record<string, string> = {};
   for (const q of form.questions) {
     const raw = g[q.id];
+    // Picture answers come as files (checked by the sign-up route), never as text.
+    if (q.type === "photo") {
+      if (raw !== undefined && raw !== null && raw !== "") return null;
+      continue;
+    }
     if (raw === undefined || raw === null || (typeof raw === "string" && raw.trim() === "")) {
       if (q.required) return null;
       continue;

@@ -27,6 +27,7 @@ async function fixture(role, lang = 'en', width = 390) {
   await context.addInitScript(lang => localStorage.setItem('sahra_lang', lang), lang);
   const page = await context.newPage(), errors = [], requests = [], posts = [];
   page.on('pageerror', e => errors.push(e.message));
+  page.on('dialog', d => { errors.push(`browser pop-up instead of the site dialog: ${d.message()}`); d.dismiss(); });
   page.on('console', m => { if (m.type() === 'error' && !m.text().startsWith('Failed to load resource:')) errors.push(m.text()); });
   const state = { pending: false, mine: [], parties: [structuredClone(emptyParty)], organisers: [] };
   await page.route('**/api/**', async route => {
@@ -114,8 +115,8 @@ try {
   await party.locator('.s-disable input').fill(emptyParty.name);
   await party.getByRole('button', { name: 'Disable party', exact: true }).click();
   await party.getByRole('button', { name: 'Enable party', exact: true }).waitFor();
-  o.page.once('dialog', d => d.accept());
   await party.getByRole('button', { name: 'Enable party', exact: true }).click();
+  await o.page.locator('dialog.dlg button[type=submit]').click();
   await party.getByRole('button', { name: 'Disable party...', exact: true }).waitFor();
   await party.locator('summary').click();
   await party.locator('[name=name]').fill('New local owner');
@@ -125,11 +126,12 @@ try {
   const invite = o.posts.find(p => p.path.endsWith('/owner-invite'));
   assert.match(invite.body.staff_id, /^[0-9a-f-]{36}$/);
   assert.match(invite.body.invite_id, /^[0-9a-f-]{36}$/);
-  o.page.once('dialog', d => d.dismiss());
+  // The site's own dialog (no browser pop-ups): Cancel changes nothing, the red button confirms.
   await o.page.getByRole('button', { name: 'Remove site owner', exact: true }).click();
+  await o.page.locator('dialog.dlg').getByRole('button', { name: 'Cancel', exact: true }).click();
   assert.equal(o.posts.some(p => p.path.endsWith('/remove')), false);
-  o.page.once('dialog', d => d.accept());
   await o.page.getByRole('button', { name: 'Remove site owner', exact: true }).click();
+  await o.page.locator('dialog.dlg button[type=submit]').click();
   await o.page.locator('#owners .say.yes').waitFor();
   assert.ok(o.posts.some(p => p.path.endsWith('/remove')));
   assert.deepEqual(o.errors, []); await o.context.close();

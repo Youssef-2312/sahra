@@ -22,7 +22,7 @@
   function roleName(r) { return t("tm_role_" + r); }
 
   async function run(id, path, body, confirmText, done) {
-    if (confirmText && !window.confirm(confirmText)) return;
+    if (confirmText && !(await Sahra.confirm(confirmText, { danger: true }))) return;
     var r = await S.act(path, body || {});
     notes[id] = r.ok ? ["yes", done] : ["no", r.body && r.body.error === "not_allowed" ? t("tm_not_allowed") : S.why(r)];
     await load();

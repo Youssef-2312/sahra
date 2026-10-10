@@ -54,7 +54,7 @@
 
   async function doors(action) {
     if (busy) return;
-    if (action === "pause" && !window.confirm(t("d_pause_confirm"))) return;
+    if (action === "pause" && !(await Sahra.confirm(t("d_pause_confirm"), { danger: true }))) return;
     busy = true;
     // A pending answer (503) is retried with the same body, as everywhere else.
     for (var i = 0; i < 5; i++) {
@@ -63,7 +63,7 @@
       await new Promise(function (ok) { setTimeout(ok, 1500); });
     }
     busy = false;
-    if (!r.ok) window.alert(Sahra.errorText(r));
+    if (!r.ok) await Sahra.notify(Sahra.errorText(r));
     await load();
   }
 

@@ -133,6 +133,38 @@ var Sahra = (function () {
   }
 
   /** The browser tab, Nova's way: "Page | Sahra"; the home page is "Sahra | Private party tickets". */
+  // ------------------------------------------------------------- dialogs
+  // The site's own confirm / alert / prompt (owner: no plain browser pop-ups): a
+  // modal <dialog> in the site's look, so focus stays inside, Escape cancels and
+  // Arabic reads right to left. Each returns a promise.
+  //   Sahra.confirm(text, { ok, danger })  -> true / false
+  //   Sahra.notify(text)                   -> resolves when closed
+  //   Sahra.ask(text, { value, ok })        -> the typed text, or null if cancelled
+  function dialog(o) {
+    return new Promise(function (done) {
+      var input = o.input ? el("input", { class: "dlg-input", attrs: { type: "text", dir: "auto", value: o.value || "", "aria-label": o.text } }) : null;
+      var ok = el("button", { class: "btn small-btn " + (o.danger ? "no" : "primary"), text: o.ok || t("dlg_ok"), attrs: { type: "submit", value: "ok" } });
+      var cancel = o.alert ? null : el("button", { class: "btn small-btn", text: t("dlg_cancel"), attrs: { type: "button" } });
+      var form = el("form", { attrs: { method: "dialog" } },
+        el("p", { class: "dlg-text", text: o.text }), input,
+        el("div", { class: "dlg-actions" }, cancel, ok));
+      var d = el("dialog", { class: "dlg", attrs: { "aria-label": o.text } }, form);
+      var answered = false;
+      function finish(v) { if (answered) return; answered = true; d.close(); d.remove(); done(v); }
+      form.addEventListener("submit", function (e) { e.preventDefault(); finish(o.input ? input.value : true); });
+      if (cancel) cancel.addEventListener("click", function () { finish(o.input ? null : false); });
+      // Escape, or the browser closing it: the same as Cancel.
+      d.addEventListener("cancel", function (e) { e.preventDefault(); finish(o.alert ? true : o.input ? null : false); });
+      document.body.appendChild(d);
+      d.showModal();
+      (input || ok).focus();
+      if (input) input.select();
+    });
+  }
+  function confirmBox(text, opts) { return dialog({ text: text, ok: opts && opts.ok, danger: opts && opts.danger }); }
+  function notify(text) { return dialog({ text: text, alert: true }); }
+  function ask(text, opts) { return dialog({ text: text, input: true, value: opts && opts.value, ok: opts && opts.ok }); }
+
   /**
    * The one sign-in (brainstorm idea 27; owner: one sign-in for everyone who runs
    * parties): a photo panel and one "Continue with Google". The server finds what
@@ -332,5 +364,5 @@ var Sahra = (function () {
   }
 
   return { t: t, el: el, clear: clear, api: api, errorText: errorText, money: money, amount: amount, when: when, time: time, rel: rel,
-    lang: lang, boot: boot, store: store, SESSION_KEY: SESSION_KEY, token: token, title: title, problem: problem, signinView: signinView, contactCard: contactCard, ref: function (id) { return id ? "SAH-" + String(id).slice(0, 6) : ""; } };
+    lang: lang, boot: boot, store: store, SESSION_KEY: SESSION_KEY, token: token, title: title, problem: problem, signinView: signinView, confirm: confirmBox, notify: notify, ask: ask, contactCard: contactCard, ref: function (id) { return id ? "SAH-" + String(id).slice(0, 6) : ""; } };
 })();

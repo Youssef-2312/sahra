@@ -48,7 +48,7 @@
   }
 
   async function run(x, action, body, confirmText) {
-    if (confirmText && !window.confirm(confirmText)) return;
+    if (confirmText && !(await Sahra.confirm(confirmText, { danger: true }))) return;
     var key = action + ":" + x.id;
     var path = "/api/tickets/" + encodeURIComponent(x.id) + "/" + action;
     var r = await S.act(path, action === "resend" ? {} : Object.assign({ op: opFor(key) }, body || {}));
@@ -348,7 +348,7 @@
 
   async function runImport(ok) {
     if (imp.busy) return;
-    if (!window.confirm(imp.release ? t("g_imp_sum_send", { n: ok.length }) + "?" : t("g_imp_sum_add", { n: ok.length }) + "?")) return;
+    if (!(await Sahra.confirm(imp.release ? t("g_imp_sum_send", { n: ok.length }) + "?" : t("g_imp_sum_add", { n: ok.length }) + "?"))) return;
     imp.busy = true; imp.error = null; redrawImport();
     while (imp.sent < ok.length) {
       var part = ok.slice(imp.sent, imp.sent + CHUNK);
@@ -414,7 +414,7 @@
         refundBusy[x.ticket_id] = true; b.disabled = true;
         var r = await S.act("/api/party/refunds/" + encodeURIComponent(x.ticket_id), { state: done ? "due" : "done" });
         delete refundBusy[x.ticket_id];
-        if (!r.ok) { window.alert(S.why(r)); b.disabled = false; return; }
+        if (!r.ok) { await Sahra.notify(S.why(r)); b.disabled = false; return; }
         await loadRefunds();
       });
       return el("li", { class: done ? "off" : null },
@@ -472,7 +472,7 @@
         holdBusy[key] = true; b.disabled = true;
         var r = await S.act("/api/recovery/" + kind + "/" + encodeURIComponent(x.id) + "/release-hold", { reason: reason.value.trim() });
         delete holdBusy[key];
-        if (!r.ok) { window.alert(S.why(r)); b.disabled = false; return; }
+        if (!r.ok) { await Sahra.notify(S.why(r)); b.disabled = false; return; }
         await loadHolds();
       });
       var what = kind === "tickets"

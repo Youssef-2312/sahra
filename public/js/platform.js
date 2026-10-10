@@ -53,7 +53,7 @@
   // Prevent concurrent clicks, and lock a form until that request is confirmed.
   async function act(key, path, body, refresh, success, confirmKey, redirect) {
     if (busy[key] || (pending[key] && pending[key].path !== path)) return;
-    if (!pending[key] && confirmKey && !window.confirm(t(confirmKey))) return;
+    if (!pending[key] && confirmKey && !(await Sahra.confirm(t(confirmKey), { danger: true }))) return;
     var request = pending[key] || { path: path, body: body || {}, refresh: refresh, success: success, redirect: redirect };
     pending[key] = request;
     busy[key] = true;
@@ -68,6 +68,11 @@
     // Network errors, pending writes and server errors can have applied the change.
     if (r.ok || (r.status >= 400 && r.status < 500)) delete pending[key];
     notes[key] = r.ok ? { ok: true, key: success || "s_saved" } : { ok: false, result: r };
+    // The success line clears itself, like on the party pages.
+    if (r.ok && !redirect) {
+      var shown = notes[key];
+      setTimeout(function () { if (notes[key] === shown) { delete notes[key]; render(); } }, S.sayMs(t(shown.key)));
+    }
     if (r.ok && redirect) {
       if (redirect === "/dashboard") Sahra.store.set(Sahra.SESSION_KEY, "party");
       if (key === "logout") Sahra.store.del(Sahra.SESSION_KEY);
