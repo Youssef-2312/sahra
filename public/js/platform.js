@@ -245,6 +245,14 @@
         notice(key));
     })) : empty("p_no_owners");
   }
+  // The name on the sign-in button and in your teams (owner: a normal name, not the Gmail address).
+  function yourName() {
+    var who = me.site_owner || me.organiser;
+    return form("myname", [S.field(t("p_your_name"), S.input("name", "text", { required: true, maxlength: 80, dir: "auto", value: who.name.indexOf("@") > 0 ? "" : who.name, autocomplete: "name" }), t("p_your_name_hint"))], "s_save", function (v) {
+      if (v.name.indexOf("@") >= 0) { notes.myname = { ok: false, result: { status: 400, body: { error: "name_is_email" } } }; render(); return; }
+      return act("myname", "/api/platform/me/name", { name: v.name }, null, "p_name_saved", null, "/platform");
+    });
+  }
   function createParty() {
     return form("create", [S.field(t("p_party_id"), S.input("id", "text", { required: true, minlength: 3, maxlength: 24, pattern: "[a-z0-9][a-z0-9\\-]{1,22}[a-z0-9]", dir: "ltr", autocapitalize: "none", spellcheck: "false" }), t("p_party_id_hint")),
       S.field(t("s_name"), S.input("name", "text", { required: true, maxlength: 80, dir: "auto" })),
@@ -273,7 +281,7 @@
     app.appendChild(el("nav", { class: "staff-nav", attrs: { "aria-label": t("p_nav") } }, navItems.map(function (n) { return el("a", { text: t(n[1]), attrs: { href: "#" + n[0] } }); }),
       action("logout", "/api/platform/logout", {}, null, null, null, "s_sign_out", "staff-out", "/platform")));
     app.appendChild(el("header", { class: "staff-head" }, el("div", null,
-      el("p", { class: "label-line", text: (me.site_owner || me.organiser).name, attrs: { dir: "auto" } }),
+      el("p", { class: "label-line", text: (me.site_owner || me.organiser).name.split("@")[0], attrs: { dir: "auto" } }),
       el("h1", { text: t(me.site_owner ? "p_site_owner" : "p_title") }),
       el("p", { class: "muted lede", text: t(me.site_owner ? "p_owner_intro" : "p_organiser_intro") }))));
     app.appendChild(notice("logout"));
@@ -282,7 +290,8 @@
       S.section("mine", t("p_my_parties"), t("p_mine_intro"), content("teams", function (d) {
         return d.teams.length ? el("ul", { class: "g-list" }, d.teams.map(teamRow)) : empty(me.organiser ? "p_no_parties_yet" : "p_no_parties");
       })),
-      me.organiser ? S.section("create", t("p_create"), t("p_create_intro"), createParty()) : null));
+      el("div", null, me.organiser ? S.section("create", t("p_create"), t("p_create_intro"), createParty()) : null,
+        S.section("myname", t("p_your_name"), t("p_your_name_intro"), yourName()))));
     if (me.site_owner) {
       app.appendChild(S.section("health", t("p_health"), t("p_health_intro"), content("health", health)));
       app.appendChild(el("div", { class: "g-cols" },

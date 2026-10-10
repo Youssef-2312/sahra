@@ -938,7 +938,8 @@ main.staff { padding-top: 16px; }
 /* Shared visual polish: clearer hierarchy and navigation, solid surfaces. */
 .topbar { flex-wrap: wrap; }
 .topbar-end { margin-inline-start: auto; min-width: 0; }
-.topbar-end .small-btn { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* A long name ends in "…" (an inline-flex box would only clip it). */
+.topbar-end .small-btn { display: inline-block; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 32px; vertical-align: middle; }
 .public-nav { display: flex; flex-basis: 100%; justify-content: center; gap: 24px; border-top: 1px solid var(--line); }
 .public-nav a { display: inline-flex; align-items: center; min-height: 44px; color: var(--muted); font-size: 14px; text-decoration: none; border-bottom: 2px solid transparent; }
 .public-nav a:hover, .public-nav a[aria-current="page"] { color: var(--text); border-bottom-color: var(--accent); }

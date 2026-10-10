@@ -194,12 +194,18 @@ var Sahra = (function () {
     applyLang();
     var brand = el("a", { class: "brand", attrs: { href: "/" } }, el("img", { attrs: { src: "/img/sahra-mark.svg", alt: "", width: 28, height: 28 } }), "Sahra");
     var account = el("a", { class: "btn small-btn", attrs: { href: me ? (me.staff.role === "door" ? "/scan.html" : "/dashboard.html") : "/signin.html" } });
+    // The signed-in person's name on the button; never a whole email address (owner), and the full name on hover.
+    function showName(n) {
+      n = String(n || "");
+      account.textContent = n.indexOf("@") > 0 ? n.slice(0, n.indexOf("@")) : n;
+      account.setAttribute("title", n);
+    }
     var sw = el("button", { class: "lang-switch", attrs: { type: "button" } });
     var foot = el("footer", { class: "site-footer" });
     var publicNav = el("nav", { class: "public-nav" });
     var navItems = [["tab_home", "/"], ["about", "/about.html"], ["contact", "/contact.html"]];
     function label() {
-      account.textContent = me ? (me.staff ? me.staff.name : me.name) : t("sign_in");
+      if (me) showName(me.staff ? me.staff.name : me.name); else account.textContent = t("sign_in");
       sw.textContent = t("lang_other");
       sw.setAttribute("lang", lang() === "en" ? "ar" : "en");
       publicNav.replaceChildren();
@@ -218,7 +224,7 @@ var Sahra = (function () {
       if (renderFn) renderFn();
     });
     label();
-    if (!me) signedIn(function (who) { me = who; account.textContent = who.name; account.setAttribute("href", who.href); });
+    if (!me) signedIn(function (who) { me = who; showName(who.name); account.setAttribute("href", who.href); });
     document.body.insertBefore(el("div", { class: "topbar-shell" }, el("header", { class: "topbar" }, brand, el("span", { class: "topbar-end" }, sw, account))), document.body.firstChild);
     if (!opts || opts.footer !== false) document.querySelector(".topbar").appendChild(publicNav);
     motion();

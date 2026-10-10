@@ -780,3 +780,17 @@ turns the ticket page's real QR into fake camera video (ffmpeg), joins as door
 staff and scans. Passes only if the first read is admitted and every later read of
 the same code is "used". Replaces an old scratch script that no longer matched the
 rebuilt join page.
+
+### Your name on the sign-in button (10 October 2026)
+
+Owner: the top-bar button showed the Gmail address (the name given at
+create-site-owner) and a long one looked bad. Now:
+- My parties has a "Your name" card (`POST /api/platform/me/name`): a normal name,
+  1 to 80 characters, not an email. It is set on every row of that Google account
+  (site owner, party-owner permission, active team rows), only while the My parties
+  session is live (checked in each statement), audited, revs up so the change log
+  records it.
+- The button never shows a whole email address (only the part before @), the full
+  name is on hover, and a long name ends in "…" (it was clipped because an
+  inline-flex box ignores text-overflow).
+- Test: `test/platform.test.ts` ("your own name").
