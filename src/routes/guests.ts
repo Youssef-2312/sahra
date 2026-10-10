@@ -23,7 +23,7 @@ import { D1Driver } from "../db/driver";
 import { sql } from "../db/sql";
 import { GuestDb, type SignupParty, type SignupRefusal } from "../guests/db";
 import { emailTemplates, findEmail, groupNote, linkEmail } from "../guests/emails";
-import { checkAnswers, cleanInstagram, storedForm } from "../guests/form";
+import { checkAnswers, cleanInstagram, MAX_PHOTO_QUESTIONS, PHOTO_ANSWER, storedForm } from "../guests/form";
 import { currentPolicy, samePolicy, shownPolicy, type Policy } from "../guests/policy";
 import { linkPath, signLink, verifyLink } from "../guests/link";
 import { referenceOf } from "../guests/reference";
@@ -37,7 +37,7 @@ import { visiblePartyDetails } from "../party/details";
 import { FlyerDb, flyerUrl, isFlyerId } from "../party/flyers";
 import { getFlyerFile } from "../storage";
 import { signQr } from "../qr";
-import { FileStore, idPhotoOwner, MAX_FILE_BYTES, sniffImage, uploadTarget, type FilesCapacity } from "../storage";
+import { answerPhotoOwner, FileStore, idPhotoOwner, MAX_FILE_BYTES, sniffImage, uploadTarget, type FilesCapacity } from "../storage";
 
 export const guestRoutes = new Hono<AppEnv>();
 
@@ -46,8 +46,8 @@ const PARTY_RE = /^[a-z0-9-]{3,24}$/;
 /** Separate tickets in one request (each its own QR code; migrations/0022). */
 export const MAX_ORDER_TICKETS = 10;
 // A payment screenshot and an ID photo, plus the form fields.
-// The proof of payment plus one ID photo per ticket of the largest order, plus the text fields.
-const MAX_SIGNUP_BYTES = (1 + MAX_ORDER_TICKETS) * MAX_FILE_BYTES + 64 * 1024;
+// The proof of payment, one ID photo per ticket of the largest order and the picture answers, plus the text fields.
+const MAX_SIGNUP_BYTES = (1 + MAX_ORDER_TICKETS + MAX_PHOTO_QUESTIONS) * MAX_FILE_BYTES + 64 * 1024;
 const MAX_ANSWERS_JSON = 16 * 1024;
 /** One "resend my link" email per address per party per window (see GuestDb.addLinkEmail). */
 const LINK_EMAIL_WINDOW_MS = 10 * 60_000;
@@ -88,6 +88,13 @@ async function signupIds(partyId: string, token: string) {
 /** The file id of the ID photo of an order's i-th other ticket (1, 2...): from the same token, so a retry is the same file. */
 async function friendIdFileId(partyId: string, token: string, i: number) {
   const h = await sha256(`sahra-idphoto-v1|${partyId}|${token}|${i}`);
+  let m = 0;
+  for (const b of h.subarray(0, 6)) m = m * 256 + b;
+  return m + 1;
+}
+/** The file id of the picture answering question `qid`: from the same token, so a retry is the same file. */
+async function answerPhotoFileId(partyId: string, token: string, qid: string) {
+  const h = await sha256(`sahra-answerphoto-v1|${partyId}|${token}|${qid}`);
   let m = 0;
   for (const b of h.subarray(0, 6)) m = m * 256 + b;
   return m + 1;
@@ -356,7 +363,7 @@ guestRoutes.post("/parties/:party/signup", async (c) => {
     }
   }
   type Image = { bytes: Uint8Array; type: NonNullable<ReturnType<typeof sniffImage>> };
-  const image = async (v: File | string | null, what: "screenshot" | "id_photo"): Promise<Image | null | Response> => {
+  const image = async (v: File | string | null, what: "screenshot" | "id_photo" | "photo"): Promise<Image | null | Response> => {
     if (v === null) return null;
     if (typeof v === "string") return json(c, 400, { error: "invalid_request" });
     if (v.size > MAX_FILE_BYTES) return json(c, 413, { error: "too_large", max_screenshot_bytes: MAX_FILE_BYTES });
@@ -377,6 +384,16 @@ guestRoutes.post("/parties/:party/signup", async (c) => {
     if (f instanceof Response) return f;
     friendIds.push(f);
   }
+  // Pictures answering "photo" questions: field q_<question id>, checked against the form below.
+  const answerPhotos = new Map<string, Image>();
+  for (const [k, v] of form.entries()) {
+    if (!k.startsWith("q_")) continue;
+    const qid = k.slice(2);
+    if (!/^[a-z0-9_]{1,32}$/.test(qid) || answerPhotos.has(qid) || answerPhotos.size >= MAX_PHOTO_QUESTIONS) return json(c, 400, { error: "invalid_request" });
+    const f = await image(v, "photo");
+    if (f instanceof Response) return f;
+    if (f) answerPhotos.set(qid, f);
+  }
   // The Instagram handle as typed ("@name", a profile link...), reduced to the handle.
   const instaField = form.get("instagram");
   const instaGiven = typeof instaField === "string" && instaField.trim() !== "";
@@ -384,7 +401,7 @@ guestRoutes.post("/parties/:party/signup", async (c) => {
   if (instaGiven && !instagram) return json(c, 400, { error: "invalid_instagram" });
   // Fail closed: without the files database a screenshot or ID photo cannot be kept.
   const anyFriendId = friendIds.some((x) => x !== null);
-  if ((shot || idPhoto || anyFriendId) && !c.env.FILES) return json(c, 503, { error: "uploads_not_configured" });
+  if ((shot || idPhoto || anyFriendId || answerPhotos.size) && !c.env.FILES) return json(c, 503, { error: "uploads_not_configured" });
 
   const bot = await verifyTurnstile(c.var.deps.fetch, c.env, form.get("cf-turnstile-response"), ip);
   if (bot !== "ok") return turnstileAnswer(c, bot);
@@ -420,6 +437,11 @@ guestRoutes.post("/parties/:party/signup", async (c) => {
   const pf = storedForm(party.guest_form);
   const answers = checkAnswers(pf, answersRaw);
   if (!answers) return json(c, 400, { error: "invalid_answers" });
+  // Each picture must answer one of the form's picture questions; required ones must have one.
+  const photoQs = pf.questions.filter((q) => q.type === "photo");
+  for (const qid of answerPhotos.keys()) if (!photoQs.some((q) => q.id === qid)) return json(c, 400, { error: "invalid_answers" });
+  const missingPhoto = photoQs.find((q) => q.required && !answerPhotos.has(q.id));
+  if (missingPhoto) return json(c, 400, { error: "photo_required", question: missingPhoto.id });
   // People per ticket: the chosen type's own limits (a group ticket, a single one), else the party's.
   if (people > party.max_people) return json(c, 400, { error: "too_many_people", max_people_per_ticket: party.max_people });
   if (people < party.min_people) return json(c, 400, { error: "too_few_people", min_people: party.min_people });
@@ -444,7 +466,7 @@ guestRoutes.post("/parties/:party/signup", async (c) => {
   if (party.type_left !== null && party.type_left < people * count) return refusal(c, "type_full");
   if (party.held + people * count > party.capacity) return json(c, 409, { error: "full", message: REFUSAL.full.message });
   // Every files database past 70% (or unreadable): no new screenshots (fail closed; health alerts the owner).
-  const target = shot || idPhoto || anyFriendId ? await uploadTarget(c.env, now) : null;
+  const target = shot || idPhoto || anyFriendId || answerPhotos.size ? await uploadTarget(c.env, now) : null;
   if (target && target.state !== "ok") {
     return json(c, 503, target.state === "full"
       ? { error: "uploads_full", message: "Screenshot uploads are paused for a moment. Please try again later." }
@@ -465,6 +487,13 @@ guestRoutes.post("/parties/:party/signup", async (c) => {
     idPhotoKey = await FileStore.for(c.env, target!.writable!)!.put({
       id: idFileId, partyId, ticketId: idPhotoOwner(ticketId), type: idPhoto.type, bytes: idPhoto.bytes, now,
     });
+  }
+  // Picture answers are kept on the first ticket, as the other answers; the answer holds the file key.
+  for (const [qid, f] of answerPhotos) {
+    const key = await FileStore.for(c.env, target!.writable!)!.put({
+      id: await answerPhotoFileId(partyId, token, qid), partyId, ticketId: answerPhotoOwner(ticketId, qid), type: f.type, bytes: f.bytes, now,
+    });
+    answers[qid] = PHOTO_ANSWER + key;
   }
   const others = await orderIds(partyId, token, count);
   const friendKeys: (string | null)[] = [];
