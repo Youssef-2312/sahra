@@ -61,6 +61,8 @@
     if (r.body.party) party = r.body.party;
     var text = t("s_saved");
     if (r.body.notices_queued) text += " " + S.tn("s_notices_queued", r.body.notices_queued);
+    // Emojis are taken out of party texts (they cannot go into guest emails): say so, and keep the note up.
+    if (r.body.emojis_removed) { rebuild(id, ["maybe", text + " " + t("s_emojis_removed")]); return true; }
     rebuild(id, ["yes", text]);
     return true;
   }

@@ -162,12 +162,15 @@ describe("edit input", () => {
   it("refuses unsafe or malformed values", () => {
     const bad: Record<string, unknown>[] = [
       { map_url: "http://maps.example.com/x" }, { map_url: "javascript:alert(1)" }, { map_url: "https://user:pw@maps.example.com/" },
-      { map_url: "data:text/html,x" }, { name: "" }, { name: "Party \u{1F389}" }, { address: "x".repeat(301) },
+      { map_url: "data:text/html,x" }, { name: "" }, { name: "\u{1F389}" }, { address: "x".repeat(301) },
       { time_zone: "Mars/Base" }, { starts_at: 1_700_000_000 }, { starts_at: "2026-10-31" }, { address_mode: "secret" },
       { capacity: -1 }, { capacity: 1.5 }, { max_people_per_ticket: 0 }, { starts_at_local: "2026-10-31T21:00" },
       { surprise: 1 }, {}, { notify_guests: "yes", name: "x" }, { description: "a\u0000b" },
     ];
     for (const b of bad) expect(parseEdit(b).ok, JSON.stringify(b)).toBe(false);
+    // Emojis are taken out (rule 6: none in pages or emails), the rest is kept (owner: a Halloween emoji made the rules refuse to save).
+    expect(parseEdit({ name: "Party \u{1F389}", rules: "No drugs \u{1F383}\u{1F47B}\nNo fights \u2764\uFE0F" })).toEqual({ ok: true, notify: false,
+      values: { name: "Party", rules: "No drugs\nNo fights" } });
     const ok = parseEdit({ starts_at_local: "2026-10-31T21:00", time_zone: "Africa/Cairo", map_url: "https://maps.example.com/?q=a b", description: "" });
     expect(ok).toEqual({ ok: true, notify: false, values: {
       starts_at: Date.UTC(2026, 9, 31, 19, 0), time_zone: "Africa/Cairo", map_url: "https://maps.example.com/?q=a%20b", description: null,

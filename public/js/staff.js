@@ -168,13 +168,19 @@ var SahraStaff = (function () {
   }
   function sayBox() { return el("p", { class: "say", attrs: { role: "status", "aria-live": "polite" } }); }
 
+  var FIELD_LABELS = { name: "s_name", description: "s_description", venue_name: "s_venue", address: "s_address", map_url: "s_map",
+    rules: "s_entry_rules", cancellation_policy: "s_cancellation", payment_instructions: "s_payment", capacity: "s_capacity",
+    max_people_per_ticket: "s_people", review_time: "s_review_time", support_phone: "s_contact_phone", support_email: "s_contact_email" };
+
   /** Words for a refused staff action: the server's code when known, else a general line. */
   function why(r) {
     if (r.status === 503) return t("s_not_confirmed");
     var code = r.body && r.body.error;
     if (typeof code === "string") {
       var k = code.indexOf("invalid_field:") === 0 ? (SahraText.en["e_" + code.replace(":", "_")] ? "e_" + code.replace(":", "_") : "e_invalid_field") : "e_" + code;
-      if (SahraText.en[k]) return t(k, { field: code.split(":")[1] || "", held: r.body.held, max: r.body.max });
+      // The field by its label on the page ("Entry rules and dress code"), not its code name.
+      var f = code.split(":")[1] || "", label = FIELD_LABELS[f];
+      if (SahraText.en[k]) return t(k, { field: label ? t(label) : f, held: r.body.held, max: r.body.max });
     }
     return Sahra.errorText(r);
   }

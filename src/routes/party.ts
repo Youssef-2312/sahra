@@ -16,7 +16,7 @@ import { isTypeId } from "../guests/types";
 import { chargeStaff } from "../limits";
 import { PartyDb } from "../party/db";
 import { doorView, staffView, visiblePartyDetails, type Viewer } from "../party/details";
-import { parseEdit, text, TIME_OR_PLACE } from "../party/input";
+import { hasEmoji, parseEdit, text, TIME_OR_PLACE } from "../party/input";
 import { pauseAdmission } from "./admission";
 import { isBase32 } from "../lib/crypto";
 import { announceText, AUDIENCES, noticeText, type Audience } from "../party/notice";
@@ -73,6 +73,8 @@ partyRoutes.post("/details", requireAuth(["owner", "admin"]), async (c) => {
     status: r.status,
     party: p ? staffView(p, now) : null,
     ...(r.notices !== null ? { notices_queued: r.notices, notices_not_queued: r.notices_not_queued } : {}),
+    // Emojis are removed from owner text (rule 6); the page says so.
+    ...(Object.values(b).some(hasEmoji) ? { emojis_removed: true } : {}),
   });
 });
 

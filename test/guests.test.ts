@@ -569,10 +569,13 @@ describe("owner-editable guest emails", () => {
     const h = await harness();
     const { party, os } = await guestParty(h);
     const edit = (b: Record<string, unknown>) => h.req("/api/party/details", api(os, b));
-    // The link placeholder is required; unknown placeholders and emojis are refused.
+    // The link placeholder is required; unknown placeholders are refused; emojis are taken out.
     expect((await edit({ email_ticket_body: "Hi {guest_name}, see you there" })).status).toBe(400);
     expect((await edit({ email_ticket_body: "Hi {guest_name}: {link} {secret}" })).status).toBe(400);
-    expect((await edit({ email_ticket_body: "Hi {guest_name} \u{1F389} {link}" })).status).toBe(400);
+    const emo = await edit({ email_ticket_body: "Hi {guest_name} \u{1F389} {link}" });
+    expect(emo.status).toBe(200);
+    expect(await emo.json()).toMatchObject({ emojis_removed: true });
+    expect(await env.DB.prepare("SELECT email_ticket_body FROM parties WHERE id = ?").bind(party).first("email_ticket_body")).toBe("Hi {guest_name} {link}");
     const body = "Ahlan {guest_name}!\n\nYou're in for {party_name}. Your QR:\n{link}\n\n{people_note}\n\nSee you at the door.";
     expect((await edit({ email_ticket_subject: "{party_name}: you're in", email_ticket_body: body })).status).toBe(200);
 

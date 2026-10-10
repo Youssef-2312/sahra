@@ -73,7 +73,7 @@ describe("ticket types", () => {
   it("refuses bad input, a sales window that closes before it opens, and places below the people holding them", async () => {
     const h = await harness();
     const { party, os } = await guestParty(h);
-    for (const bad of [{ name: "" }, { name: "Early", price: -1 }, { name: "Early", price: 1.5 }, { name: "VIP \u{1F389}" },
+    for (const bad of [{ name: "" }, { name: "Early", price: -1 }, { name: "Early", price: 1.5 }, { name: "\u{1F389}" },
       { name: "Early", quantity: 0 }, { name: "Early", colour: "red" }, { name: "Early", staff_only: "yes" }]) {
       expect((await newType(h, os, bad)).status, JSON.stringify(bad)).toBe(400);
     }
@@ -361,7 +361,8 @@ describe("search, resend, announcements, stats", () => {
     expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM audit WHERE party_id = ? AND action = 'announcement_queued'").bind(party).first("n")).toBe(1);
     const all = await h.req("/api/party/announce", api(os, { op: newId(), subject: "Hi", body: "Hello all", audience: "everyone" }));
     expect(((await all.json()) as { queued: number }).queued).toBe(2);
-    expect((await h.req("/api/party/announce", api(os, { op: newId(), subject: "Hi \u{1F389}", body: "x" }))).status).toBe(400);
+    // An emoji-only subject is empty once emojis are taken out.
+    expect((await h.req("/api/party/announce", api(os, { op: newId(), subject: "\u{1F389}", body: "x" }))).status).toBe(400);
     expect((await h.req("/api/party/announce", api(os, { op: newId(), subject: "Hi", body: "x", audience: "rejected" }))).status).toBe(400);
   });
 
