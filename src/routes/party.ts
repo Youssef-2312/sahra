@@ -205,7 +205,7 @@ partyRoutes.get("/stats", requireAuth(["owner", "admin", "door"]), async (c) => 
     released: sum("released"),
     inside: sum("admitted"),
     admitted_tickets: sum("admitted_tickets"),
-    // Whole EGP: price per person shown at request time x people (staff-issued complimentary = 0).
+    // Whole EGP: the price shown at request time, x people unless the type is a package (staff-issued complimentary = 0).
     money_expected: sum("money_approved"),
     money_pending: sum("money_pending"),
     // Of the money expected, what was paid in cash to the organiser (migrations/0027).

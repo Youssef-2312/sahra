@@ -269,7 +269,7 @@
   // Payment instructions and the total follow the chosen ticket and the number of people.
   // A type of a fixed group size (Duo: exactly 2) is priced as a package: its price
   // is for the whole ticket. Other types are priced per person.
-  function isPackage(x) { return x.min_people > 1 && x.min_people === x.max_people; }
+  function isPackage(x) { return !!x.package; }
   function priceUnit(x) { return isPackage(x) ? t("per_package", { n: x.min_people }) : t("per_person"); }
   function ticketPrice(x, people) { return (x.price || 0) * (isPackage(x) ? 1 : people); }
 

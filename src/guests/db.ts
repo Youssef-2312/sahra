@@ -18,7 +18,7 @@ import { audit, sessionValid, type SessionRef } from "../db/index";
 import { inList, join, sql, type Sql } from "../db/sql";
 import { isBase32 } from "../lib/crypto";
 import { outboxInsert, type OutboxRow } from "../outbox";
-import { hasPublicTypes, onSale, peopleOk, typeApproved, typeHeld } from "./types";
+import { hasPublicTypes, onSale, peopleOk, ticketTotal, typeApproved, typeHeld } from "./types";
 
 const MANAGERS = ["owner", "admin"] as const;
 
@@ -324,7 +324,7 @@ export class GuestDb {
     // same_email: the address's other pending/approved tickets (the duplicate warning; index tickets_party_email).
     const r = await this.driver.all(sql`SELECT t.id, t.status, t.people, t.guest_name, t.guest_email, t.answers,
         t.screenshot_key IS NOT NULL AS has_screenshot, t.id_photo_key IS NOT NULL AS has_id_photo, t.instagram, t.order_id, t.created_at, t.approved_at, t.released_at, t.reject_reason, t.hold_at,
-        t.used_at, t.qr_version, t.rev, t.type_id, (SELECT name FROM ticket_types WHERE id = t.type_id) AS type_name, t.price, t.payment,
+        t.used_at, t.qr_version, t.rev, t.type_id, (SELECT name FROM ticket_types WHERE id = t.type_id) AS type_name, t.price, ${ticketTotal("t")} AS total, t.payment,
         CASE WHEN t.guest_email IS NULL THEN 0 ELSE (SELECT COUNT(*) FROM tickets d WHERE d.party_id = t.party_id
           AND d.guest_email = t.guest_email AND d.id != t.id AND d.status IN ('pending', 'approved')) END AS same_email
       FROM tickets t WHERE t.party_id = ${sess.partyId} AND t.status = ${status} ${cash} ${cursor}
@@ -458,7 +458,7 @@ export class GuestDb {
     const r = await this.driver.all(sql`SELECT t.id, t.status, t.people, t.guest_name, t.guest_email, t.instagram, t.answers, t.created_at,
         t.approved_at, ap.name AS approved_by, t.rejected_at, rj.name AS rejected_by, t.reject_reason,
         t.released_at, rl.name AS released_by, t.used_at, us.name AS scanned_by, t.qr_version, t.hold_at,
-        ty.name AS type_name, t.price, t.price * t.people AS total_price, t.payment
+        ty.name AS type_name, t.price, CASE WHEN t.price IS NOT NULL THEN ${ticketTotal("t")} END AS total_price, t.payment
       FROM tickets t
         LEFT JOIN ticket_types ty ON ty.id = t.type_id
         LEFT JOIN staff ap ON ap.id = t.approved_by LEFT JOIN staff rj ON rj.id = t.rejected_by
@@ -576,9 +576,9 @@ export class GuestDb {
           COALESCE(SUM(CASE WHEN t.status = 'approved' AND t.released_at IS NOT NULL THEN t.people END), 0) AS released,
           COALESCE(SUM(CASE WHEN t.used_at IS NOT NULL THEN t.people END), 0) AS admitted,
           COALESCE(SUM(CASE WHEN t.used_at IS NOT NULL THEN 1 END), 0) AS admitted_tickets,
-          COALESCE(SUM(CASE WHEN t.status = 'approved' THEN COALESCE(t.price, 0) * t.people END), 0) AS money_approved,
-          COALESCE(SUM(CASE WHEN t.status = 'pending' THEN COALESCE(t.price, 0) * t.people END), 0) AS money_pending,
-          COALESCE(SUM(CASE WHEN t.status = 'approved' AND t.payment = 'cash' THEN COALESCE(t.price, 0) * t.people END), 0) AS money_cash
+          COALESCE(SUM(CASE WHEN t.status = 'approved' THEN ${ticketTotal("t")} END), 0) AS money_approved,
+          COALESCE(SUM(CASE WHEN t.status = 'pending' THEN ${ticketTotal("t")} END), 0) AS money_pending,
+          COALESCE(SUM(CASE WHEN t.status = 'approved' AND t.payment = 'cash' THEN ${ticketTotal("t")} END), 0) AS money_cash
         FROM parties p LEFT JOIN tickets t ON t.party_id = p.id LEFT JOIN ticket_types ty ON ty.id = t.type_id
         WHERE p.id = ${sess.partyId} AND ${ok}
         GROUP BY t.type_id`,

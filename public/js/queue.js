@@ -205,7 +205,7 @@
             el("span", { class: "small muted", text: [ids.length > 1 ? t("q_n_tickets", { n: ids.length }) : null, row.type_name, people(row.people)].filter(Boolean).join(" · "), attrs: { dir: "auto" } }), el("br"),
             el("span", { class: "small faint mono", text: Sahra.ref(row.id), attrs: { dir: "ltr" } }))),
         status),
-      row.price ? el("p", { class: "price", text: t("q_expected", { amount: Sahra.amount(row.price * row.people * ids.length) }) }) : null,
+      row.price ? el("p", { class: "price", text: t("q_expected", { amount: Sahra.amount((row.total != null ? row.total : row.price * row.people) * ids.length) }) }) : null,
       row.payment === "cash" ? el("p", null, el("span", { class: "pill", text: t("q_paid_cash") })) : null,
       row.same_email ? el("p", { class: "notice maybe small", text: t("q_same_email", { n: row.same_email }) }) : null,
       tab === "rejected" && row.reject_reason ? el("p", { class: "small muted", text: t("q_reason", { reason: row.reject_reason }), attrs: { dir: "auto" } }) : null,

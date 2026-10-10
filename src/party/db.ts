@@ -6,6 +6,7 @@
 import { audit, sessionValid, type SessionRef } from "../db";
 import type { SqlDriver } from "../db/driver";
 import { join, raw, sql, type Sql } from "../db/sql";
+import { ticketTotal } from "../guests/types";
 import type { PartyDetailsRow } from "./details";
 import { EDITABLE, type EditValues, type EditableField } from "./input";
 import { announceInsert, announceRecipients, type Audience, MAX_NOTICES_PER_EDIT, noticeInsert, noticeRecipients } from "./notice";
@@ -113,7 +114,7 @@ export class PartyDb {
    * cancelled with the reason (new requests are refused from then on, checked in
    * the sign-up INSERT; admission is paused by the route BEFORE this), and, when
    * asked, records "refund due" for every paid ticket still pending or approved
-   * (price per person x people). A retry with the same op changes nothing more.
+   * (the ticket's total: per person x people, or the package price). A retry with the same op changes nothing more.
    * Cannot be undone.
    */
   async cancel(sess: SessionRef, actor: string, a: { reason: string | null; markRefunds: boolean }, now: number, op: string) {
@@ -124,7 +125,7 @@ export class PartyDb {
         WHERE id = ${p} AND cancelled_at IS NULL AND ${ok}`,
       audit(now, actor, "party_cancelled", "party", sql`SELECT id AS party_id, id, rev FROM parties WHERE id = ${p} AND last_op = ${op}`, a.reason),
       ...(a.markRefunds ? [sql`INSERT INTO refunds (ticket_id, party_id, amount, state, created_at, updated_at, updated_by)
-          SELECT t.id, t.party_id, COALESCE(t.price, 0) * t.people, 'due', ${now}, ${now}, ${actor}
+          SELECT t.id, t.party_id, ${ticketTotal("t")}, 'due', ${now}, ${now}, ${actor}
           FROM tickets t WHERE t.party_id = ${p} AND t.status IN ('pending', 'approved') AND COALESCE(t.price, 0) > 0
             AND EXISTS (SELECT 1 FROM parties WHERE id = ${p} AND cancelled_at IS NOT NULL) AND ${ok}
           ON CONFLICT (ticket_id) DO NOTHING`] : []),
@@ -157,7 +158,7 @@ export class PartyDb {
     const p = sess.partyId;
     const rs = await this.driver.batch([
       sql`INSERT INTO refunds (ticket_id, party_id, amount, state, created_at, updated_at, updated_by)
-        SELECT t.id, t.party_id, COALESCE(t.price, 0) * t.people, ${state}, ${now}, ${now}, ${actor}
+        SELECT t.id, t.party_id, ${ticketTotal("t")}, ${state}, ${now}, ${now}, ${actor}
         FROM tickets t WHERE t.id = ${ticketId} AND t.party_id = ${p} AND COALESCE(t.price, 0) > 0 AND ${ok}
         ON CONFLICT (ticket_id) DO UPDATE SET state = excluded.state, updated_at = excluded.updated_at, updated_by = excluded.updated_by
           WHERE refunds.party_id = ${p} AND refunds.state != excluded.state`,

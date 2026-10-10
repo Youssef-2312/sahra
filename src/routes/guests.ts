@@ -273,13 +273,15 @@ guestRoutes.get("/parties/:party", async (c) => {
     registration: registration(p, now),
     max_tickets_per_email: p.max_tickets_per_email,
     payment_instructions: p.payment_instructions,
-    // Prices are whole Egyptian pounds per person. A request must name one of these when the list is not empty.
+    // Prices are whole Egyptian pounds, per person, or for the whole ticket when `package` (a type of one
+    // fixed group size, src/guests/types.ts isPackage). A request must name one of these when the list is not empty.
     types: types.map((t) => {
       const left = t.quantity === null ? partyLeft : Math.max(0, Math.min(partyLeft, t.quantity - t.held));
       return {
         id: t.id, name: t.name, description: t.description, price: t.price, currency: "EGP",
         // People one ticket of this type admits (a group type, a single one).
         min_people: t.min_people ?? 1, max_people: t.max_people ?? p.max_people_per_ticket,
+        package: t.min_people !== null && t.min_people > 1 && t.min_people === t.max_people,
         places_left: left, sold_out: left === 0, on_sale: !!t.on_sale && left > 0,
         sales_opens_at: t.sales_opens_at, sales_closes_at: t.sales_closes_at,
         payment_instructions: t.payment_instructions ?? p.payment_instructions,
