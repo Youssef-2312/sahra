@@ -153,8 +153,9 @@ var Sahra = (function () {
   //   Sahra.notify(text)                   -> resolves when closed
   //   Sahra.ask(text, { value, ok })        -> the typed text, or null if cancelled
   function dialog(o) {
+    var previousFocus = document.activeElement;
     return new Promise(function (done) {
-      var input = o.input ? el("input", { class: "dlg-input", attrs: { type: "text", dir: "auto", value: o.value || "", "aria-label": o.text } }) : null;
+      var input = o.input ? el("input", { class: "dlg-input", attrs: { type: "text", dir: "auto", value: o.value || "", "aria-label": o.text, readonly: !!o.readonly } }) : null;
       var ok = el("button", { class: "btn small-btn " + (o.danger ? "no" : "primary"), text: o.ok || t("dlg_ok"), attrs: { type: "submit", value: "ok" } });
       var cancel = o.alert ? null : el("button", { class: "btn small-btn", text: t("dlg_cancel"), attrs: { type: "button" } });
       var form = el("form", { attrs: { method: "dialog" } },
@@ -162,7 +163,7 @@ var Sahra = (function () {
         el("div", { class: "dlg-actions" }, cancel, ok));
       var d = el("dialog", { class: "dlg", attrs: { "aria-label": o.text } }, form);
       var answered = false;
-      function finish(v) { if (answered) return; answered = true; d.close(); d.remove(); done(v); }
+      function finish(v) { if (answered) return; answered = true; d.close(); d.remove(); if (previousFocus && previousFocus.isConnected) previousFocus.focus(); done(v); }
       form.addEventListener("submit", function (e) { e.preventDefault(); finish(o.input ? input.value : true); });
       if (cancel) cancel.addEventListener("click", function () { finish(o.input ? null : false); });
       // Escape, or the browser closing it: the same as Cancel.
@@ -173,9 +174,25 @@ var Sahra = (function () {
       if (input) input.select();
     });
   }
+  // One clipboard action for guests and staff; a blocked clipboard opens
+  // selected text in the site's dialog instead of claiming it was copied.
+  function copyButton(value, label) {
+    var b = el("button", { class: "btn small-btn copy-btn", text: label || t("copy"), attrs: { type: "button" } });
+    var timer;
+    b.addEventListener("click", async function () {
+      b.disabled = true;
+      clearTimeout(timer);
+      try { await navigator.clipboard.writeText(String(value)); b.textContent = t("copied"); }
+      catch (e) { await ask(t("copy_fallback"), { value: String(value), readonly: true }); }
+      finally { b.disabled = false; }
+      timer = setTimeout(function () { b.textContent = label || t("copy"); }, 2000);
+    });
+    return b;
+  }
+
   function confirmBox(text, opts) { return dialog({ text: text, ok: opts && opts.ok, danger: opts && opts.danger }); }
   function notify(text) { return dialog({ text: text, alert: true }); }
-  function ask(text, opts) { return dialog({ text: text, input: true, value: opts && opts.value, ok: opts && opts.ok }); }
+  function ask(text, opts) { return dialog({ text: text, input: true, value: opts && opts.value, readonly: opts && opts.readonly, ok: opts && opts.ok }); }
 
   /**
    * The one sign-in (brainstorm idea 27; owner: one sign-in for everyone who runs
@@ -184,7 +201,7 @@ var Sahra = (function () {
    * there. Used by /signin and by /platform when signed out. `extra`: an error box.
    */
   function signinView(extra) {
-    var img = el("img", { attrs: { src: "/img/hero/hero-3.jpg", alt: "", decoding: "async" } });
+    var img = el("img", { attrs: { src: "/img/hero/hero-24.jpg", alt: "", decoding: "async" } });
     img.addEventListener("error", function () { img.remove(); });
     return el("div", { class: "signin-wrap" },
       el("div", { class: "signin-panel" }, img, el("p", { class: "label-line", text: t("si_title") }), el("h1", { text: t("si_head") }), el("p", { text: t("si_text") })),
@@ -205,7 +222,7 @@ var Sahra = (function () {
    * o: { kicker, title, text, big?, actions: [[label, href, primary?]], extra?, hint?, code?, photo? }
    */
   function problem(o) {
-    var img = el("img", { attrs: { src: o.photo || "/img/hero/hero-3.jpg", alt: "", decoding: "async" } });
+    var img = el("img", { attrs: { src: o.photo || "/img/hero/hero-20.jpg", alt: "", decoding: "async" } });
     img.addEventListener("error", function () { img.remove(); });
     var panel = el("div", { class: "signin-panel notice-panel" }, img,
       el("p", { class: "label-line", text: o.kicker }),
@@ -232,6 +249,30 @@ var Sahra = (function () {
    * `me` (staff pages, from Sahra.api.me()) shows who is signed in; otherwise a
    * "Sign in" link to the staff sign-in page.
    */
+  // Keep ordinary form values and open sections during an in-page language
+  // change. Consent is reviewed again; files cannot be restored by a browser.
+  function captureDrafts() {
+    return { forms: [].map.call(document.querySelectorAll("main form"), function (f) {
+      return [].map.call(f.elements, function (x) {
+        if (!x.name || /^(file|hidden|submit|button|password)$/.test(x.type) || /accept|consent/.test(x.name)) return null;
+        return { name: x.name, type: x.type, value: x.value, checked: x.checked };
+      });
+    }), details: [].map.call(document.querySelectorAll("main details"), function (d) { return d.open; }) };
+  }
+  function restoreDrafts(draft) {
+    [].forEach.call(document.querySelectorAll("main form"), function (f, i) {
+      var prior = draft.forms[i];
+      if (!prior) return;
+      [].forEach.call(f.elements, function (x, j) {
+        var v = prior[j];
+        if (!v || x.name !== v.name || x.type !== v.type) return;
+        x.value = v.value;
+        if (x.type === "checkbox" || x.type === "radio") x.checked = v.checked;
+      });
+    });
+    [].forEach.call(document.querySelectorAll("main details"), function (d, i) { if (draft.details[i] !== undefined) d.open = draft.details[i]; });
+  }
+
   function boot(opts) {
     renderFn = (opts && opts.render) || null;
     var me = (opts && opts.me) || null;
@@ -262,10 +303,12 @@ var Sahra = (function () {
       footer(foot);
     }
     sw.addEventListener("click", function () {
+      var draft = captureDrafts();
       store.set(KEY, lang() === "en" ? "ar" : "en");
       applyLang();
       label();
       if (renderFn) renderFn();
+      restoreDrafts(draft);
     });
     label();
     if (!me) signedIn(function (who) { me = who; showName(who.name); account.setAttribute("href", who.href); });
@@ -376,5 +419,5 @@ var Sahra = (function () {
   }
 
   return { t: t, el: el, clear: clear, api: api, errorText: errorText, money: money, amount: amount, when: when, date: date, time: time, rel: rel,
-    lang: lang, boot: boot, store: store, SESSION_KEY: SESSION_KEY, token: token, title: title, problem: problem, signinView: signinView, confirm: confirmBox, notify: notify, ask: ask, contactCard: contactCard, ref: function (id) { return id ? "SAH-" + String(id).slice(0, 6) : ""; } };
+    lang: lang, boot: boot, store: store, SESSION_KEY: SESSION_KEY, token: token, title: title, problem: problem, signinView: signinView, copyButton: copyButton, confirm: confirmBox, notify: notify, ask: ask, contactCard: contactCard, ref: function (id) { return id ? "SAH-" + String(id).slice(0, 6) : ""; } };
 })();

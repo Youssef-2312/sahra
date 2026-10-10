@@ -5,6 +5,21 @@
 "use strict";
 var SahraText = {
   en: {
+    photo_question: "Picture upload",
+    photo_question_limit: "Up to 3 picture questions per form. Each accepts one JPEG, PNG or WebP image.",
+    photo_question_hint: "One JPEG, PNG or WebP image. Compressed on your device; maximum 600 KB after compression. Only the party owner and admins can view it.",
+    view_answer_photo: "View picture",
+    e_photo_must_be_jpeg_png_or_webp: "Please upload a JPEG, PNG or WebP picture.",
+    e_photo_required: "Please add a picture for each required picture question.",
+    e_answer_photo_deleted: "This picture has been deleted under the retention policy.",
+    e_form_changed: "The guest form has changed. Reload the page and review your answers.",
+    signup_reattach: "Please attach your photos again after changing language or reloading the page.",
+    clear_search: "Clear search",
+    copy_ticket_link: "Copy ticket link",
+    copy_fallback: "Copy the selected text below.",
+    d_admission_help: "Opening door check-in lets staff scan existing tickets. Ticket requests have separate opening and closing dates in Settings.",
+    d_request_settings: "Manage ticket requests",
+
     h_story_label: "The house-party feeling",
     h_story_title: "Good people. A night worth remembering.",
     h_story_p: "The music, the familiar faces, the friends you came with. Find your next house party, with the details and tickets in one place.",
@@ -525,6 +540,21 @@ var SahraText = {
   },
 
   ar: {
+    photo_question: "رفع صورة",
+    photo_question_limit: "حتى 3 أسئلة بصور في النموذج. يقبل كل سؤال صورة واحدة بصيغة JPEG أو PNG أو WebP.",
+    photo_question_hint: "صورة واحدة بصيغة JPEG أو PNG أو WebP. تُصغّر على جهازك، والحد الأقصى 600 كيلوبايت بعد التصغير. يراها صاحب الحفلة والمسؤولون فقط.",
+    view_answer_photo: "عرض الصورة",
+    e_photo_must_be_jpeg_png_or_webp: "يرجى رفع صورة بصيغة JPEG أو PNG أو WebP.",
+    e_photo_required: "يرجى إضافة صورة لكل سؤال إلزامي بصور.",
+    e_answer_photo_deleted: "حُذفت هذه الصورة وفقًا لسياسة الحفظ.",
+    e_form_changed: "تغيّر نموذج الضيوف. أعد تحميل الصفحة وراجع إجاباتك.",
+    signup_reattach: "يرجى إرفاق صورك مجددًا بعد تغيير اللغة أو إعادة تحميل الصفحة.",
+    clear_search: "مسح البحث",
+    copy_ticket_link: "نسخ رابط التذكرة",
+    copy_fallback: "انسخ النص المحدد أدناه.",
+    d_admission_help: "فتح الدخول عند الباب يتيح للفريق مسح التذاكر الموجودة. لطلبات التذاكر مواعيد فتح وإغلاق مستقلة في الإعدادات.",
+    d_request_settings: "إدارة طلبات التذاكر",
+
     h_story_label: "أجواء الحفلات المنزلية",
     h_story_title: "صحبة حلوة. وليلة تستحق أن تتذكرها.",
     h_story_p: "الموسيقى والوجوه المألوفة والأصدقاء الذين جئت معهم. اكتشف حفلتك المنزلية القادمة، مع التفاصيل والتذاكر في مكان واحد.",

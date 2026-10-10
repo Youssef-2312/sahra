@@ -25,26 +25,36 @@ function syncHttp() {
   const worker = new Worker(`
     const { workerData } = require("node:worker_threads");
     const { port, flag } = workerData;
-    port.on("message", async ({ url, init }) => {
+    port.on("message", async ({ id, url, init }) => {
       let out;
       try {
-        const r = await fetch(url, init);
+        const r = await fetch(url, { ...init, signal: AbortSignal.timeout(25_000) });
         out = { status: r.status, headers: Object.fromEntries(r.headers), body: new Uint8Array(await r.arrayBuffer()) };
       } catch (e) { out = { error: String(e && e.message || e) }; }
-      port.postMessage(out);
+      port.postMessage({ id, ...out });
       Atomics.store(flag, 0, 1);
       Atomics.notify(flag, 0);
     });`, { eval: true, workerData: { port: port2, flag }, transferList: [port2] });
   worker.unref();
+  let requestId = 0;
   return {
     fetch(url, init) {
-      Atomics.store(flag, 0, 0);
-      port1.postMessage({ url, init });
-      Atomics.wait(flag, 0, 0, 120_000);
-      const m = receiveMessageOnPort(port1);
-      if (!m) throw new Error("no HTTP answer");
-      if (m.message.error) throw new Error(`Address unavailable: ${url} (${m.message.error})`);
-      return m.message;
+      const id = ++requestId;
+      const deadline = Date.now() + 30_000;
+      port1.postMessage({ id, url, init });
+      // Notification can arrive before Node exposes the posted message. A timed
+      // out response must also never become the next request's response.
+      while (Date.now() < deadline) {
+        let m;
+        while ((m = receiveMessageOnPort(port1))) {
+          if (m.message.id !== id) continue;
+          if (m.message.error) throw new Error(`Address unavailable: ${url} (${m.message.error})`);
+          return m.message;
+        }
+        Atomics.store(flag, 0, 0);
+        Atomics.wait(flag, 0, 0, 50);
+      }
+      throw new Error("no HTTP answer");
     },
     close: () => worker.terminate(),
   };
@@ -205,9 +215,40 @@ export function loadAppsScript(o) {
     Session: { getScriptTimeZone: () => tz, getEffectiveUser: () => ({ getEmail: () => "owner@example.com" }) },
     console: { log: (m) => sim.logs.push(String(m)), warn: (m) => sim.logs.push(String(m)), error: (m) => sim.logs.push(String(m)) },
   };
-  const ctx = createContext({ ...services });
+  const ctx = createContext({ ...services, Error });
   runInContext(o.code, ctx, { filename: "Code.gs" });
   for (const [k, v] of Object.entries(o.overrides ?? {})) runInContext(`${k} = ${JSON.stringify(v)};`, ctx);
   sim.call = (fn) => runInContext(`${fn}()`, ctx);
+  return sim;
+}
+
+/** Async facade: keep Miniflare's host event loop free while Apps Script does
+ * synchronous HTTP. State returns after each call, just like Script Properties. */
+export function loadAppsScriptAsync(o) {
+  const worker = new Worker(new URL('./apps-script-worker.mjs', import.meta.url), { workerData: o });
+  const pending = new Map();
+  let seq = 0;
+  const sim = { props: new Map(Object.entries(o.props)), mails: [], triggers: [], fetches: 0,
+    drive: { removed: [] }, http: { close: () => worker.terminate() } };
+  worker.on('message', m => {
+    const p = pending.get(m.id);
+    if (!p) return;
+    pending.delete(m.id);
+    if (m.error) { p.reject(new Error(m.error)); return; }
+    sim.props.clear();
+    for (const [k, v] of m.props) sim.props.set(k, v);
+    sim.mails = m.mails; sim.triggers = m.triggers; sim.fetches = m.fetches;
+    sim.drive.removed = m.removed;
+    p.resolve(m.result);
+  });
+  worker.on('error', e => { for (const p of pending.values()) p.reject(e); pending.clear(); });
+  worker.on('exit', code => {
+    for (const p of pending.values()) p.reject(new Error(`Apps Script simulation exited (${code})`));
+    pending.clear();
+  });
+  sim.call = fn => new Promise((resolve, reject) => {
+    const id = ++seq; pending.set(id, { resolve, reject });
+    worker.postMessage({ id, fn, props: [...sim.props] });
+  });
   return sim;
 }

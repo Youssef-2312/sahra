@@ -129,6 +129,7 @@ const REFUSAL: Record<SignupRefusal, { status: number; message: string }> = {
   type_full: { status: 409, message: "This ticket type is sold out." },
   full: { status: 409, message: "This party is full." },
   people_out_of_range: { status: 400, message: "This number of people is not allowed for this ticket." },
+  form_changed: { status: 409, message: "The guest form has changed. Reload and review your answers." },
   terms_changed: { status: 409, message: "The terms or this party's rules have changed. Please review them before sending your request." },
   refused: { status: 409, message: "This request cannot be made." },
 };
@@ -507,7 +508,7 @@ guestRoutes.post("/parties/:party/signup", async (c) => {
     id: ticketId, partyId, people, name, email, answers: Object.keys(answers).length ? JSON.stringify(answers) : null,
     screenshotKey, idPhotoKey, instagram: pf.instagram === "none" ? null : instagram, typeId, now, op: crypto.randomUUID(),
     more: others.map((id, i) => ({ id, name: otherNames[i]!, idPhotoKey: friendKeys[i] ?? null })),
-    rules: party.rules, cancellation: party.cancellation_policy, accepted: { terms: policy.terms_version, rules: policy.rules_version, privacy: policy.privacy_version },
+    guestForm: party.guest_form, rules: party.rules, cancellation: party.cancellation_policy, accepted: { terms: policy.terms_version, rules: policy.rules_version, privacy: policy.privacy_version },
   });
   // The rules were edited between the read above and the insert: show the new ones.
   if (r === "terms_changed") {

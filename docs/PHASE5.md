@@ -794,3 +794,67 @@ create-site-owner) and a long one looked bad. Now:
   name is on hover, and a long name ends in "…" (it was clipped because an
   inline-flex box ignores text-overflow).
 - Test: `test/platform.test.ts` ("your own name").
+
+### Picture questions and consistent quality-of-life controls (10 October 2026)
+
+Owner request: picture answers on the guest form, consistent controls across the
+site, useful quality-of-life options, and fewer repeated decorative photos.
+
+- Settings offers Text, Choices and Picture questions, with required/optional
+  answers and a maximum of three picture questions. Guests choose JPEG, PNG or
+  WebP from their device; the existing browser compression keeps uploads below
+  the server's 600,000-byte limit. Multipart fields use `q_<question-id>`.
+- Requests and guest search show private View picture links. The new endpoint
+  requires a live owner/admin session for the ticket's party inside the query;
+  door staff and other parties cannot read the images. Responses are private,
+  no-store and nosniff. Pictures use the existing files storage and backup export,
+  with the upstream seven-day retention and one-day orphan cleanup. A form edited
+  during upload refuses the stale submission inside the ticket insert.
+- Dropdowns share dark controls, a local chevron and RTL positioning. Browsers
+  supporting `appearance: base-select` also use the dark option picker; other
+  browsers retain their native picker. Contact controls stay 52 px high.
+- Shared keyboard focus, invalid-field borders, busy state, dialog focus return
+  and clipboard-denied fallback. Existing useful ticket-link actions use the
+  same helper. No extra copy-email/reference controls were added.
+- Language changes preserve ordinary unsaved form values in memory. Consent,
+  files and passwords are excluded. Guest drafts preserve friend names, ticket
+  selection and text answers, with consent unchecked after restoration.
+- Guest search keeps text through the initial refresh, offers Clear search, and
+  ignores late responses from an older search. Success messages disappear after
+  three seconds; errors stay visible. Overview explains that admission controls
+  QR check-in, while guest request dates are configured in Settings > Requests.
+- Six additional Pinterest photos are self-hosted, with references in
+  `docs/PHOTO-SOURCES.md`. Preview pictures 4 and 6 were excluded at the owner's
+  request. Contact, sign-in and error pages now have distinct photos. Larger
+  hero tiles and staggered rows reduce repetition without changing host artwork.
+
+Local verification, synthetic sessions and API stubs only:
+
+- Typecheck passed; Vitest: 44 files, 534 tests passed, including eight picture
+  question cases covering access, validation, retry, backup, retention and races.
+- Staff pages: 54 layouts; platform roles: 18 layouts; public pages: 30 layouts;
+  guest pages: 66 layouts and six complete flows; quality-of-life: six flows.
+  English/Arabic at 390, 768 and 1440 px: zero horizontal overflow and no
+  unexpected console/page errors.
+- Contact: six layouts, five single-line controls each 52 px, 16 px font,
+  matching 12 px / 14 px padding. Textarea five rows, 146 px. Helper/footnote
+  14 px. Send button insets 21 px on phone/tablet, 29 px desktop; desktop column
+  top difference zero. Twelve stubbed FormSubmit requests, no real email.
+- Collage: 96 samples (12 times through the 150-second cycle, English and
+  Arabic at 390, 768, 1440 and 1920 px), no repeated photo among tiles with more than 40 px
+  intersecting the hero on both axes. Screenshots saved outside the repository.
+- Camera scanner: real ticket QR converted to fake camera video, actual door
+  invitation and join, verdicts `admit`, then `used`; admitted exactly once.
+
+- Full local backup drill passed: nightly and hourly export, two-files-database
+  byte-identical restores, five changes replayed with zero holds, corrupt-file
+  refusal, budget skips, three older backup folders permanently removed after
+  guest erasure, and one simulated wrong-key alert. The first export used 51
+  requests, read 376 rows and wrote only its one completion report. Local test
+  tooling now runs synchronous Apps Script in a worker thread, so it cannot
+  block the Miniflare host; timed-out HTTP responses are matched to request IDs.
+- Dependency audit: zero vulnerabilities, including development dependencies.
+
+No migration, staging deployment, live guest submission or account configuration
+is required by this batch. The owner explicitly requested a production auto-deploy
+through the feature branch's pull request to main.

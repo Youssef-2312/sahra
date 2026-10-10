@@ -61,7 +61,7 @@ export interface SignupParty {
 
 /** Why a sign-up was not stored (the same rules as the insert, read in the same batch). */
 export type SignupRefusal = "registration_not_open" | "registration_closed" | "email_limit" | "type_required" | "type_unavailable"
-  | "type_full" | "full" | "terms_changed" | "people_out_of_range" | "refused";
+  | "type_full" | "full" | "form_changed" | "terms_changed" | "people_out_of_range" | "refused";
 
 /** The registration rules of a party row aliased `p`, at `now`, for one email (all inside SQL). */
 function registrationRules(now: number, email: string, count = 1) {
@@ -157,7 +157,7 @@ export class GuestDb {
   async signup(a: {
     id: string; partyId: string; people: number; name: string; email: string; answers: string | null;
     screenshotKey: string | null; idPhotoKey?: string | null; instagram?: string | null; typeId: string | null; now: number; op: string;
-    rules: string | null; cancellation: string | null; accepted: { terms: string; rules: string | null; privacy: string };
+    guestForm?: string | null; rules: string | null; cancellation: string | null; accepted: { terms: string; rules: string | null; privacy: string };
     more?: { id: string; name: string; idPhotoKey?: string | null }[];
   }): Promise<"created" | "already" | SignupRefusal> {
     const more = a.more ?? [];
@@ -166,6 +166,7 @@ export class GuestDb {
     const ty = typeRules(a.typeId, a.people * count, a.now);
     const roomOk = sql`${held(sql`p.id`)} + ${a.people * count} <= p.capacity`;
     const rulesOk = sql`(p.rules IS ${a.rules} AND p.cancellation_policy IS ${a.cancellation})`;
+    const formOk = a.guestForm === undefined ? sql`1` : sql`p.guest_form IS ${a.guestForm}`;
     const orderId = count > 1 ? a.id : null;
     // Each ticket's own ID photo (the buyer's, and each friend's when the party asks for ID).
     const rows = join([sql`(0, ${a.id}, ${a.name}, ${a.idPhotoKey ?? null})`, ...more.map((m, i) => sql`(${i + 1}, ${m.id}, ${m.name}, ${m.idPhotoKey ?? null})`)], ", ");
@@ -179,7 +180,7 @@ export class GuestDb {
           o.idk, CASE WHEN o.i = 0 THEN ${a.instagram ?? null} END, ${a.typeId}, ${ty.price},
           ${orderId}, ${a.accepted.terms}, ${a.accepted.rules}, ${a.accepted.privacy}, ${a.now}, ${a.now}, ${a.op}, 'ticket_requested'
         FROM o, parties p
-        WHERE p.id = ${a.partyId} AND ${peopleOk(a.typeId, a.people)} AND ${roomOk} AND ${rulesOk}
+        WHERE p.id = ${a.partyId} AND ${peopleOk(a.typeId, a.people)} AND ${roomOk} AND ${rulesOk} AND ${formOk}
           AND ${reg.opened} AND ${reg.notClosed} AND ${reg.emailOk} AND ${ty.chosenOk} AND ${ty.placesOk}
           AND NOT EXISTS (SELECT 1 FROM tickets x WHERE x.id IN (${inList(ids)}))
         ORDER BY o.i`,
@@ -188,6 +189,7 @@ export class GuestDb {
       sql`SELECT (SELECT party_id FROM tickets WHERE id = ${a.id}) AS existing_party,
           CASE
             WHEN NOT ${rulesOk} THEN 'terms_changed'
+            WHEN NOT ${formOk} THEN 'form_changed'
             WHEN NOT ${reg.opened} THEN 'registration_not_open'
             WHEN NOT ${reg.notClosed} THEN 'registration_closed'
             WHEN NOT ${reg.emailOk} THEN 'email_limit'
@@ -338,6 +340,15 @@ export class GuestDb {
     const r = await this.driver.all<{ id_photo_key: string | null }>(sql`SELECT id_photo_key FROM tickets
       WHERE id = ${id} AND party_id = ${sess.partyId} AND ${sessionValid(sess, MANAGERS, now)}`);
     return r.results[0]?.id_photo_key ?? null;
+  }
+
+  async questionPhotoKey(sess: SessionRef, id: string, question: string, now: number): Promise<string | null> {
+    const r = await this.driver.all<{ answers: string | null }>(sql`SELECT answers FROM tickets
+      WHERE id = ${id} AND party_id = ${sess.partyId} AND ${sessionValid(sess, MANAGERS, now)}`);
+    try {
+      const answer = JSON.parse(r.results[0]?.answers ?? "{}")[question];
+      return typeof answer === "string" && /^photo:f[1-4]:[1-9][0-9]*$/.test(answer) ? answer.slice(6) : null;
+    } catch { return null; }
   }
 
   /** The screenshot key of one of the party's tickets (owner/admin only; checked in the query). */

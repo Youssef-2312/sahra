@@ -120,7 +120,7 @@ export function checkAnswers(form: GuestForm, v: unknown): Record<string, string
   const g = given as Record<string, unknown>;
   const known = new Set(form.questions.map((q) => q.id));
   for (const k of Object.keys(g)) if (!known.has(k)) return null;
-  const out: Record<string, string> = {};
+  const out: Record<string, string> = Object.create(null);
   for (const q of form.questions) {
     const raw = g[q.id];
     // Picture answers come as files (checked by the sign-up route), never as text.

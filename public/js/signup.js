@@ -247,6 +247,12 @@
   }
 
   function questionField(q) {
+    if (q.type === "photo") {
+      var field = uploadField(q.required ? "required" : "optional", { name: "q_" + q.id,
+        id: "question-photo-" + q.id, label: q.label, hint: t("photo_question_hint") });
+      field.querySelector("input").dataset.photoQuestion = q.id;
+      return field;
+    }
     var input;
     if (q.type === "choice") {
       input = el("select", { attrs: { required: q.required } }, el("option", { text: "", attrs: { value: "" } }),
@@ -392,11 +398,12 @@
     var maxPeople = data.max_people_per_ticket;
     var draft = {};
     try { draft = JSON.parse(sessionStorage.getItem(draftKey) || "{}"); } catch (e) { draft = {}; }
+    if (!draft || typeof draft !== "object" || Array.isArray(draft)) draft = {};
     var people = el("input", { class: "qty-input", attrs: { type: "number", id: "qty-input", name: "people", min: 1, max: maxPeople, value: draft.people || 1, inputmode: "numeric", required: true } });
     var qty = quantityField(people, t("people_label"), function (r) {
       return r.min > 1 ? t("people_hint_range", { min: r.min, max: r.max }) : t("people_hint", { n: r.max });
     });
-    var count = el("input", { class: "qty-input", attrs: { type: "number", id: "tickets-input", name: "tickets", min: 1, max: MAX_TICKETS, value: 1, inputmode: "numeric", required: true } });
+    var count = el("input", { class: "qty-input", attrs: { type: "number", id: "tickets-input", name: "tickets", min: 1, max: MAX_TICKETS, value: draft.tickets || 1, inputmode: "numeric", required: true } });
     var tickets = quantityField(count, t("qty_label"), function () { return t("tickets_hint"); });
     var ticketMax = data.max_tickets_per_email ? Math.min(MAX_TICKETS, data.max_tickets_per_email) : MAX_TICKETS;
     // The names on the other tickets (optional; empty = the guest's own).
@@ -404,10 +411,15 @@
     // When the party asks for an ID photo, each friend's ticket gets its own upload (kept across changes of the quantity).
     var idAsk = data.form.id_photo || "none";
     var friendUploads = {};
+    var savedNames = Array.isArray(draft.names) ? draft.names : [];
     function namesRefresh() {
       var n = Math.max(1, Number(count.value) || 1);
       var have = namesBox.querySelectorAll("input[data-friend]");
-      var keep = [].map.call(have, function (x) { return x.value; });
+      // Blurring Quantity fires change again. Keep existing inputs when the
+      // count is unchanged, or the friend field being focused is detached.
+      if (have.length === n - 1) return;
+      var keep = have.length ? [].map.call(have, function (x) { return x.value; }) : savedNames;
+      savedNames = [];
       Sahra.clear(namesBox);
       if (n < 2) return;
       namesBox.appendChild(el("p", { class: "label", text: t("names_title") }));
@@ -455,9 +467,15 @@
     // The ticket choices need the form for their change handler; the first one on sale is chosen.
     if (data.types.length) {
       typesSlot.appendChild(typesBlock(form));
-      var first = data.types.filter(function (x) { return x.on_sale; })[0];
+      var first = data.types.filter(function (x) { return x.on_sale && x.id === draft.type_id; })[0] || data.types.filter(function (x) { return x.on_sale; })[0];
       if (first) form.querySelector("input[value='" + first.id + "']").checked = true;
     }
+    form.querySelectorAll("[data-q]").forEach(function (input) {
+      var answer = draft.answers && draft.answers[input.dataset.q];
+      if (input.dataset.kind === "yesno") input.checked = answer === "yes";
+      else if (typeof answer === "string") input.value = answer;
+    });
+    if (draft.reattach) form.prepend(el("p", { class: "notice maybe", text: t("signup_reattach") }));
     people.addEventListener("input", function () { paymentRefresh(form); orderRefresh(form); });
     count.addEventListener("input", function () { paymentRefresh(form); orderRefresh(form); });
     setTimeout(function () { tickets.bounds({ min: 1, max: ticketMax }); tickets.hidden = ticketMax <= 1; }, 0);
@@ -498,15 +516,11 @@
 
   function doneView() {
     var url = location.origin + done.link;
-    var copy = el("button", { class: "btn", text: t("copy"), attrs: { type: "button" } });
-    copy.addEventListener("click", async function () {
-      try { await navigator.clipboard.writeText(url); copy.textContent = t("copied"); } catch (e) { /* the link is shown below to copy by hand */ }
-    });
+    var copy = Sahra.copyButton(url, t("copy"));
     // Several tickets: one row each, to open or to copy and send to the friend it is for.
     var list = done.tickets && done.tickets.length > 1 ? el("ol", { class: "ticket-list" }, done.tickets.map(function (x, i) {
       var u = location.origin + x.link;
-      var c = el("button", { class: "btn small-btn", text: t("copy"), attrs: { type: "button" } });
-      c.addEventListener("click", async function () { try { await navigator.clipboard.writeText(u); c.textContent = t("copied"); } catch (e) { /* shown below */ } });
+      var c = Sahra.copyButton(u, t("copy"));
       return el("li", null,
         el("span", { class: "tl-text" }, el("strong", { text: i === 0 ? t("ticket_yours") : t("ticket_n", { n: i + 1 }) }),
           x.name ? el("span", { class: "muted", text: x.name, attrs: { dir: "auto" } }) : null,
@@ -572,7 +586,15 @@
     var f = app.querySelector("form");
     if (!f || !f.elements.name) return;
     try {
+      var answers = {};
+      f.querySelectorAll("[data-q]").forEach(function (input) {
+        answers[input.dataset.q] = input.dataset.kind === "yesno" ? (input.checked ? "yes" : "") : input.value;
+      });
+      var chosen = f.querySelector("input[name=type_id]:checked");
       sessionStorage.setItem(draftKey, JSON.stringify({ name: f.elements.name.value, email: f.elements.email.value, people: f.elements.people.value,
+        tickets: f.elements.tickets.value, type_id: chosen ? chosen.value : null,
+        names: [].map.call(f.querySelectorAll("[data-friend]"), function (input) { return input.value; }), answers: answers,
+        reattach: [].some.call(f.querySelectorAll("input[type=file]"), function (input) { return input.files.length > 0; }),
         instagram: f.elements.instagram ? f.elements.instagram.value : "" }));
     } catch (e) { /* not kept */ }
   }
@@ -629,6 +651,14 @@
       if (file) {
         var shot = await compress(file);
         fd.set("screenshot", shot, shot === file ? file.name : "screenshot.jpg");
+      }
+      which = "photo";
+      var photos = f.querySelectorAll("[data-photo-question]");
+      for (var i = 0; i < photos.length; i++) {
+        var photoFile = photos[i].files[0];
+        if (!photoFile) continue;
+        var photoSmall = await compress(photoFile);
+        fd.set("q_" + photos[i].dataset.photoQuestion, photoSmall, photoSmall === photoFile ? photoFile.name : "photo.jpg");
       }
       which = "id_photo";
       var idFile = f.elements.id_photo && f.elements.id_photo.files[0];

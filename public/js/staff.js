@@ -160,6 +160,7 @@ var SahraStaff = (function () {
     clearTimeout(node._sayTimer);
     node.className = "say" + (text ? " " + cls : "");
     node.textContent = text || "";
+    node.setAttribute("role", cls === "no" ? "alert" : "status");
     if (text && cls === "yes") {
       node._sayTimer = setTimeout(function () {
         if (node.textContent === text) { node.className = "say"; node.textContent = ""; }
@@ -203,15 +204,7 @@ var SahraStaff = (function () {
   }
 
   /** A button that copies a text and says so. */
-  function copyButton(text, label) {
-    var b = el("button", { class: "btn small-btn", text: label || t("s_copy"), attrs: { type: "button" } });
-    b.addEventListener("click", async function () {
-      try { await navigator.clipboard.writeText(text); b.textContent = t("copied"); }
-      catch (e) { await Sahra.ask(t("s_copy"), { value: text }); }
-      setTimeout(function () { b.textContent = label || t("s_copy"); }, 2000);
-    });
-    return b;
-  }
+  function copyButton(text, label) { return Sahra.copyButton(text, label || t("s_copy")); }
 
   return { start: start, act: act, field: field, input: input, select: select, check: check, section: section,
     say: say, sayMs: sayMs, sayBox: sayBox, why: why, local: local, copyButton: copyButton, sleep: sleep, nav: nav, redraw: redraw, tn: tn };

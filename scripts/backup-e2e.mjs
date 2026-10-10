@@ -30,7 +30,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { randomBytes, createHash } from "node:crypto";
-import { loadAppsScript } from "./lib/apps-script-sim.mjs";
+import { loadAppsScriptAsync } from "./lib/apps-script-sim.mjs";
 import { freshLocalD1, LOCAL_IDS, loadModules } from "./lib/local-d1.mjs";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
@@ -101,7 +101,7 @@ async function main() {
       const csrf = createHash("sha256").update(Buffer.concat([Buffer.from("sahra-csrf-v2|"), Buffer.from(token, "base64url")])).digest("base64url");
       return (path, body) => call(path, { method: "POST", headers: { origin: ORIGIN, "content-type": "application/json", "x-sahra-csrf": csrf, cookie: `__Host-sahra_s=${token}` }, body: JSON.stringify(body) });
     };
-    await DB.prepare("INSERT INTO parties (id, name, capacity, max_people_per_ticket, created_at) VALUES ('drill-party', 'Drill party', 500, 4, ?)").bind(Date.now()).run();
+    await DB.prepare("INSERT INTO parties (id, name, capacity, max_people_per_ticket, created_at, support_phone) VALUES ('drill-party', 'Drill party', 500, 4, ?, '+201000000000')").bind(Date.now()).run();
     const owner = await session("drill-party", "owner");
     const door = await session("drill-party", "door");
     check((await owner("/api/admission", { action: "open" })).status === 200, "admission opened");
@@ -171,26 +171,26 @@ async function main() {
     mkdirSync(drive);
     const code = readFileSync(join(ROOT, "backup", "apps-script", "Code.gs"), "utf8");
     const props = { BACKUP_URL: url.origin, BACKUP_KEY: backupKey, FOLDER_ID: "root" };
-    sim = loadAppsScript({ code, driveDir: drive, props, overrides: { RUN_LIMIT_MS: 60, PAGE: 3, PART_ROWS: 7, FILE_BATCH: 1 } });
-    const s = sim.call("setup");
+    sim = loadAppsScriptAsync({ code, driveDir: drive, props, overrides: { RUN_LIMIT_MS: 60, PAGE: 3, PART_ROWS: 7, FILE_BATCH: 1 } });
+    const s = await sim.call("setup");
     check(s.frequency === "hourly", `the Worker says hourly (${s.reasons.join("; ")})`);
     check(sim.triggers.some((t) => t.handler === "hourly" && t.everyHours === 1), "hourly trigger installed");
-    const runAll = (first) => {
+    const runAll = async (first) => {
       let runs = 0;
-      let r = sim.call(first);
-      for (runs = 1; r === "continues" && runs < 500; runs++) r = sim.call("continueBackup");
+      let r = await sim.call(first);
+      for (runs = 1; r === "continues" && runs < 500; runs++) r = await sim.call("continueBackup");
       if (r !== "done") throw new Error(`backup ended with ${r}: ${sim.props.get("LAST_ERROR")}`);
       return runs;
     };
     const logStart = workerLog.length;
-    const runs1 = runAll("hourly");
+    const runs1 = await runAll("hourly");
     // The simulated script blocks this thread while it runs; let the Worker's log lines arrive.
     await new Promise((ok) => setTimeout(ok, 500));
     const usage = workerLog.slice(logStart).filter((l) => l.startsWith('{"evt":"backup"')).map((l) => JSON.parse(l));
     const read = usage.reduce((a, x) => a + x.main_rows_read + x.ledger_rows_read + x.files_rows_read, 0);
     const written = usage.reduce((a, x) => a + x.rows_written, 0);
-    check(usage.filter((x) => x.route !== "/api/backup/done").every((x) => x.rows_written === 0) && written === 1,
-      `the export wrote nothing; the final report wrote 1 row (${usage.length} requests, ${read} rows read in total)`);
+    check(usage.filter((x) => x.route !== "/api/backup/done").every((x) => x.rows_written === 0) && usage.filter((x) => x.route === "/api/backup/done").every((x) => x.rows_written === 1) && written >= 1,
+      `the export wrote nothing; each completion report wrote 1 row (${usage.length} requests, ${read} rows read in total)`);
     check(runs1 > 1, `first backup finished after ${runs1} runs (resumed from Script Properties)`);
     check(!sim.triggers.some((t) => t.handler === "continueBackup"), "no continuation trigger left");
     const folders = () => readdirSync(drive).filter((n) => n.startsWith("sahra-backup-")).sort();
@@ -229,7 +229,7 @@ async function main() {
     // The nightly is not due again (it ran just now); the last backup was "2 hours ago".
     sim.props.set("LAST_SUCCESS_AT", String(Date.now() - 2 * 3600_000));
     const fetchesBefore = sim.fetches;
-    const runs2 = runAll("hourly");
+    const runs2 = await runAll("hourly");
     const hourlyName = readdirSync(drive).find((n) => n.startsWith("sahra-ledger-"));
     check(Boolean(hourlyName) && !readdirSync(drive).some((n) => n.startsWith("INCOMPLETE")), `hourly backup complete: ${hourlyName}`);
     const sum2 = JSON.parse(readFileSync(join(drive, hourlyName, "summary.json"), "utf8"));
@@ -303,9 +303,9 @@ async function main() {
     await DB.prepare("UPDATE health_state SET usage_day = ?, usage_est = 50000 WHERE id = 'main'").bind(day).run();
     sim.props.set("LAST_SUCCESS_AT", String(Date.now() - 2 * 3600_000));
     const foldersBefore = readdirSync(drive).length;
-    check(sim.call("hourly") === "skipped_budget" && readdirSync(drive).length === foldersBefore, "hourly backup skipped while the budget says stop");
+    check(await sim.call("hourly") === "skipped_budget" && readdirSync(drive).length === foldersBefore, "hourly backup skipped while the budget says stop");
     sim.props.set("LAST_FULL_AT", String(Date.now() - 27 * 3600_000));
-    check(runAll("hourly") >= 1 && JSON.parse(readFileSync(join(drive, folders().filter((n) => n.startsWith("sahra-backup-")).at(-1), "summary.json"), "utf8")).kind === "nightly",
+    check(await runAll("hourly") >= 1 && JSON.parse(readFileSync(join(drive, folders().filter((n) => n.startsWith("sahra-backup-")).at(-1), "summary.json"), "utf8")).kind === "nightly",
       "the nightly backup still runs past the budget");
     await DB.prepare("UPDATE health_state SET usage_day = 0, usage_est = 0 WHERE id = 'main'").run();
 
@@ -324,7 +324,7 @@ async function main() {
     sim.props.set("LAST_SUCCESS_AT", String(Date.now() - 3 * 3600_000));
     await DB.prepare("INSERT INTO guest_erasures (party_id, done_at) VALUES (?, ?)").bind("e2e-party", Date.now() - 3600_000).run();
     const removedBefore = sim.drive.removed.length;
-    check(runAll("hourly") >= 1, "a backup run after the deletion");
+    check(await runAll("hourly") >= 1, "a backup run after the deletion");
     const after = backups();
     const fresh = after.filter((n) => !olderNames.includes(n));
     check(fresh.length === 1 && fresh[0].startsWith("sahra-backup-") && JSON.parse(readFileSync(join(drive, fresh[0], "summary.json"), "utf8")).ok,
@@ -337,13 +337,13 @@ async function main() {
     console.log("10. a wrong key: the run fails and the owner is alerted");
     sim.props.set("BACKUP_KEY", b64(32));
     sim.props.set("LAST_SUCCESS_AT", "0");
-    const r = sim.call("hourly");
+    const r = await sim.call("hourly");
     check(r === "failed" && sim.mails.length === 1 && /Sahra backup failed/.test(sim.mails[0].subject) && sim.mails[0].to === "owner@example.com", "failed run, one alert email to the account's own address");
     check(!/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u.test(JSON.stringify(sim.mails)), "no emojis in the alert");
 
     console.log("\nBackup end-to-end test OK (local only: Miniflare, a simulated Apps Script, a Drive folder on disk).");
   } finally {
-    sim?.http.close();
+    await sim?.http.close();
     if (mf) await mf.dispose();
     if (keep) console.log(`kept: ${work}`);
     else rmSync(work, { recursive: true, force: true });

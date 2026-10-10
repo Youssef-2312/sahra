@@ -107,6 +107,7 @@
         el("p", { class: "dash-meta" }, when ? el("span", { text: when }) : null,
           admission ? el("span", { class: "pill " + (admission.open ? "yes" : "maybe"), text: admission.open ? t("d_doors_open") : t("d_doors_paused") }) : null)),
       headActions()));
+    app.appendChild(el("div", { class: "notice dash-warn" }, el("p", { text: t("d_admission_help") }), el("a", { class: "btn small-btn", text: t("d_request_settings"), attrs: { href: "/party.html#requests" } })));
     if (party && party.cancelled_at) app.appendChild(el("div", { class: "notice no dash-warn" },
       el("p", { text: t("d_cancelled", { when: Sahra.when(party.cancelled_at, party.time_zone) }) }),
       el("a", { class: "btn small-btn", text: t("s_open_refunds"), attrs: { href: "/guests.html#refunds" } })));

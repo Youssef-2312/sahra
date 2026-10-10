@@ -380,6 +380,7 @@ export interface SignupFields {
   email?: string;
   people?: number | string;
   answers?: unknown;
+  photos?: Record<string, Uint8Array>;
   screenshot?: Uint8Array | null;
   turnstile?: string | null;
   /** The Terms box (default ticked) and the versions the form showed (default: current, no party rules, no email sentence). */
@@ -403,6 +404,7 @@ export async function signupInit(f: SignupFields = {}): Promise<RequestInit> {
   fd.set("name", f.name ?? "Guest Name");
   fd.set("email", f.email ?? `guest-${newId().slice(0, 8)}@example.com`);
   fd.set("people", String(f.people ?? 1));
+  for (const [q, bytes] of Object.entries(f.photos ?? {})) fd.set(`q_${q}`, new File([bytes], "answer.png", { type: "image/png" }));
   if (f.answers !== undefined) fd.set("answers", JSON.stringify(f.answers));
   const shot = f.screenshot === undefined ? PNG : f.screenshot;
   if (shot) fd.set("screenshot", new File([shot], "shot.png", { type: "image/png" }));
