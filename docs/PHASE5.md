@@ -858,3 +858,17 @@ Local verification, synthetic sessions and API stubs only:
 No migration, staging deployment, live guest submission or account configuration
 is required by this batch. The owner explicitly requested a production auto-deploy
 through the feature branch's pull request to main.
+
+Production verification for PR #14: Workers Builds succeeded on merge
+`b76e45acbde2fb59b72b323a6a071929a2f35c24`. At 20:35:09 UTC, production's home
+script matched the release; CSS, shared UI, settings, sign-up and all six new
+photos subsequently matched byte-for-byte. The read-only browser sweep passed
+102 layouts: 17 addresses in English/Arabic at 390, 768 and 1440 px, with zero
+overflow, broken images or unexpected errors. Protected pages were checked signed
+out; their expected 401/404 answers were recorded separately. The private picture
+endpoint returned 401 with no-store and nosniff while signed out.
+
+A small keyboard follow-up restores focus to Copy after closing the blocked
+clipboard fallback, only when focus is on the document body. It does not steal
+focus from another control. The six quality-of-life browser flows now explicitly
+check this return as well.

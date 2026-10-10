@@ -184,7 +184,7 @@ var Sahra = (function () {
       clearTimeout(timer);
       try { await navigator.clipboard.writeText(String(value)); b.textContent = t("copied"); }
       catch (e) { await ask(t("copy_fallback"), { value: String(value), readonly: true }); }
-      finally { b.disabled = false; }
+      finally { b.disabled = false; if (b.isConnected && document.activeElement === document.body) b.focus(); }
       timer = setTimeout(function () { b.textContent = label || t("copy"); }, 2000);
     });
     return b;
