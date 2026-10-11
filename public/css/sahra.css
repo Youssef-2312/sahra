@@ -341,7 +341,7 @@ html[dir="rtl"] .mine { display: grid; gap: 10px; }
 }
 
 /* Approval queue (piece 7): one card per request, the main action obvious. */
-.tabs { display: flex; gap: 8px; margin: var(--gap) 0; overflow-x: auto; }
+.tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: var(--gap) 0; }
 .tabs button { flex: none; min-height: 40px; padding: 6px 16px; border-radius: 999px; border: 1px solid var(--line-strong); background: var(--surface); color: var(--text); font: inherit; font-weight: 600; cursor: pointer; }
 .tabs button[aria-pressed="true"] { background: var(--accent-2); border-color: var(--accent-2); color: var(--accent-text); }
 .req { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; margin: 12px 0; }
@@ -1120,3 +1120,13 @@ select:disabled { opacity: 0.55; cursor: default; }
   .hero-bg .ph { width: 640px; height: 448px; }
   .hero-bg .lane:nth-child(even) { margin-inline-start: -320px; }
 }
+
+/* A filter box above a list (Sahra.findBox): filters as you type; "/" jumps to it. */
+.find-box { display: flex; gap: 8px; margin: 12px 0; }
+.find-box input { flex: 1; min-width: 0; }
+.find-box .btn { margin: 0; flex: none; width: auto; min-width: 0; min-height: 48px; }
+.find-count { margin: -4px 0 12px; }
+/* "Jump to" links at the top of a long settings page. */
+.jump { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 18px; }
+.jump a { text-decoration: none; }
+.s-card { scroll-margin-top: 88px; }

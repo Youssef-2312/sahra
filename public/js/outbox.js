@@ -66,6 +66,16 @@
       acts.length ? el("div", { class: "g-actions" }, acts) : null);
   }
 
+  var find = "";
+  function fillList(list) {
+    Sahra.clear(list);
+    var shown = rows.filter(function (x) { return Sahra.matches(find, [x.to_email, x.subject, x.body_text, t("o_st_" + x.status)]); });
+    if (find.trim()) list.appendChild(el("p", { class: "small muted find-count", attrs: { role: "status" },
+      text: t("q_find_count", { n: shown.length, total: rows.length }) + (next ? " " + t("o_find_more") : "") }));
+    if (!shown.length) { list.appendChild(el("p", { class: "s-empty muted", text: t("q_find_none") })); return; }
+    list.appendChild(el("ul", { class: "o-list" }, shown.map(rowCard)));
+  }
+
   function render(me, app) {
     if (tab === null) { app.appendChild(el("p", { class: "muted", text: t("loading") })); return; }
     if (awaiting && awaiting.n > 0) {
@@ -88,7 +98,11 @@
     if (failed) { app.appendChild(el("p", { class: "notice no", text: S.why(failed) })); return; }
     if (rows === null) { app.appendChild(el("p", { class: "muted", text: t("loading") })); return; }
     if (!rows.length) { app.appendChild(el("p", { class: "s-empty muted", text: t("o_none_" + (tab || "all")) })); return; }
-    app.appendChild(el("ul", { class: "o-list" }, rows.map(rowCard)));
+    // Filter by recipient, subject or text; redraws only the list, so typing keeps its place.
+    var list = el("div");
+    app.appendChild(Sahra.findBox({ value: find, placeholder: t("o_find_ph"), onChange: function (v) { find = v; fillList(list); } }));
+    app.appendChild(list);
+    fillList(list);
     if (next) app.appendChild(el("button", { class: "btn small-btn", text: t("o_older"), attrs: { type: "button" }, on: { click: function () { load(true); } } }));
   }
 

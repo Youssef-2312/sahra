@@ -410,6 +410,52 @@ var Sahra = (function () {
   }
 
   /** A fresh random token (256 bits, base64url): the sign-up token. */
+  // ------------------------------------------------------------ finding things
+
+  // Text for matching: lower case, Arabic letter forms folded (alef, yaa, taa marbuta),
+  // marks and tatweel removed, spaces collapsed. "Ahmed" finds "ahmed", "احمد" finds "أحمد".
+  function fold(v) {
+    return String(v == null ? "" : v).toLowerCase()
+      .replace(/[\u064B-\u065F\u0670\u0640]/g, "").replace(/[\u0622\u0623\u0625]/g, "\u0627")
+      .replace(/\u0649/g, "\u064A").replace(/\u0629/g, "\u0647").replace(/\s+/g, " ").trim();
+  }
+  /** True when every word of `q` is in one of `fields` (an empty query matches everything). */
+  function matches(q, fields) {
+    var words = fold(q).split(" ").filter(Boolean);
+    if (!words.length) return true;
+    var hay = fields.map(fold).join(" \u0001 ");
+    return words.every(function (w) { return hay.indexOf(w) >= 0; });
+  }
+  /**
+   * A filter box for a list already on the page: filters as you type (no button),
+   * Escape or Clear empties it, and "/" anywhere on the page jumps to it.
+   * o: { value, placeholder, label, onChange(text) }.
+   */
+  function findBox(o) {
+    var input = el("input", { attrs: { type: "search", value: o.value || "", placeholder: o.placeholder, "aria-label": o.label || o.placeholder, title: t("find_hint"),
+      autocomplete: "off", enterkeyhint: "search", maxlength: 80, dir: "auto", "data-find": "" } });
+    var clearBtn = el("button", { class: "btn small-btn find-clear", text: t("find_clear"), attrs: { type: "button", hidden: !o.value } });
+    var timer = null;
+    function changed() { clearBtn.hidden = !input.value; clearTimeout(timer); timer = setTimeout(function () { o.onChange(input.value); }, 120); }
+    input.addEventListener("input", changed);
+    input.addEventListener("keydown", function (e) { if (e.key === "Escape" && input.value) { e.preventDefault(); input.value = ""; changed(); } });
+    clearBtn.addEventListener("click", function () { input.value = ""; changed(); input.focus(); });
+    var f = el("form", { class: "find-box", attrs: { role: "search" } }, input, clearBtn);
+    f.addEventListener("submit", function (e) { e.preventDefault(); clearTimeout(timer); o.onChange(input.value); });
+    return f;
+  }
+  // "/" focuses the page's search or filter box (as on most sites), unless typing somewhere already.
+  document.addEventListener("keydown", function (e) {
+    if (e.key !== "/" || e.ctrlKey || e.metaKey || e.altKey) return;
+    var a = document.activeElement, tag = a && a.tagName;
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || (a && a.isContentEditable) || document.querySelector("dialog[open]")) return;
+    var box = document.querySelector("[data-find]") || document.querySelector("input[type=search]");
+    if (!box) return;
+    e.preventDefault();
+    box.focus();
+    if (box.select) box.select();
+  });
+
   function token() {
     var b = new Uint8Array(32);
     crypto.getRandomValues(b);
@@ -419,5 +465,5 @@ var Sahra = (function () {
   }
 
   return { t: t, el: el, clear: clear, api: api, errorText: errorText, money: money, amount: amount, when: when, date: date, time: time, rel: rel,
-    lang: lang, boot: boot, store: store, SESSION_KEY: SESSION_KEY, token: token, title: title, problem: problem, signinView: signinView, copyButton: copyButton, confirm: confirmBox, notify: notify, ask: ask, contactCard: contactCard, ref: function (id) { return id ? "SAH-" + String(id).slice(0, 6) : ""; } };
+    lang: lang, boot: boot, store: store, SESSION_KEY: SESSION_KEY, token: token, title: title, problem: problem, signinView: signinView, copyButton: copyButton, fold: fold, matches: matches, findBox: findBox, confirm: confirmBox, notify: notify, ask: ask, contactCard: contactCard, ref: function (id) { return id ? "SAH-" + String(id).slice(0, 6) : ""; } };
 })();

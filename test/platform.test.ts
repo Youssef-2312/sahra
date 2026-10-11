@@ -406,6 +406,27 @@ describe("disabling", () => {
     expect(JSON.stringify(counts)).not.toContain("Guest");
   });
 
+  it("Not paid: the same switch-off, noted as unpaid for the site owner only; cleared by enabling; other reasons refused", async () => {
+    const h = await harness();
+    const a = await siteOwner(h);
+    const { party, os } = await openParty(h);
+    const list = async () => ((await (await h.req("/api/platform/parties", { cookies: { "__Host-sahra_p": a.s.token } })).json()) as { parties: Record<string, unknown>[] })
+      .parties.find((x) => x.id === party)!;
+    expect((await list()).unpaid).toBe(false);
+    expect((await h.req(`/api/platform/parties/${party}/disable`, papi(a.s, { reason: "late" }))).status).toBe(400);
+    expect(await (await h.req(`/api/platform/parties/${party}/disable`, papi(a.s, { reason: "unpaid" }))).json()).toMatchObject({ status: "disabled" });
+    expect(await list()).toMatchObject({ unpaid: true });
+    expect((await list()).disabled_at).not.toBeNull();
+    // The party's team is signed out, as with any switch-off; nothing they can read says why.
+    expect((await h.req("/api/me", { cookies: { "__Host-sahra_s": os.token } })).status).toBe(401);
+    expect((await h.req(`/api/platform/parties/${party}/enable`, papi(a.s))).status).toBe(200);
+    expect(await list()).toMatchObject({ unpaid: false, disabled_at: null });
+    // Switched off again without the reason: not shown as unpaid.
+    h.clock.advance(1000);
+    expect((await h.req(`/api/platform/parties/${party}/disable`, papi(a.s))).status).toBe(200);
+    expect((await list()).unpaid).toBe(false);
+  });
+
   it("disabled party: staff sign-in refused even for a session-less owner (the party picker skips it)", async () => {
     const h = await harness();
     const a = await siteOwner(h);
@@ -642,6 +663,53 @@ describe("re-enabling a party", () => {
     expect((await h.req("/api/admission", api(owner2, { action: "open" }))).status).toBe(200);
     const door2 = await (await import("./helpers")).seedDoor(party, h.clock);
     expect(await scan(h, door2, t!.qr)).toMatchObject({ verdict: "admit" });
+  });
+});
+
+describe("deleting switched-off people", () => {
+  it("a disabled party owner is deleted with their invitations; their name and email are cleared from the change log; never an active one", async () => {
+    const h = await harness();
+    const a = await siteOwner(h);
+    const o = await organiser(h);
+    const { body } = await inviteOrganiser(h, a.s, "later.owner@gmail.com", "Later Owner");
+    const del = (id: string, as = a.s) => h.req(`/api/platform/organisers/${id}/delete`, papi(as));
+    // Still active: refused; nobody else may; unknown: 404.
+    expect(await (await del(o.id)).json()).toEqual({ error: "not_disabled" });
+    expect((await del(o.id, o.s)).status).toBe(403);
+    expect((await del(newId())).status).toBe(404);
+    expect((await createParty(h, o.s)).status).toBe(200);
+    for (const id of [o.id, body.organiser_id]) expect((await h.req(`/api/platform/organisers/${id}/disable`, papi(a.s))).status).toBe(200);
+    const rev = Number(await env.DB.prepare("SELECT rev FROM organisers WHERE id = ?").bind(body.organiser_id).first("rev"));
+    expect(await (await del(body.organiser_id)).json()).toEqual({ status: "deleted" });
+    expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM organisers WHERE id = ?").bind(body.organiser_id).first("n")).toBe(0);
+    expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM organiser_invites WHERE organiser_id = ?").bind(body.organiser_id).first("n")).toBe(0);
+    for (let r = 1; r <= rev; r++) expect((await logEntry("organiser", body.organiser_id, r))!.state).toMatchObject({ name: "Deleted", email: "deleted@invalid", google_sub: null });
+    expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM audit WHERE action = 'organiser_deleted' AND entity_id = ?").bind(body.organiser_id).first("n")).toBe(1);
+    // A retry: already gone (404), nothing more changes. The list no longer shows them.
+    expect((await del(body.organiser_id)).status).toBe(404);
+    const list = (await (await h.req("/api/platform/organisers", { cookies: { "__Host-sahra_p": a.s.token } })).json()) as { organisers: { id: string }[] };
+    expect(list.organisers.map((x) => x.id)).not.toContain(body.organiser_id);
+    // One who made a party: deleted too; the party stays, without a party owner.
+    expect(await (await del(o.id)).json()).toEqual({ status: "deleted" });
+    const parties = (await (await h.req("/api/platform/parties", { cookies: { "__Host-sahra_p": a.s.token } })).json()) as { parties: { organiser_name: string | null }[] };
+    expect(parties.parties.length).toBeGreaterThan(0);
+    // The same Gmail can be invited again afterwards.
+    expect((await inviteOrganiser(h, a.s, "later.owner@gmail.com", "Later Owner")).r.status).toBe(200);
+  });
+
+  it("a removed site owner can be deleted; never yourself and never one still active", async () => {
+    const h = await harness();
+    const a = await siteOwner(h);
+    const b = await siteOwner(h);
+    const del = (id: string) => h.req(`/api/platform/site-owners/${id}/delete`, papi(a.s));
+    expect(await (await del(a.id)).json()).toEqual({ error: "cannot_remove_yourself" });
+    expect(await (await del(b.id)).json()).toEqual({ error: "not_disabled" });
+    expect((await h.req(`/api/platform/site-owners/${b.id}/remove`, papi(a.s))).status).toBe(200);
+    expect(await (await del(b.id)).json()).toEqual({ status: "deleted" });
+    expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM platform_admins WHERE id = ?").bind(b.id).first("n")).toBe(0);
+    expect((await logEntry("platform_admin", b.id, 2))!.state).toMatchObject({ name: "Deleted", email: "deleted@invalid", google_sub: null });
+    // The one who deleted is still signed in and still a site owner.
+    expect((await h.req("/api/platform/me", { cookies: { "__Host-sahra_p": a.s.token } })).status).toBe(200);
   });
 });
 

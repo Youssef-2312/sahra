@@ -50,8 +50,8 @@
     redrawFind();
   }
 
-  async function run(x, action, body, confirmText) {
-    if (confirmText && !(await Sahra.confirm(confirmText, { danger: true }))) return;
+  async function run(x, action, body, confirmText, safe) {
+    if (confirmText && !(await Sahra.confirm(confirmText, { danger: !safe }))) return;
     var key = action + ":" + x.id;
     var path = "/api/tickets/" + encodeURIComponent(x.id) + "/" + action;
     var r = await S.act(path, action === "resend" ? {} : Object.assign({ op: opFor(key) }, body || {}));
@@ -61,7 +61,9 @@
       notes[x.id] = r.ok ? ["yes", r.body.status === "queued" ? t("g_resent") : t("g_resent_already"), link]
         : r.body && r.body.error === "no_email" ? ["maybe", t("g_no_email"), link] : ["no", S.why(r)];
     } else if (!r.ok) {
-      notes[x.id] = ["no", r.body && r.body.error === "not_allowed" ? t("g_not_allowed_" + action) : S.why(r)];
+      var code = r.body && r.body.error;
+      notes[x.id] = ["no", code === "not_allowed" ? t("g_not_allowed_" + action)
+        : action === "restore" && SahraText.en["g_restore_" + code] ? t("g_restore_" + code) : S.why(r)];
     } else {
       notes[x.id] = ["yes", t("g_done_" + action), link];
       delete open[x.id];
@@ -79,7 +81,9 @@
       x.status === "approved" && !x.used_at ? el("button", { class: "btn small-btn", text: t("g_reissue"), attrs: { type: "button" }, on: { click: function () { run(x, "reissue", null, t("g_reissue_confirm")); } } }) : null,
       live && !x.used_at ? el("button", { class: "btn small-btn", text: t("g_change_email"), attrs: { type: "button", "aria-expanded": open[x.id] === "email" ? "true" : "false" }, on: { click: function () { open[x.id] = open[x.id] === "email" ? null : "email"; redrawFind(); } } }) : null,
       live && !x.used_at ? el("button", { class: "btn small-btn", text: t("g_transfer"), attrs: { type: "button", "aria-expanded": open[x.id] === "transfer" ? "true" : "false" }, on: { click: function () { open[x.id] = open[x.id] === "transfer" ? null : "transfer"; redrawFind(); } } }) : null,
-      live && !x.used_at ? el("button", { class: "btn no small-btn", text: t("g_cancel"), attrs: { type: "button" }, on: { click: function () { run(x, "cancel", null, t("g_cancel_confirm", { name: x.guest_name || x.id })); } } }) : null);
+      live && !x.used_at ? el("button", { class: "btn no small-btn", text: t("g_cancel"), attrs: { type: "button" }, on: { click: function () { run(x, "cancel", null, t("g_cancel_confirm", { name: x.guest_name || x.id })); } } }) : null,
+      // A cancelled ticket can be brought back (owner request), with a new QR code.
+      x.status === "cancelled" && !x.used_at ? el("button", { class: "btn small-btn", text: t("g_restore"), attrs: { type: "button" }, on: { click: function () { run(x, "restore", null, t("g_restore_confirm", { name: x.guest_name || Sahra.ref(x.id) }), true); } } }) : null);
     var note = notes[x.id];
     var li = el("li", { class: "g-row" },
       el("div", { class: "g-who" },
@@ -540,6 +544,13 @@
         if (rs[0].ok) stats = rs[0].body;
         if (rs[1].ok) types = rs[1].body.types || [];
         S.redraw();
+        // Opened from the dashboard's "Find a guest" (/guests.html?q=...): run that search.
+        var q0 = (new URLSearchParams(location.search).get("q") || "").trim().slice(0, 80);
+        if (q0.length >= 2) {
+          search(q0);
+          var finder = document.getElementById("find");
+          if (finder && finder.scrollIntoView) finder.scrollIntoView({ block: "start" });
+        }
         setInterval(function () { if (document.visibilityState === "visible") loadStats(); }, 60000);
         if (me.staff.role === "owner") loadHolds();
       });

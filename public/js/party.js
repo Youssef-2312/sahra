@@ -556,6 +556,20 @@
   var ORDER = [["basics", "s_basics"], ["contact", "s_contact"], ["time", "s_time"], ["location", "s_location"], ["requests", "s_requests"], ["rules", "s_rules"],
     ["pictures", "s_pictures"], ["types", "s_types"], ["form", "s_form"], ["emails", "s_emails"], ["cancel", "s_cancel"]];
 
+  var settingFind = "";
+  function filterSections(toc, none, order) {
+    var any = false;
+    order.forEach(function (o, i) {
+      var n = nodes[o[0]];
+      var hit = !n || Sahra.matches(settingFind, [n.textContent, [].map.call(n.querySelectorAll("[placeholder]"), function (x) { return x.placeholder; }).join(" ")]);
+      if (n) n.hidden = !hit;
+      var li = toc.querySelectorAll("li")[i];
+      if (li) li.hidden = !hit;
+      any = any || hit;
+    });
+    none.hidden = any;
+  }
+
   function render(me, app) {
     who = me;
     if (loadErr) { app.appendChild(el("p", { class: "notice no", text: S.why(loadErr) })); return; }
@@ -565,8 +579,14 @@
       return el("li", null, el("a", { text: t(o[1]), attrs: { href: "#" + o[0] } }));
     })));
     var main = el("div", { class: "s-main" });
+    // "Find a setting": shows only the sections whose title, labels or hints match (and their links).
+    var none = el("p", { class: "s-empty muted", text: t("s_find_none") });
+    none.hidden = true;
+    main.appendChild(Sahra.findBox({ value: settingFind, placeholder: t("s_find_ph"), onChange: function (v) { settingFind = v; filterSections(toc, none, order); } }));
+    main.appendChild(none);
     order.forEach(function (o) { nodes[o[0]] = BUILD[o[0]](); main.appendChild(nodes[o[0]]); });
     app.appendChild(el("div", { class: "s-layout" }, toc, main));
+    filterSections(toc, none, order);
   }
 
   var ready = false;

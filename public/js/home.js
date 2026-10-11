@@ -15,7 +15,8 @@
   var parties = null, failed = null;
   var mine = [];          // [{ link, status, party_id, party_name, starts_at, time_zone }]
   var heroBox = document.getElementById("hero");
-  var filter = "all";     // the chips above the parties (this page only, not remembered)
+  var filter = "all";
+  var partyFind = "";     // the party search (shown once there are several parties)     // the chips above the parties (this page only, not remembered)
   // Twenty-two distinct photos, with similar scenes spaced apart.
   var HERO = [1, 17, 8, 18, 14, 19, 3, 20, 10, 16, 22, 6, 5, 24, 13, 2, 15, 9, 4, 11, 12, 7];
 
@@ -173,7 +174,7 @@
       var keys = Object.keys(FILTERS).filter(function (k) { return k === "all" || parties.some(FILTERS[k]); });
       if (!keys.some(function (k) { return k === filter; })) filter = "all";
       var fill = function () {
-        var shown = parties.filter(FILTERS[filter]);
+        var shown = parties.filter(FILTERS[filter]).filter(function (p) { return Sahra.matches(partyFind, [p.name, p.id]); });
         Sahra.clear(grid);
         if (shown.length) shown.forEach(function (p) { grid.appendChild(card(p)); });
         else grid.appendChild(el("p", { class: "muted none", text: t("h_filter_none") }));
@@ -188,6 +189,7 @@
       });
       head.appendChild(el("div", { class: "head-tools" }, keys.length > 1 ? chips : null, count));
       fill();
+      if (parties.length > 6) list.push(Sahra.findBox({ value: partyFind, placeholder: t("h_find_ph"), onChange: function (v) { partyFind = v; fill(); } }));
       list.push(grid);
     }
     return list;

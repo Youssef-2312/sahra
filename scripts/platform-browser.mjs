@@ -118,7 +118,7 @@ try {
   await party.getByRole('button', { name: 'Enable party', exact: true }).click();
   await o.page.locator('dialog.dlg button[type=submit]').click();
   await party.getByRole('button', { name: 'Disable party...', exact: true }).waitFor();
-  await party.locator('summary').click();
+  await party.locator('summary', { hasText: 'Invite new party owner' }).click();
   await party.locator('[name=name]').fill('New local owner');
   await party.locator('[name=email]').fill('local.owner@gmail.com');
   await party.getByRole('button', { name: 'Invite new party owner', exact: true }).click();
@@ -136,6 +136,47 @@ try {
   assert.ok(o.posts.some(p => p.path.endsWith('/remove')));
   assert.deepEqual(o.errors, []); await o.context.close();
   console.log('PASS party disable confirmation, re-enable, owner invitation and site-owner removal confirmation');
+
+  // Deleting a switched-off party owner (owner request), and the list filters.
+  for (const width of [390, 1440]) {
+    const d = await fixture('owner', 'en', width);
+    const off = '33333333-3333-4333-8333-333333333333';
+    d.state.organisers.push({ id: off, name: 'Old Owner', email: 'old.owner@gmail.com', party_limit: 1, active_parties: 0, linked: true, disabled_at: now },
+      ...Array.from({ length: 5 }, (_, i) => ({ id: `4444444${i}-4444-4444-8444-444444444444`, name: `Active ${i}`, email: `a${i}@gmail.com`, party_limit: 1, active_parties: 0, linked: true })));
+    d.state.parties.push(...Array.from({ length: 5 }, (_, i) => ({ ...structuredClone(emptyParty), id: `extra-${i}`, name: `Extra party ${i}` })));
+    await d.page.locator('.lang-switch').click(); await d.page.locator('.lang-switch').click(); // redraw with the new lists
+    await d.page.evaluate(() => location.reload()); await d.page.waitForLoadState('networkidle');
+    // Filters: typing narrows the list and keeps the cursor in the box.
+    const pf = d.page.locator('#parties [data-find]');
+    await pf.fill('extra party 3');
+    await d.page.waitForFunction(() => document.querySelectorAll('#parties .g-row').length === 1);
+    await pf.press('End'); await d.page.keyboard.type('x');
+    assert.equal(await d.page.evaluate(() => document.activeElement && document.activeElement.dataset.findKey), 'parties', 'typing keeps focus');
+    await pf.fill('');
+    await d.page.waitForFunction(() => document.querySelectorAll('#parties .g-row').length === 6);
+    await d.page.locator('#organisers [data-find]').fill('old.owner');
+    await d.page.waitForFunction(() => document.querySelectorAll('#organisers .g-row').length === 1);
+    // Only the switched-off person has Delete; Cancel in the dialog changes nothing; the red button deletes.
+    assert.equal(await d.page.locator('#organisers').getByRole('button', { name: 'Delete', exact: true }).count(), 1);
+    await d.page.locator('#organisers').getByRole('button', { name: 'Delete', exact: true }).click();
+    await d.page.locator('dialog.dlg').getByRole('button', { name: 'Cancel', exact: true }).click();
+    assert.equal(d.posts.some(p => p.path.endsWith('/delete')), false);
+    await d.page.locator('#organisers').getByRole('button', { name: 'Delete', exact: true }).click();
+    await d.page.locator('dialog.dlg button[type=submit]').click();
+    await d.page.locator('#organisers .say.yes').waitFor();
+    assert.ok(d.posts.some(p => p.path === `/api/platform/organisers/${off}/delete`));
+    // Not paid: folded under Payment, one confirmation, the switch-off sent with the reason.
+    const row = d.page.locator('#parties .g-row').filter({ hasText: 'Extra party 2' });
+    await row.locator('summary', { hasText: 'Payment' }).click();
+    await row.getByRole('button', { name: 'Not paid: switch off now', exact: true }).click();
+    await d.page.locator('dialog.dlg button[type=submit]').click();
+    await d.page.waitForFunction(() => document.querySelector('#parties .say.yes'));
+    const sent = d.posts.find(p => p.path === '/api/platform/parties/extra-2/disable');
+    assert.deepEqual(sent && sent.body, { reason: 'unpaid' });
+    assert.equal(await d.page.evaluate(() => document.documentElement.scrollWidth - innerWidth), 0, `${width}: horizontal overflow`);
+    assert.deepEqual(d.errors, []); await d.context.close();
+  }
+  console.log('PASS party and party-owner filters; deleting a switched-off party owner asks first; Not paid switch-off (390 and 1440 px)');
 } finally {
   await browser.close();
 }

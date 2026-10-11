@@ -4,7 +4,7 @@
 
 import type { SqlDriver } from "./driver";
 import { audit, sessionValid, type Role, type SessionRef } from "./index";
-import { sql, type Sql } from "./sql";
+import { raw, sql, type Sql } from "./sql";
 
 export type ScanOutcome = "admitted" | "already_used" | "not_approved" | "not_released" | "old_version" | "unknown_ticket" | "paused";
 
@@ -262,6 +262,39 @@ export class TicketDb {
   cancel(sess: SessionRef, id: string, now: number, actor: string, op: string) {
     return this.change(sess, ["owner", "admin"], id, "cancelled",
       sql`status = 'cancelled', cancelled_at = ${now}, cancelled_by = ${actor}`, sql`status IN ('pending', 'approved') AND used_scan_id IS NULL`, now, actor, op);
+  }
+
+  /**
+   * Restore a cancelled ticket (owner request: "I cancelled a ticket and I want to
+   * bring it back"): back to approved when it had been approved, else to waiting.
+   * Checked in the statement: never used at the door, the party not cancelled, its
+   * places (pending + approved people + this ticket within the capacity, and within
+   * the ticket type's places), and no refund recorded for it. A new QR version, so a
+   * screenshot of the old code never scans green; the ticket link shows the new one.
+   */
+  restore(sess: SessionRef, id: string, now: number, actor: string, op: string) {
+    const held = (col: string, val: Sql) => sql`(SELECT COALESCE(SUM(o.people), 0) FROM tickets o WHERE o.${raw(col)} = ${val} AND o.status IN ('pending', 'approved'))`;
+    return this.change(sess, ["owner", "admin"], id, "restored",
+      sql`status = CASE WHEN approved_at IS NOT NULL THEN 'approved' ELSE 'pending' END, cancelled_at = NULL, cancelled_by = NULL, qr_version = qr_version + 1`,
+      sql`status = 'cancelled' AND used_scan_id IS NULL
+        AND (SELECT cancelled_at FROM parties WHERE id = tickets.party_id) IS NULL
+        AND ${held("party_id", sql`tickets.party_id`)} + tickets.people <= (SELECT capacity FROM parties WHERE id = tickets.party_id)
+        AND (tickets.type_id IS NULL OR (SELECT quantity FROM ticket_types WHERE id = tickets.type_id) IS NULL
+          OR ${held("type_id", sql`tickets.type_id`)} + tickets.people <= (SELECT quantity FROM ticket_types WHERE id = tickets.type_id))
+        AND NOT EXISTS (SELECT 1 FROM refunds r WHERE r.ticket_id = tickets.id)`, now, actor, op);
+  }
+
+  /** Read-only: why restore() refused this ticket. */
+  async restoreRefusal(partyId: string, id: string) {
+    const r = await this.driver.all<{ status: string; used: number; party_cancelled: number; refund: number }>(sql`SELECT t.status,
+        t.used_scan_id IS NOT NULL AS used, p.cancelled_at IS NOT NULL AS party_cancelled,
+        EXISTS (SELECT 1 FROM refunds r WHERE r.ticket_id = t.id) AS refund
+      FROM tickets t JOIN parties p ON p.id = t.party_id WHERE t.id = ${id} AND t.party_id = ${partyId}`);
+    const x = r.results[0];
+    if (!x || x.status !== "cancelled" || x.used) return "not_allowed";
+    if (x.party_cancelled) return "party_cancelled";
+    if (x.refund) return "refund_recorded";
+    return "full";
   }
 
   /** Reissue: bumps qr_version, so every older QR code for this ticket stops working. */
