@@ -417,7 +417,7 @@ ticketRoutes.post("/release", requireAuth(MANAGERS), async (c) => {
  * Cancel or reissue: intent first, then the change (TicketDb), then the change log.
  * `op` (a UUID from the browser) makes a retry after "pending" recognizable.
  */
-async function intentChange(c: Ctx, action: "cancelled" | "reissued") {
+async function intentChange(c: Ctx, action: "cancelled" | "reissued" | "restored") {
   const id = c.req.param("id");
   const op = (await readJson(c))?.op;
   if (!isTicketId(id) || !isUuid(op)) return json(c, 400, { error: "invalid_request" });
@@ -430,8 +430,9 @@ async function intentChange(c: Ctx, action: "cancelled" | "reissued") {
     status = "already";
   } else {
     await recordIntent(c.var.ledger, op, sess.partyId, action, [{ entity: "ticket", id }], now);
-    const ok = action === "cancelled" ? await tdb.cancel(sess, id, now, actor, op) : await tdb.reissue(sess, id, now, actor, op);
-    if (!ok) return json(c, 409, { error: "not_allowed" });
+    const ok = action === "cancelled" ? await tdb.cancel(sess, id, now, actor, op)
+      : action === "restored" ? await tdb.restore(sess, id, now, actor, op) : await tdb.reissue(sess, id, now, actor, op);
+    if (!ok) return json(c, 409, { error: action === "restored" ? await restoreRefusal(c, id) : "not_allowed" });
     status = "done";
   }
   await flushChangeLog(c.var.db, c.var.ledger, now, [id]);
@@ -440,6 +441,13 @@ async function intentChange(c: Ctx, action: "cancelled" | "reissued") {
 
 ticketRoutes.post("/:id/cancel", requireAuth(MANAGERS), (c) => intentChange(c, "cancelled"));
 ticketRoutes.post("/:id/reissue", requireAuth(MANAGERS), (c) => intentChange(c, "reissued"));
+/** Bring back a cancelled ticket (see TicketDb.restore). */
+ticketRoutes.post("/:id/restore", requireAuth(MANAGERS), (c) => intentChange(c, "restored"));
+
+/** Why a restore was refused, for the owner (read after the guarded write refused it). */
+async function restoreRefusal(c: Ctx, id: string) {
+  return new TicketDb(c.var.db.driver).restoreRefusal(sessOf(c).sess.partyId, id);
+}
 
 /**
  * Name transfer (feature 13): new name (and optionally a new email); the ticket is

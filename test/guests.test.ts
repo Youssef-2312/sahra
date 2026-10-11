@@ -361,6 +361,45 @@ describe("cancel, reissue, name transfer", () => {
     expect(await (await h.req(`/api/tickets/${id}/cancel`, api(os, { op }))).json()).toEqual({ status: "already" });
   });
 
+  it("restored: back to approved with a new QR (the old one never scans green), once; refused when full, used or refunded", async () => {
+    const { h, party, os, door } = await setup();
+    const { id, link } = await releasedTicket(h, party, os);
+    const old = await qrOf(h, link);
+    expect((await h.req(`/api/tickets/${id}/cancel`, api(os, { op: newId() }))).status).toBe(200);
+    // Door staff cannot restore.
+    expect((await h.req(`/api/tickets/${id}/restore`, api(door, { op: newId() }))).status).toBe(403);
+    const op = newId();
+    expect(await (await h.req(`/api/tickets/${id}/restore`, api(os, { op }))).json()).toEqual({ status: "done" });
+    expect(await (await h.req(`/api/tickets/${id}/restore`, api(os, { op }))).json()).toEqual({ status: "already" });
+    expect(await ticket(id)).toMatchObject({ status: "approved", cancelled_at: null, last_action: "restored" });
+    const fresh = await qrOf(h, link);
+    expect(fresh).not.toBe(old);
+    expect(await scan(h, door, old)).toMatchObject({ verdict: "stop" });
+    expect(await scan(h, door, fresh)).toMatchObject({ verdict: "admit" });
+    // Not cancelled any more (and now used): a second restore is refused.
+    expect(await (await h.req(`/api/tickets/${id}/restore`, api(os, { op: newId() }))).json()).toEqual({ error: "not_allowed" });
+    expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM audit WHERE entity_id = ? AND action = 'restored'").bind(id).first("n")).toBe(1);
+
+    // A request cancelled while waiting goes back to waiting.
+    const w = await signup(h, party);
+    expect((await h.req(`/api/tickets/${w.body.ticket_id}/cancel`, api(os, { op: newId() }))).status).toBe(200);
+    expect((await h.req(`/api/tickets/${w.body.ticket_id}/restore`, api(os, { op: newId() }))).status).toBe(200);
+    expect(await ticket(w.body.ticket_id!)).toMatchObject({ status: "pending" });
+
+    // Its place was taken in the meantime: refused, "full".
+    const f = await signup(h, party);
+    expect((await h.req(`/api/tickets/${f.body.ticket_id}/cancel`, api(os, { op: newId() }))).status).toBe(200);
+    const held = Number(await env.DB.prepare("SELECT COALESCE(SUM(people), 0) AS n FROM tickets WHERE party_id = ? AND status IN ('pending', 'approved')").bind(party).first("n"));
+    await env.DB.prepare("UPDATE parties SET capacity = ? WHERE id = ?").bind(held, party).run();
+    expect(await (await h.req(`/api/tickets/${f.body.ticket_id}/restore`, api(os, { op: newId() }))).json()).toEqual({ error: "full" });
+    await env.DB.prepare("UPDATE parties SET capacity = ? WHERE id = ?").bind(held + 10, party).run();
+    // A refund recorded for it: refused.
+    await env.DB.prepare("UPDATE tickets SET price = 300 WHERE id = ?").bind(f.body.ticket_id).run();
+    expect((await h.req(`/api/party/refunds/${f.body.ticket_id}`, api(os, { state: "due" }))).status).toBe(200);
+    expect(await (await h.req(`/api/tickets/${f.body.ticket_id}/restore`, api(os, { op: newId() }))).json()).toEqual({ error: "refund_recorded" });
+    expect(await ticket(f.body.ticket_id!)).toMatchObject({ status: "cancelled" });
+  });
+
   it("reissued: the old QR is refused, the new one (same link) admits once", async () => {
     const { h, party, os, door } = await setup();
     const { id, link } = await releasedTicket(h, party, os);

@@ -21,6 +21,7 @@ import { json, readJson } from "../context";
 import { CONFIG } from "../env";
 import { COOKIE_SESSION, clearCookie, cookie } from "../lib/http";
 import { csrfFor, isUuid, newId, newToken, sha256hex } from "../lib/crypto";
+import { inList, sql } from "../db/sql";
 import { COOKIE_PLATFORM, requirePlatform, type PCtx, type PlatformEnv } from "../platform/auth";
 import { MAX_PARTY_LIMIT, PLATFORM, platformSessionFor, siteOwnerValid } from "../platform/db";
 import { healthView } from "../health";
@@ -160,6 +161,9 @@ platformRoutes.post("/parties/:id/disable", requirePlatform(["site_owner"]), asy
   if (!PARTY_ID.test(partyId)) return j(c, 400, { error: "invalid_request" });
   const p = c.var.platform;
   const now = c.var.deps.now();
+  // Optional {"reason": "unpaid"}: the quick "Not paid" switch-off, noted for the site owner only.
+  const reason = (await readJson(c as never))?.reason;
+  if (reason !== undefined && reason !== null && reason !== "unpaid") return j(c, 400, { error: "invalid_request" });
   const party = await c.var.pdb.partyForDisable(partyId);
   if (!party) return j(c, 404, { error: "not_found" });
   const op = newId();
@@ -174,7 +178,7 @@ platformRoutes.post("/parties/:id/disable", requirePlatform(["site_owner"]), asy
     }
   }
   // 2. Main database, one batch.
-  const r = await c.var.pdb.disableParty(p.hash, p.info.site_owner_id!, partyId, pn, now, op);
+  const r = await c.var.pdb.disableParty(p.hash, p.info.site_owner_id!, partyId, pn, now, op, reason === "unpaid");
   if (r === "rejected") return j(c, 409, { error: "not_allowed" });
   await flushChangeLog(c.var.db, c.var.ledger, now);
   return j(c, 200, { status: r, pause_number: pn });
@@ -234,6 +238,39 @@ platformRoutes.post("/site-owners/:id/remove", requirePlatform(["site_owner"]), 
   await flushChangeLog(c.var.db, c.var.ledger, now);
   return j(c, 200, { status: r.status, staff_disabled: r.staff.length });
 });
+
+/**
+ * Delete a switched-off party owner or site owner for good (owner request). Only
+ * one that is already switched off, and never yourself. Their name, email and
+ * Google account are first cleared from every logged copy in the change log, as
+ * guest details are after a party (so a later recovery can only bring back an
+ * anonymous, switched-off row); then the row and a party owner's invitations are
+ * deleted in one batch with an audit row. A retry repeats the clearing (it changes
+ * nothing more) and answers "already".
+ */
+async function deletePerson(c: PCtx, table: "organisers" | "platform_admins", entity: "organiser" | "platform_admin") {
+  const id = c.req.param("id") ?? "";
+  if (!isUuid(id)) return j(c, 400, { error: "invalid_request" });
+  const p = c.var.platform;
+  if (id === p.info.site_owner_id) return j(c, 409, { error: "cannot_remove_yourself" });
+  const now = c.var.deps.now();
+  const row = await c.var.pdb.personState(table, id);
+  if (!row) return j(c, 404, { error: "not_found" });
+  if (row.disabled_at === null) return j(c, 409, { error: "not_disabled" });
+  // Copies not logged yet go into the change log first, so they are cleared with the rest.
+  await flushChangeLog(c.var.db, c.var.ledger, now);
+  const events = Array.from({ length: Number(row.rev) }, (_, i) => `${entity}:${id}:${i + 1}`);
+  for (let i = 0; i < events.length; i += 50) {
+    await c.var.ledgerDriver.all(sql`UPDATE change_log SET state = json_set(state, '$.name', 'Deleted', '$.email', 'deleted@invalid', '$.google_sub', json('null'))
+      WHERE event_id IN (${inList(events.slice(i, i + 50))}) AND (json_extract(state, '$.name') IS NOT 'Deleted' OR json_extract(state, '$.email') IS NOT 'deleted@invalid'
+        OR json_extract(state, '$.google_sub') IS NOT NULL)`);
+  }
+  const r = await c.var.pdb.deletePerson(p.hash, p.info.site_owner_id!, table, id, now);
+  if (r === "rejected") return j(c, 409, { error: "not_allowed" });
+  return j(c, 200, { status: r });
+}
+platformRoutes.post("/organisers/:id/delete", requirePlatform(["site_owner"]), (c) => deletePerson(c, "organisers", "organiser"));
+platformRoutes.post("/site-owners/:id/delete", requirePlatform(["site_owner"]), (c) => deletePerson(c, "platform_admins", "platform_admin"));
 
 /**
  * Manage any party (owner decision): the site owner gets an ordinary owner staff

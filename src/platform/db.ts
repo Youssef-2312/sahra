@@ -326,7 +326,10 @@ o.party_limit, ${activeParties(sql`o.id`)} AS active_parties,
           (SELECT COUNT(*) FROM staff ow WHERE ow.party_id = p.id AND ow.role = 'owner' AND ow.disabled_at IS NULL
             AND ow.google_sub IS NULL) AS pending_owner_invites,
           (SELECT COUNT(*) FROM staff ow WHERE ow.party_id = p.id AND ow.disabled_at IS NULL
-            AND ow.site_owner_id IS NOT NULL) AS site_owners_managing
+            AND ow.site_owner_id IS NOT NULL) AS site_owners_managing,
+          -- Switched off with the "Not paid" button (the audit row of that switch-off says so).
+          (p.disabled_at IS NOT NULL AND EXISTS (SELECT 1 FROM audit a WHERE a.party_id = p.id AND a.action = 'party_disabled'
+            AND a.at = p.disabled_at AND a.detail LIKE '%; unpaid')) AS unpaid
         FROM parties p LEFT JOIN organisers o ON o.id = p.organiser_id WHERE p.id != ${PLATFORM} AND ${ok} ORDER BY p.created_at`,
       sql`SELECT party_id, status, COUNT(*) AS n FROM tickets WHERE ${ok} GROUP BY party_id, status`,
       sql`SELECT party_id, status, COUNT(*) AS n FROM outbox WHERE ${ok} GROUP BY party_id, status`,
@@ -342,7 +345,7 @@ o.party_limit, ${activeParties(sql`o.id`)} AS active_parties,
     }
     return {
       parties: (rs[0]!.results as { id: string; active_owners: number }[]).map((p) => ({
-        ...p, no_active_owner: Number(p.active_owners) === 0, tickets: tickets.get(p.id) ?? {}, outbox: outbox.get(p.id) ?? {},
+        ...p, unpaid: !!(p as { unpaid?: number }).unpaid, no_active_owner: Number(p.active_owners) === 0, tickets: tickets.get(p.id) ?? {}, outbox: outbox.get(p.id) ?? {},
       })),
     };
   }
@@ -361,7 +364,7 @@ o.party_limit, ${activeParties(sql`o.id`)} AS active_parties,
    * first): marks it disabled and paused with the control object's
    * pause_number, revokes every session and every unused invitation, audit rows.
    */
-  async disableParty(hash: string, ownerId: string, partyId: string, pauseNumber: number, now: number, op: string) {
+  async disableParty(hash: string, ownerId: string, partyId: string, pauseNumber: number, now: number, op: string, unpaid = false) {
     const ok = siteOwnerValid(hash, ownerId, now);
     const disabled = sql`EXISTS (SELECT 1 FROM parties WHERE id = ${partyId} AND disabled_at IS NOT NULL)`;
     const rs = await this.driver.batch([
@@ -373,7 +376,8 @@ o.party_limit, ${activeParties(sql`o.id`)} AS active_parties,
       sql`UPDATE invites SET revoked_at = ${now}, revoked_by = ${ownerId}, rev = rev + 1, last_op = ${op}, last_action = 'invite_revoked'
         WHERE party_id = ${partyId} AND used_at IS NULL AND revoked_at IS NULL AND ${disabled} AND ${ok}`,
       audit(now, ownerId, "party_disabled", "party", sql`SELECT id AS party_id, id, rev FROM parties WHERE id = ${partyId} AND last_op = ${op}`,
-        `site owner; pause_number ${pauseNumber}`),
+        // "unpaid": the site owner's own note (shown only in the site-owner panel, never to the party's team or guests).
+        `site owner; pause_number ${pauseNumber}${unpaid ? "; unpaid" : ""}`),
       audit(now, ownerId, "invite_revoked", "invite", sql`SELECT party_id, id, rev FROM invites WHERE party_id = ${partyId} AND last_op = ${op}`,
         "party disabled"),
       sql`SELECT disabled_at, ${ok} AS ok FROM parties WHERE id = ${partyId}`,
@@ -487,6 +491,43 @@ o.party_limit, ${activeParties(sql`o.id`)} AS active_parties,
     if (Number(row.ok) !== 1 || targetId === ownerId) return { status: "rejected" as const, staff };
     if (rs[0]!.meta.changes === 1) return { status: "removed" as const, staff };
     return { status: row.disabled_at != null ? ("already" as const) : ("rejected" as const), staff };
+  }
+
+  // ------------------------------------------------------- deleting switched-off people
+
+  /**
+   * Read-only: a party owner (organisers) or site owner (platform_admins) row: whether it
+   * is switched off, and its rev (every logged copy of it is cleared before it is deleted).
+   */
+  async personState(table: "organisers" | "platform_admins", id: string) {
+    const r = await this.driver.all<{ rev: number; disabled_at: number | null }>(
+      sql`SELECT rev, disabled_at FROM ${raw(table)} WHERE id = ${id}`,
+    );
+    return r.results[0] ?? null;
+  }
+
+  /**
+   * Deletes a switched-off person for good (owner request: "deleting the disabled
+   * people"): only a row that is already disabled, never yourself, and only by the
+   * site owner, all inside the statements. A party owner's invitations go with
+   * them (they point to the row). The audit row keeps the id, not the name or email.
+   * Their parties keep their tickets and teams; a party just shows no party owner.
+   */
+  async deletePerson(hash: string, ownerId: string, table: "organisers" | "platform_admins", id: string, now: number) {
+    const ok = siteOwnerValid(hash, ownerId, now);
+    const t = raw(table);
+    const gone = sql`id = ${id} AND id != ${ownerId} AND disabled_at IS NOT NULL AND ${ok}`;
+    const entity = table === "organisers" ? "organiser" : "platform_admin";
+    const rs = await this.driver.batch([
+      paudit(now, ownerId, `${entity}_deleted`, entity, sql`SELECT id, rev FROM ${t} WHERE ${gone}`),
+      table === "organisers"
+        ? sql`DELETE FROM organiser_invites WHERE organiser_id = ${id} AND EXISTS (SELECT 1 FROM organisers WHERE ${gone})`
+        : sql`SELECT 1`,
+      sql`DELETE FROM ${t} WHERE ${gone}`,
+      sql`SELECT ${ok} AS ok`,
+    ]);
+    if (Number((rs[3]!.results[0] as { ok: number }).ok) !== 1) return "rejected" as const;
+    return rs[2]!.meta.changes === 1 ? ("deleted" as const) : ("already" as const);
   }
 
   /** Read-only: a site owner's active party rows (for the intents written before removing them). */

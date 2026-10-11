@@ -92,7 +92,27 @@
       })));
   }
 
+  // "Find a guest": opens the Guests page with this search (the page refreshes every minute,
+  // so what is typed and the cursor are kept across a refresh).
+  var findText = "";
+  function findGuest() {
+    var input = el("input", { attrs: { id: "d-find", type: "search", value: findText, placeholder: t("d_find_ph"), "aria-label": t("d_find_t"),
+      minlength: 2, maxlength: 80, autocomplete: "off", enterkeyhint: "search", dir: "auto", "data-find": "" } });
+    input.addEventListener("input", function () { findText = input.value; });
+    var f = el("form", { class: "find-box dash-find", attrs: { role: "search", action: "/guests.html", method: "get" } }, input,
+      el("button", { class: "btn primary small-btn", text: t("d_find_go"), attrs: { type: "submit" } }));
+    f.addEventListener("submit", function (e) {
+      e.preventDefault();
+      var q = input.value.trim();
+      if (q.length < 2) { input.focus(); return; }
+      location.href = "/guests.html?q=" + encodeURIComponent(q);
+    });
+    return f;
+  }
+
   function render() {
+    var typing = document.activeElement && document.activeElement.id === "d-find";
+    var caret = typing ? document.activeElement.selectionStart : null;
     Sahra.clear(app);
     if (!me) { app.appendChild(Sahra.problem({ kicker: t("nt_kicker_signin"), title: t("nt_staff_t"), text: t("d_sign_in"),
       actions: [[t("sign_in"), "/signin", true], [t("nt_home"), "/"]], hint: t("nt_guest_hint") })); return; }
@@ -114,6 +134,7 @@
     // Requests stay closed until the party has a contact number (brainstorm idea 16).
     else if (party && !party.support_phone) app.appendChild(el("div", { class: "notice maybe dash-warn" },
       el("p", { text: t("d_contact_missing") }), el("a", { class: "btn small-btn", text: t("d_contact_add"), attrs: { href: "/party.html#contact" } })));
+    if (me.staff.role !== "door") app.appendChild(findGuest());
     app.appendChild(tiles());
     var C = window.SahraCharts;
     var charts = el("div", { class: "charts" + (drawn ? "" : " animate"), attrs: { id: "charts" } });
@@ -128,6 +149,7 @@
     }
     app.appendChild(charts);
     if (updatedAt) app.appendChild(el("p", { class: "small muted center", text: t("d_updated", { time: Sahra.time(updatedAt) }) }));
+    if (typing) { var box = document.getElementById("d-find"); if (box) { box.focus(); try { box.setSelectionRange(caret, caret); } catch (x) { /* not a text field */ } } }
   }
 
   async function load() {

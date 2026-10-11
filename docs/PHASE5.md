@@ -872,3 +872,44 @@ A small keyboard follow-up restores focus to Copy after closing the blocked
 clipboard fallback, only when focus is on the document body. It does not steal
 focus from another control. The six quality-of-life browser flows now explicitly
 check this return as well.
+
+### Finding things, restoring tickets, deleting switched-off people, Not paid (11 October 2026)
+
+Owner requests: "QOL improvements ... looking for this and this", "deleting the
+disabled people" in the site-owner panel, "cancel a ticket ... in mobile", "I
+cancelled a ticket and I want to bring it back", and a quick switch-off when a
+party is not paid, kept to the site-owner panel. No migration.
+
+- Filter boxes (`Sahra.findBox`): Requests (name, email, Instagram, reference,
+  ticket type), Emails (recipient, subject, text), the site-owner panel's parties
+  and party owners, and the home page once there are more than six parties. They
+  filter as you type, keep the cursor through redraws, Escape or Clear empties
+  them, and "/" anywhere on a page jumps to its box. Arabic letter forms are
+  folded (alef, yaa, taa marbuta, marks). Party settings: "Find a setting" shows
+  only the matching sections. Dashboard: "Find a guest" opens Guests with that
+  search (`/guests?q=`).
+- Requests: Cancel ticket on approved requests (any screen width), a Cancelled
+  tab with Restore. Tab rows wrap instead of scrolling sideways, so no tab is
+  off-screen on a phone.
+- Restore (`POST /api/tickets/:id/restore`, owners and admins): back to approved,
+  or to waiting if it was never approved, with a new QR version (a screenshot of
+  the old code scans red; the ticket link shows the new one). Refused inside the
+  statement when the ticket was used, the party is cancelled, a refund is
+  recorded, or the party or ticket type has no place left. Intent first, audited.
+- Delete a switched-off party owner or site owner (`POST
+  /api/platform/organisers/:id/delete`, `/site-owners/:id/delete`): only one
+  already switched off, never yourself. Name, email and Google account are first
+  cleared from every logged copy in the change log (as guest details are), then
+  the row and a party owner's invitations are deleted in one batch with an audit
+  row. Their parties, tickets and teams stay.
+- Not paid: under Payment in each party row of the site-owner panel, one
+  confirmation switches the party off exactly as Disable party does; the audit
+  row notes "unpaid" and only the site-owner panel shows it.
+- The guest export's price column is "price (EGP)" (a Duo or Squad price is per
+  ticket).
+
+Checks (local): typecheck; Vitest 44 files, 541 tests; page sweep 90 checks;
+site-owner panel 18 layouts plus delete, filters and Not paid at 390 and 1440 px;
+guest flows 66 layouts; quality-of-life flows 6; find, cancel and restore flows
+in English and Arabic at 390 and 1440 px with no overflow, page errors or browser
+pop-ups; camera scanner admit then used.

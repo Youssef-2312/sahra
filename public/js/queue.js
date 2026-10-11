@@ -13,12 +13,13 @@
   var t = Sahra.t, el = Sahra.el;
   var app = document.getElementById("app");
   var MAX = 20;
-  var TABS = [["pending", "q_waiting"], ["approved", "q_approved"], ["rejected", "q_rejected"]];
+  var TABS = [["pending", "q_waiting"], ["approved", "q_approved"], ["rejected", "q_rejected"], ["cancelled", "q_cancelled_tab"]];
   var me = null, tab = "pending", rows = null, next = null, failed = null, cashOnly = false;
   var selected = {};              // id -> true
   var notes = {};                 // id -> { cls, text }: the answer shown on a card after an action
   var bulkNote = null;
   var busy = false;
+  var find = "";                  // the filter box: name, email, Instagram, reference or ticket type
 
   function sleep(ms) { return new Promise(function (ok) { setTimeout(ok, ms); }); }
   async function post(path, body) {
@@ -66,6 +67,39 @@
       out[id] = r.ok && ok(r.body.results[id]) ? { cls: "yes", text: t("q_rejected_done"), state: "rejected" }
         : { cls: "no", text: r.ok ? t("q_refused") : r.status === 503 ? t("not_confirmed") : Sahra.errorText(r) };
     });
+    return out;
+  }
+
+  // Cancel approved tickets (the same action as on the Guests page): one op per ticket, kept until
+  // its answer is known, so a retry never cancels twice. Tickets already scanned are refused by the server.
+  var cancelOps = {};
+  async function cancelTickets(ids) {
+    var out = {};
+    for (var i = 0; i < ids.length; i++) {
+      var id = ids[i];
+      var op = cancelOps[id] || (cancelOps[id] = crypto.randomUUID());
+      var r = await post("/api/tickets/" + encodeURIComponent(id) + "/cancel", { op: op });
+      if (r.status !== 503) delete cancelOps[id];
+      out[id] = r.ok ? { cls: "yes", text: t("q_cancelled_done"), state: "cancelled" }
+        : { cls: "no", text: r.status === 409 ? t("q_refused") : r.status === 503 ? t("not_confirmed") : Sahra.errorText(r) };
+    }
+    return out;
+  }
+
+  // Bring back cancelled tickets (TicketDb.restore): a new QR code; refused when there is no place left.
+  var restoreOps = {};
+  async function restoreTickets(ids) {
+    var out = {};
+    for (var i = 0; i < ids.length; i++) {
+      var id = ids[i];
+      var op = restoreOps[id] || (restoreOps[id] = crypto.randomUUID());
+      var r = await post("/api/tickets/" + encodeURIComponent(id) + "/restore", { op: op });
+      if (r.status !== 503) delete restoreOps[id];
+      var code = r.body && r.body.error;
+      out[id] = r.ok ? { cls: "yes", text: t("g_done_restore"), state: "restored" }
+        : { cls: "no", text: code === "not_allowed" ? t("g_not_allowed_restore") : SahraText.en["g_restore_" + code] ? t("g_restore_" + code)
+          : r.status === 503 ? t("not_confirmed") : Sahra.errorText(r) };
+    }
     return out;
   }
 
@@ -137,10 +171,17 @@
     return out;
   }
 
+  /** A request (or a whole order) matches the filter when any of its tickets does. */
+  function found(g) {
+    return (g.members || [g]).some(function (r) {
+      return Sahra.matches(find, [r.guest_name, r.guest_email, r.instagram ? "@" + r.instagram : "", Sahra.ref(r.id), r.id, r.type_name]);
+    });
+  }
+
   function card(row) {
     var ids = row.ids || [row.id];
     var note = notes[row.id];
-    var finished = note && note.cls !== "no" && (note.state === "sent" || note.state === "rejected" || (tab === "pending" && note.state === "approved" && note.cls === "yes"));
+    var finished = note && note.cls !== "no" && (note.state === "sent" || note.state === "rejected" || note.state === "cancelled" || note.state === "restored" || (tab === "pending" && note.state === "approved" && note.cls === "yes"));
     var canSelect = !finished && (tab === "pending" || (tab === "approved" && !row.released_at));
     var box = canSelect ? el("input", { attrs: { type: "checkbox", "aria-label": t("q_select") },
       on: { change: function (e) { ids.forEach(function (id) { if (e.target.checked) selected[id] = true; else delete selected[id]; }); render(); } } }) : null;
@@ -192,6 +233,21 @@
         actions.appendChild(el("button", { class: "btn primary main", text: t("q_send"), attrs: { type: "button" },
           on: { click: function () { run(ids, release); } } }));
       }
+      if (tab === "cancelled" && !(row.members || [row]).some(function (m) { return m.used_at; })) {
+        actions.appendChild(el("button", { class: "btn", text: t("g_restore"), attrs: { type: "button" },
+          on: { click: async function () {
+            if (!(await Sahra.confirm(t("g_restore_confirm", { name: row.guest_name || Sahra.ref(row.id) }), { ok: t("g_restore") }))) return;
+            run(ids, restoreTickets);
+          } } }));
+      }
+      // Approved and not yet at the door: can be cancelled here too, on any screen.
+      if (tab === "approved" && !(row.members || [row]).some(function (m) { return m.used_at; })) {
+        actions.appendChild(el("button", { class: "btn no", text: ids.length > 1 ? t("q_cancel_n", { n: ids.length }) : t("g_cancel"), attrs: { type: "button" },
+          on: { click: async function () {
+            if (!(await Sahra.confirm(t("g_cancel_confirm", { name: row.guest_name || Sahra.ref(row.id) }), { danger: true, ok: t("g_cancel") }))) return;
+            run(ids, cancelTickets);
+          } } }));
+      }
     }
     // After "Approve and send" failed to send: offer Send QR on the same card.
     if (tab === "pending" && note && note.cls === "maybe" && !busy) {
@@ -200,7 +256,8 @@
     }
 
     var status = tab === "approved" ? el("span", { class: "pill " + (row.released_at ? "yes" : "maybe"), text: row.released_at ? t("q_sent") : t("q_approved") })
-      : tab === "rejected" ? el("span", { class: "pill no", text: t("q_rejected") }) : null;
+      : tab === "rejected" ? el("span", { class: "pill no", text: t("q_rejected") })
+      : tab === "cancelled" ? el("span", { class: "pill no", text: t("q_cancelled_tab") }) : null;
 
     return el("article", { class: "req" + (finished ? " done" : "") },
       el("div", { class: "head" },
@@ -267,12 +324,11 @@
     if (!rows) { app.appendChild(el("p", { class: "muted", text: t("loading") })); return; }
     if (!rows.length) app.appendChild(el("p", { class: "empty", text: cashOnly ? t("q_none_cash") : t("q_none") }));
     else {
-      var selectable = rows.filter(function (r) { return tab === "pending" ? !notes[r.id] || notes[r.id].cls === "no" : tab === "approved" && !r.released_at; });
-      if (selectable.length > 1) {
-        app.appendChild(el("button", { class: "btn link", text: t("q_select_all"), attrs: { type: "button" },
-          on: { click: function () { selectable.slice(0, MAX).forEach(function (r) { selected[r.id] = true; }); render(); } } }));
-      }
-      app.appendChild(el("div", { class: "reqs" }, grouped(rows).map(card)));
+      // The filter redraws only the list below it, so typing keeps its place.
+      var list = el("div");
+      app.appendChild(Sahra.findBox({ value: find, placeholder: t("q_find_ph"), onChange: function (v) { find = v; fillList(list); } }));
+      app.appendChild(list);
+      fillList(list);
     }
     if (next) app.appendChild(el("button", { class: "btn", text: t("q_more"), attrs: { type: "button", disabled: busy }, on: { click: function () { load(true); } } }));
     app.appendChild(el("div", { class: "page-tools" },
@@ -280,6 +336,24 @@
       tab === "pending" ? staleTool() : null));
     var bar = bulkbar();
     if (bar) app.appendChild(bar);
+  }
+
+  function fillList(list) {
+    Sahra.clear(list);
+    var all = grouped(rows), shown = all.filter(found);
+    var keep = {};
+    shown.forEach(function (g) { (g.ids || [g.id]).forEach(function (id) { keep[id] = true; }); });
+    var selectable = rows.filter(function (r) { return keep[r.id] && (tab === "pending" ? !notes[r.id] || notes[r.id].cls === "no" : tab === "approved" && !r.released_at); });
+    if (find.trim()) {
+      list.appendChild(el("p", { class: "small muted find-count", attrs: { role: "status" },
+        text: t("q_find_count", { n: shown.length, total: all.length }) + (next ? " " + t("q_find_more") : "") }));
+    }
+    if (!shown.length) { list.appendChild(el("p", { class: "empty", text: t("q_find_none") })); return; }
+    if (selectable.length > 1) {
+      list.appendChild(el("button", { class: "btn link", text: t("q_select_all"), attrs: { type: "button" },
+        on: { click: function () { selectable.slice(0, MAX).forEach(function (r) { selected[r.id] = true; }); render(); } } }));
+    }
+    list.appendChild(el("div", { class: "reqs" }, shown.map(card)));
   }
 
   // "Reject every waiting request older than N hours" (requests are only cleaned up by hand):
@@ -347,7 +421,7 @@
     var keys = {};
     all.forEach(function (x) { Object.keys(x.answers || {}).forEach(function (k) { keys[k] = true; }); });
     var qs = Object.keys(keys);
-    var head = ["ticket", "status", "name", "email", "instagram", "people", "type", "price per person (EGP)", "total (EGP)", "paid by", "requested", "approved", "approved by", "rejected", "rejected by",
+    var head = ["ticket", "status", "name", "email", "instagram", "people", "type", "price (EGP)", "total (EGP)", "paid by", "requested", "approved", "approved by", "rejected", "rejected by",
       "reason", "QR sent", "QR sent by", "scanned", "scanned by"].concat(qs);
     var lines = [head.map(csvCell).join(",")];
     all.forEach(function (x) {

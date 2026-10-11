@@ -160,7 +160,10 @@
   }
 
   function organisers(o) {
-    return el("div", null, o.organisers.length ? el("ul", { class: "g-list" }, o.organisers.map(function (person) {
+    var list = o.organisers.filter(function (x) { return Sahra.matches(finds.organisers, [x.name, x.email, x.disabled_at ? t("p_state_disabled") : ""]); });
+    return el("div", null, o.organisers.length > 4 ? finder("organisers", "p_find_people_ph") : null,
+      o.organisers.length && !list.length ? empty("q_find_none") : null,
+      o.organisers.length ? el("ul", { class: "g-list" }, list.map(function (person) {
       var key = "org:" + person.id, path = "/api/platform/organisers/" + encodeURIComponent(person.id);
       var invitation = o.invites.find(function (i) { return i.organiser_id === person.id && !i.used_at && !i.revoked_at && i.expires_at > Date.now(); });
       return el("li", { class: "g-row" },
@@ -173,6 +176,8 @@
             return act(key + ":limit", path + "/party-limit", { limit: Number(v.limit) }, "organisers");
           }),
           action(key, path + "/disable", {}, "organisers", "p_organiser_disabled", "p_confirm_organiser", "p_disable_organiser", "no")) : null,
+        // Switched off: can be deleted for good (owner request), after a confirmation.
+        person.disabled_at ? el("div", { class: "g-actions" }, action(key, path + "/delete", {}, "organisers", "p_person_deleted", "p_confirm_delete_person", "p_delete_person", "no")) : null,
         notice(key));
     })) : empty("p_no_organisers"),
     el("h3", { text: t("p_invite_organiser") }),
@@ -223,13 +228,19 @@
       else acts.push(button("p_disable_open", function () { disabling[key] = !disabling[key]; render(); }, "no"));
     }
     var li = el("li", { class: "g-row" },
-      el("div", { class: "g-name-line" }, el("strong", { text: p.name, attrs: { dir: "auto" } }), pill(p.disabled_at ? "disabled" : p.admission_state)),
+      el("div", { class: "g-name-line" }, el("strong", { text: p.name, attrs: { dir: "auto" } }), pill(p.disabled_at ? "disabled" : p.admission_state),
+        siteOwner && p.disabled_at && p.unpaid ? el("span", { class: "pill no", text: t("p_unpaid_pill") }) : null),
       el("p", { class: "muted small", text: p.id, attrs: { dir: "ltr" } }),
       el("dl", { class: "s-platform-facts" }, detail("p_capacity", p.capacity),
         siteOwner ? [detail("p_organiser", p.organiser_name || t("p_none")), detail("p_staff", p.staff), detail("p_sessions", p.active_sessions),
           detail("p_tickets", counts(p.tickets)), detail("p_emails", counts(p.outbox))] : null),
       acts.length ? el("div", { class: "g-actions" }, acts) : null, notice(key));
     if (siteOwner && !p.disabled_at && disabling[key]) li.appendChild(disablePanel(p, key, path));
+    // Not paid (site owner only, folded away): switch the party off in one step, after one confirmation.
+    // The reason is kept for this panel only; the party's team sees an ordinary switched-off party.
+    if (siteOwner && !p.disabled_at) li.appendChild(el("details", { class: "s-platform-details" }, el("summary", { text: t("p_payment") }),
+      el("p", { class: "muted small", text: t("p_unpaid_help") }),
+      el("div", { class: "g-actions" }, action(key, path + "/disable", { reason: "unpaid" }, "parties", "p_party_unpaid_done", "p_confirm_unpaid", "p_unpaid_go", "no"))));
     if (siteOwner && p.no_active_owner) {
       li.appendChild(el("p", { class: "notice maybe", text: t("p_no_owner", { n: p.pending_owner_invites }) }));
       if (!p.disabled_at) li.appendChild(el("details", { class: "s-platform-details" }, el("summary", { text: t("p_invite_owner") }),
@@ -246,7 +257,8 @@
         el("div", { class: "g-name-line" }, el("strong", { text: person.name, attrs: { dir: "auto" } }), pill(person.disabled_at ? "disabled" : person.linked ? "active" : "pending")),
         el("p", { class: "muted s-platform-wrap", text: person.email, attrs: { dir: "ltr" } }),
         person.id === me.site_owner.id ? el("p", { class: "muted small", text: t("tm_you") }) : !person.disabled_at ?
-          action(key, "/api/platform/site-owners/" + encodeURIComponent(person.id) + "/remove", {}, "owners", "p_owner_removed", "p_confirm_owner", "p_remove_owner", "no") : null,
+          action(key, "/api/platform/site-owners/" + encodeURIComponent(person.id) + "/remove", {}, "owners", "p_owner_removed", "p_confirm_owner", "p_remove_owner", "no")
+          : action(key, "/api/platform/site-owners/" + encodeURIComponent(person.id) + "/delete", {}, "owners", "p_person_deleted", "p_confirm_delete_person", "p_delete_person", "no"),
         notice(key));
     })) : empty("p_no_owners");
   }
@@ -266,7 +278,18 @@
       });
   }
 
+  // Filter boxes over the lists (party name, id or party owner; person name or email).
+  // The panel redraws as a whole, so the box keeps its text and, while typing, the cursor.
+  var finds = { parties: "", organisers: "" };
+  function finder(key, ph) {
+    var box = Sahra.findBox({ value: finds[key], placeholder: t(ph), onChange: function (v) { finds[key] = v; render(); } });
+    box.querySelector("input").dataset.findKey = key;
+    return box;
+  }
+
   function render() {
+    var typing = document.activeElement && document.activeElement.dataset && document.activeElement.dataset.findKey;
+    var caret = typing ? document.activeElement.selectionStart : null;
     // Preserve unsent edits and open details through background loads and language changes.
     var drafts = {}, open = Array.from(app.querySelectorAll("details")).map(function (d) { return d.open; });
     app.querySelectorAll("form[data-form]").forEach(function (f) {
@@ -300,7 +323,12 @@
     if (me.site_owner) {
       app.appendChild(S.section("health", t("p_health"), t("p_health_intro"), content("health", health)));
       app.appendChild(el("div", { class: "g-cols" },
-        S.section("parties", t("p_parties"), t("p_parties_intro"), content("parties", function (d) { return d.parties.length ? el("ul", { class: "g-list" }, d.parties.map(function (p) { return partyRow(p, true); })) : empty("p_no_parties"); })),
+        S.section("parties", t("p_parties"), t("p_parties_intro"), content("parties", function (d) {
+          if (!d.parties.length) return empty("p_no_parties");
+          var list = d.parties.filter(function (p) { return Sahra.matches(finds.parties, [p.name, p.id, p.organiser_name, p.disabled_at ? t("p_state_disabled") : ""]); });
+          return el("div", null, d.parties.length > 4 ? finder("parties", "p_find_parties_ph") : null,
+            list.length ? el("ul", { class: "g-list" }, list.map(function (p) { return partyRow(p, true); })) : empty("q_find_none"));
+        })),
         el("div", null, S.section("organisers", t("p_organisers"), t("p_organisers_intro"), content("organisers", organisers)),
           S.section("owners", t("p_site_owners"), t("p_owners_intro"), content("owners", owners)))));
     }
@@ -310,6 +338,10 @@
       (drafts[f.dataset.form] || []).forEach(function (pair) { var input = f.querySelector('[name="' + pair[0] + '"]'); if (input) input.value = pair[1]; });
     });
     app.querySelectorAll("details").forEach(function (d, i) { d.open = !!open[i]; });
+    if (typing) {
+      var again = app.querySelector('[data-find-key="' + typing + '"]');
+      if (again) { again.focus(); try { again.setSelectionRange(caret, caret); } catch (x) { /* not a text field */ } }
+    }
   }
 
   var r = await Sahra.api.get("/api/platform/me");
