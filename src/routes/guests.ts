@@ -289,8 +289,9 @@ guestRoutes.get("/parties/:party", async (c) => {
         id: t.id, name: t.name, description: t.description, price: t.price, currency: "EGP",
         // People one ticket of this type admits (a group type, a single one).
         min_people: t.min_people ?? 1, max_people: t.max_people ?? p.max_people_per_ticket,
+        individual_tickets: !!t.individual_tickets,
         package: t.min_people !== null && t.min_people > 1 && t.min_people === t.max_people,
-        places_left: left, sold_out: left === 0, on_sale: !!t.on_sale && left > 0,
+        places_left: left, sold_out: left === 0, on_sale: !!t.on_sale && left >= (t.min_people ?? 1) && (!t.individual_tickets || (t.min_people ?? 1) <= Math.min(MAX_ORDER_TICKETS, p.max_tickets_per_email ?? MAX_ORDER_TICKETS)),
         sales_opens_at: t.sales_opens_at, sales_closes_at: t.sales_closes_at,
         payment_instructions: t.payment_instructions ?? p.payment_instructions,
       };
@@ -324,14 +325,16 @@ guestRoutes.post("/parties/:party/signup", async (c) => {
   const email = guestEmail(form.get("email"));
   const people = Number(form.get("people") ?? 1);
   // Separate tickets for friends: how many, and (optionally) the name on each of the others.
-  const count = Number(form.get("tickets") ?? 1);
+  const requestedCount = Number(form.get("tickets") ?? 1);
+  const split = form.get("individual_tickets") === "yes";
+  const count = requestedCount * (split ? people : 1);
   const namesText = form.get("names");
   const typeField = form.get("type_id");
   const typeId = typeField === null || typeField === "" ? null : typeField;
   const answersText = form.get("answers");
   const file = form.get("screenshot");
   if (typeof token !== "string" || !parseToken(token) || !name || !email || !Number.isInteger(people) || people < 1 || people > 100
-    || (typeId !== null && !isTypeId(typeId)) || !Number.isInteger(count) || count < 1 || count > MAX_ORDER_TICKETS) {
+    || (typeId !== null && !isTypeId(typeId)) || !Number.isInteger(requestedCount) || requestedCount < 1 || !Number.isInteger(count) || count < 1 || count > MAX_ORDER_TICKETS) {
     return json(c, 400, { error: "invalid_request" });
   }
   // Names on the other tickets: optional; an empty one takes the guest's own name.
@@ -464,8 +467,8 @@ guestRoutes.post("/parties/:party/signup", async (c) => {
   if (party.max_tickets_per_email !== null && party.email_tickets + count > party.max_tickets_per_email) return refusal(c, "email_limit");
   if (party.has_types && typeId === null) return refusal(c, "type_required");
   if (typeId !== null && !party.type_on_sale) return refusal(c, "type_unavailable");
-  if (party.type_left !== null && party.type_left < people * count) return refusal(c, "type_full");
-  if (party.held + people * count > party.capacity) return json(c, 409, { error: "full", message: REFUSAL.full.message });
+  if (party.type_left !== null && party.type_left < people * requestedCount) return refusal(c, "type_full");
+  if (party.held + people * requestedCount > party.capacity) return json(c, 409, { error: "full", message: REFUSAL.full.message });
   // Every files database past 70% (or unreadable): no new screenshots (fail closed; health alerts the owner).
   const target = shot || idPhoto || anyFriendId || answerPhotos.size ? await uploadTarget(c.env, now) : null;
   if (target && target.state !== "ok") {
@@ -505,7 +508,7 @@ guestRoutes.post("/parties/:party/signup", async (c) => {
     }) : null);
   }
   const r = await gdb.signup({
-    id: ticketId, partyId, people, name, email, answers: Object.keys(answers).length ? JSON.stringify(answers) : null,
+    id: ticketId, partyId, people, individualTickets: split, name, email, answers: Object.keys(answers).length ? JSON.stringify(answers) : null,
     screenshotKey, idPhotoKey, instagram: pf.instagram === "none" ? null : instagram, typeId, now, op: crypto.randomUUID(),
     more: others.map((id, i) => ({ id, name: otherNames[i]!, idPhotoKey: friendKeys[i] ?? null })),
     guestForm: party.guest_form, rules: party.rules, cancellation: party.cancellation_policy, accepted: { terms: policy.terms_version, rules: policy.rules_version, privacy: policy.privacy_version },

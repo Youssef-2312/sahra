@@ -1447,3 +1447,12 @@ Object.assign(SahraText.ar, {
 
 Object.assign(SahraText.en, { p_state_gave_up: "Delivery stopped", p_state_archived: "Archived" });
 Object.assign(SahraText.ar, { p_state_gave_up: "توقف الإرسال", p_state_archived: "مؤرشف" });
+
+Object.assign(SahraText.en, {
+  s_individual_tickets: "Separate QR ticket for each person",
+  s_individual_tickets_h: "Keep the group price. Each person gets their own ticket and can arrive separately. Up to 10 people per booking. Ticket links and emails go to the buyer to share.",
+});
+Object.assign(SahraText.ar, {
+  s_individual_tickets: "تذكرة برمز QR منفصل لكل شخص",
+  s_individual_tickets_h: "يبقى سعر المجموعة كما هو. يحصل كل شخص على تذكرة خاصة ويمكنه الوصول بمفرده. حتى 10 أشخاص لكل حجز. تُرسل الروابط والرسائل إلى المشتري ليشاركها.",
+});

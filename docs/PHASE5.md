@@ -913,3 +913,37 @@ site-owner panel 18 layouts plus delete, filters and Not paid at 390 and 1440 px
 guest flows 66 layouts; quality-of-life flows 6; find, cancel and restore flows
 in English and Arabic at 390 and 1440 px with no overflow, page errors or browser
 pop-ups; camera scanner admit then used.
+
+### Individual QR tickets for group requests (14 October 2026)
+
+Settings > Ticket types now has an opt-in “Separate QR ticket for each person”
+checkbox. For guest bookings of an enabled Duo, Squad or variable-size group,
+the buyer requests one group and receives one link per person, with optional
+names and each person's ID photo where required. Ticket links and release emails
+still go to the buyer's address to share. Existing shared group tickets remain
+unchanged; turning the option on applies to new guest requests. Staff-issued
+single tickets and cash imports retain their existing workflow.
+
+The existing ten-ticket booking limit applies to the individual people. The
+server expands the group into an atomic order of one-person tickets and checks
+capacity, type places, request windows, the delivery mode, terms and per-email
+limits inside the insert. Retrying the signup token returns the same order.
+Fixed group prices are divided into whole-EGP shares without changing the total:
+a Duo at EGP 301 produces EGP 151 + EGP 150. Variable-size per-person prices remain
+per person. `split_group_size` records the pricing snapshot on each ticket; QR
+admission remains the existing one-use server path.
+
+Migration **0028_individual_group_tickets.sql** adds the type option and ticket
+pricing snapshot. The owner must apply it before deploying this code, on staging
+first under the existing deployment rules. No remote migrations or deployments
+were performed for this change.
+
+Validation: TypeScript passes and all 544 Vitest tests pass. Three new order
+cases cover exact package totals, distinct QRs, independent admissions and
+repeated-use refusal, retries, all-or-none limits, delivery-mode mismatch and
+shared-group compatibility. `scripts/group-tickets-browser.mjs` checks 12 local,
+API-stubbed flows: guest booking and organiser editing at 390/768/1440 px in
+English and Arabic, with zero horizontal overflow and JavaScript errors. Checks
+include switching shared/individual modes, language draft restoration, two
+returned links, the EGP 301 group total, saving both checkbox states and copying
+a type with the option retained. No real signup or email was sent.

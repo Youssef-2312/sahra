@@ -117,7 +117,7 @@ ticketRoutes.get("/types", requireAuth(MANAGERS), async (c) => {
   const types = await new TypeDb(c.var.db.driver).list(sess, now);
   return json(c, 200, {
     currency: "EGP",
-    types: types.map((t) => ({ ...t, staff_only: !!t.staff_only, archived: t.archived_at !== null,
+    types: types.map((t) => ({ ...t, individual_tickets: !!t.individual_tickets, staff_only: !!t.staff_only, archived: t.archived_at !== null,
       places_left: t.quantity === null ? null : Math.max(0, t.quantity - t.held) })),
   });
 });

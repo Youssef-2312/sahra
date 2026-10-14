@@ -1082,3 +1082,23 @@ var SahraText = {
     nt_staff_t: "يلزم تسجيل الدخول",
   },
 };
+
+Object.assign(SahraText.en, {
+  individual_group_hint: "One QR ticket per person at the group price. Each person can arrive separately. The buyer receives the ticket links to share.",
+});
+Object.assign(SahraText.ar, {
+  individual_group_hint: "تذكرة برمز QR لكل شخص بسعر المجموعة. يمكن لكل شخص الوصول بمفرده. يحصل المشتري على روابط التذاكر ليشاركها.",
+});
+
+Object.assign(SahraText.en, {
+  individual_group_people: "People in the group",
+  individual_group_price: "Group price",
+  individual_group_size: "Group of {n}, one QR ticket per person",
+  group_price_from: "From {amount}. See ticket types for group prices.",
+});
+Object.assign(SahraText.ar, {
+  individual_group_people: "عدد الأشخاص في المجموعة",
+  individual_group_price: "سعر المجموعة",
+  individual_group_size: "مجموعة من {n}، تذكرة برمز QR لكل شخص",
+  group_price_from: "يبدأ من {amount}. راجع أنواع التذاكر لأسعار المجموعات.",
+});

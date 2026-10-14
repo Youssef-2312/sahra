@@ -309,6 +309,7 @@
     var bits = [Sahra.money(x.price) + (!x.price ? "" : x.min_people > 1 && x.min_people === x.max_people ? " " + t("s_per_package", { n: x.min_people }) : " " + t("s_pp")), peopleLine(x),
       x.quantity !== null ? t("s_type_places", { held: x.held, of: x.quantity }) : t("s_type_held", { held: x.held })];
     var tags = [];
+    if (x.individual_tickets) tags.push(["", t("s_individual_tickets")]);
     if (x.staff_only) tags.push(["", t("s_staff_only")]);
     if (x.archived) tags.push(["no", t("s_archived")]);
     if (x.quantity !== null && x.places_left === 0) tags.push(["maybe", t("sold_out")]);
@@ -322,7 +323,7 @@
       editing = "new";
       preset = { name: t("s_type_copy_of", { name: x.name }).slice(0, 80), price: x.price, quantity: x.quantity, min_people: x.min_people, max_people: x.max_people,
         sales_opens_at: x.sales_opens_at, sales_closes_at: x.sales_closes_at, entry_from: x.entry_from, staff_only: x.staff_only,
-        description: x.description, payment_instructions: x.payment_instructions };
+        individual_tickets: x.individual_tickets, description: x.description, payment_instructions: x.payment_instructions };
       rebuild("types"); focusEditor();
     });
     return el("li", { class: x.archived ? "off" : null },
@@ -373,6 +374,7 @@
       S.field(t("s_type_desc"), textarea("description", x.description, 500, 2)),
       S.field(t("s_type_payment"), textarea("payment_instructions", x.payment_instructions, 1000, 2), t("s_type_payment_h")),
       el("div", { class: "s-checks" },
+        S.check("individual_tickets", t("s_individual_tickets"), x.individual_tickets, t("s_individual_tickets_h")),
         S.check("staff_only", t("s_staff_only"), x.staff_only, t("s_staff_only_h")),
         editing !== "new" ? S.check("archived", t("s_archive"), x.archived, t("s_archive_h")) : null),
       row.node);
@@ -381,7 +383,7 @@
       if (!val(f, "name")) { S.say(box, "no", t("s_name_needed")); return; }
       var body = { name: val(f, "name"), price: Number(f.elements.price.value || 0), sort: Number(f.elements.sort.value || 0),
         quantity: num(f, "quantity"), min_people: num(f, "min_people"), max_people: num(f, "max_people"),
-        staff_only: f.elements.staff_only.checked, description: textOrNull(f, "description"), payment_instructions: textOrNull(f, "payment_instructions"),
+        individual_tickets: f.elements.individual_tickets.checked, staff_only: f.elements.staff_only.checked, description: textOrNull(f, "description"), payment_instructions: textOrNull(f, "payment_instructions"),
         sales_opens_at_local: localOrNull(f, "sales_opens_at_local"), sales_closes_at_local: localOrNull(f, "sales_closes_at_local"), entry_from_local: localOrNull(f, "entry_from_local") };
       var path = "/api/tickets/types";
       if (editing === "new") body.op = f.dataset.op || (f.dataset.op = crypto.randomUUID());
