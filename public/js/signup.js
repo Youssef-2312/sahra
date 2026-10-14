@@ -104,6 +104,9 @@
     var low = Math.min.apply(null, prices);
     var many = prices.some(function (p) { return p !== low; });
     if (!low && !many) return t("free");
+    var samePackage = sale.every(function (x) { return isPackage(x) && x.min_people === sale[0].min_people; });
+    if (samePackage && !many) return Sahra.money(low) + " " + priceUnit(sale[0]);
+    if (sale.some(isPackage)) return t("group_price_from", { amount: Sahra.money(low) });
     return t(many ? "from_pp" : "price_pp", { amount: Sahra.money(low) });
   }
   function whereFact(d) {
@@ -298,11 +301,13 @@
     var n = Math.max(1, Number(form.elements.tickets.value) || 1);
     var set = function (k, v) { var x = document.querySelector("[data-o-" + k + "]"); if (x) { x.textContent = v; x.parentElement.hidden = v === null; } };
     set("type", type ? type.name : null);
-    set("count", String(n));
+    set("count", String(type && type.individual_tickets ? n * people : n));
     set("people", people > 1 ? String(people) : null);
     set("each", type ? Sahra.money(type.price) : null);
     var each = document.querySelector("[data-o-each]");
-    if (each) each.parentElement.firstChild.textContent = t(type && isPackage(type) ? "order_each_package" : "order_each");
+    if (each) each.parentElement.firstChild.textContent = t(type && isPackage(type) ? type.individual_tickets ? "individual_group_price" : "order_each_package" : "order_each");
+    var size = document.querySelector("[data-o-people]");
+    if (size) size.parentElement.firstChild.textContent = t(type && type.individual_tickets ? "individual_group_people" : "order_people");
     var total = document.querySelector("[data-o-total]");
     if (total) total.textContent = type ? Sahra.money(ticketPrice(type, people) * n) : "-";
   }
@@ -384,6 +389,7 @@
   }
   function peopleText(type) {
     var r = peopleRange(type);
+    if (type && type.individual_tickets) return t("individual_group_size", { n: r.min === r.max ? r.max : r.min + "–" + r.max });
     if (r.max <= 1) return t("one_person");
     if (r.min === r.max) return t("people_package", { n: r.max });
     return r.min > 1 ? t("people_range", { min: r.min, max: r.max }) : t("people_upto", { n: r.max });
@@ -413,7 +419,8 @@
     var friendUploads = {};
     var savedNames = Array.isArray(draft.names) ? draft.names : [];
     function namesRefresh() {
-      var n = Math.max(1, Number(count.value) || 1);
+      var type = chosenType();
+      var n = Math.max(1, Number(count.value) || 1) * (type && type.individual_tickets ? Math.max(1, Number(people.value) || 1) : 1);
       var have = namesBox.querySelectorAll("input[data-friend]");
       // Blurring Quantity fires change again. Keep existing inputs when the
       // count is unchanged, or the friend field being focused is detached.
@@ -439,9 +446,11 @@
       var c = form.querySelector("input[name=type_id]:checked");
       return c ? data.types.filter(function (x) { return x.id === c.value; })[0] || null : null;
     };
+    var splitHint = el("p", { class: "hint", text: t("individual_group_hint") });
+    splitHint.hidden = true;
     var typesSlot = el("div");
     var form = el("form", { class: "buy-form" },
-      data.types.length ? step(t("choose_type"), [typesSlot, tickets, qty]) : null,
+      data.types.length ? step(t("choose_type"), [typesSlot, tickets, qty, splitHint]) : null,
       step(t("step_details"), [
       el("div", { class: "field" }, el("label", null, t("full_name"),
         el("input", { attrs: { type: "text", name: "name", maxlength: 80, required: true, autocomplete: "name", value: draft.name || "" } }))),
@@ -476,14 +485,28 @@
       else if (typeof answer === "string") input.value = answer;
     });
     if (draft.reattach) form.prepend(el("p", { class: "notice maybe", text: t("signup_reattach") }));
-    people.addEventListener("input", function () { paymentRefresh(form); orderRefresh(form); });
+    people.addEventListener("input", function () { namesRefresh(); paymentRefresh(form); orderRefresh(form); });
     count.addEventListener("input", function () { paymentRefresh(form); orderRefresh(form); });
-    setTimeout(function () { tickets.bounds({ min: 1, max: ticketMax }); tickets.hidden = ticketMax <= 1; }, 0);
+    function typeRefresh() {
+      var type = chosenType(), split = !!(type && type.individual_tickets);
+      var range = peopleRange(type);
+      if (split) range.max = Math.min(range.max, ticketMax);
+      tickets.bounds({ min: 1, max: split ? 1 : ticketMax });
+      tickets.hidden = split || ticketMax <= 1;
+      qty.bounds(range);
+      splitHint.hidden = !split || !qty.hidden;
+      qty.querySelector("label").textContent = t(split ? "individual_group_people" : "people_label");
+      var hint = qty.querySelector(".hint");
+      if (split && hint) hint.textContent = t("individual_group_hint");
+      namesRefresh();
+      paymentRefresh(form);
+      orderRefresh(form);
+    }
     form.addEventListener("change", function (e) {
-      if (e.target && e.target.name === "type_id") qty.bounds(peopleRange(chosenType()));
+      if (e.target && e.target.name === "type_id") typeRefresh();
       orderRefresh(form);
     });
-    setTimeout(function () { qty.bounds(peopleRange(chosenType())); }, 0);
+    setTimeout(typeRefresh, 0);
     form.addEventListener("submit", submit);
     setTimeout(function () { paymentRefresh(form); orderRefresh(form); }, 0);
     return form;
@@ -632,6 +655,9 @@
     fd.set("email", f.elements.email.value);
     fd.set("people", f.elements.people.value || "1");
     fd.set("tickets", f.elements.tickets.value || "1");
+    var selected = f.querySelector("input[name=type_id]:checked");
+    var selectedType = selected && data.types.filter(function (x) { return x.id === selected.value; })[0];
+    if (selectedType && selectedType.individual_tickets) fd.set("individual_tickets", "yes");
     var friends = [].map.call(f.querySelectorAll("[data-friend]"), function (x) { return x.value.trim(); });
     if (friends.length) fd.set("names", JSON.stringify(friends));
     var chosen = f.querySelector("input[name=type_id]:checked");
@@ -667,7 +693,7 @@
         fd.set("id_photo", idSmall, idSmall === idFile ? idFile.name : "id.jpg");
       }
       // Each friend's ID photo (only for the tickets in the order).
-      var n = Math.max(1, Number(f.elements.tickets.value) || 1);
+      var n = Math.max(1, Number(f.elements.tickets.value) || 1) * (selectedType && selectedType.individual_tickets ? Number(f.elements.people.value) : 1);
       for (var k = 1; k < n; k++) {
         var fi = f.elements["id_photo_" + k], ff = fi && fi.files && fi.files[0];
         if (!ff) continue;

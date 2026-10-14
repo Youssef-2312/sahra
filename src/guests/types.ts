@@ -56,12 +56,12 @@ export const MAX_TYPE_PEOPLE = 50;
 export const isPackage = (tt: string) => raw(`(${tt}.min_people > 1 AND ${tt}.min_people = ${tt}.max_people)`);
 
 /** What one ticket costs in whole EGP: its price, times its people unless its type is a package. `t` is the ticket's alias. */
-export const ticketTotal = (t: string) => raw(`(COALESCE(${t}.price, 0) * CASE WHEN EXISTS (SELECT 1 FROM ticket_types pk
+export const ticketTotal = (t: string) => raw(`(COALESCE(${t}.price, 0) * CASE WHEN ${t}.split_group_size IS NOT NULL THEN 1 WHEN EXISTS (SELECT 1 FROM ticket_types pk
   WHERE pk.id = ${t}.type_id AND pk.min_people > 1 AND pk.min_people = pk.max_people) THEN 1 ELSE ${t}.people END)`);
 
 export const TYPE_FIELDS = [
   "name", "description", "price", "quantity", "sales_opens_at", "sales_closes_at", "entry_from", "staff_only",
-  "payment_instructions", "sort", "min_people", "max_people",
+  "payment_instructions", "sort", "min_people", "max_people", "individual_tickets",
 ] as const;
 type TypeField = (typeof TYPE_FIELDS)[number];
 const TIMES = ["sales_opens_at", "sales_closes_at", "entry_from"] as const;
@@ -82,6 +82,7 @@ export interface TicketTypeRow {
   sort: number;
   min_people: number | null;
   max_people: number | null;
+  individual_tickets: number;
   archived_at: number | null;
   rev: number;
 }
@@ -142,6 +143,10 @@ export function parseType(b: Record<string, unknown>, timeZone: string | null, c
     if (typeof n !== "number" || !Number.isInteger(n) || n < 0 || n > 1000) return bad("sort");
     v.sort = n;
   }
+  if ("individual_tickets" in b) {
+    if (typeof b.individual_tickets !== "boolean") return bad("individual_tickets");
+    v.individual_tickets = b.individual_tickets ? 1 : 0;
+  }
   if ("staff_only" in b) {
     if (typeof b.staff_only !== "boolean") return bad("staff_only");
     v.staff_only = b.staff_only ? 1 : 0;
@@ -181,7 +186,7 @@ export class TypeDb {
   async list(sess: SessionRef, now: number) {
     const r = await this.driver.all<TicketTypeRow & { held: number; approved: number; admitted: number }>(sql`SELECT tt.id, tt.party_id,
         tt.name, tt.description, tt.price, tt.quantity, tt.sales_opens_at, tt.sales_closes_at, tt.entry_from, tt.staff_only,
-        tt.payment_instructions, tt.sort, tt.min_people, tt.max_people, tt.archived_at, tt.rev,
+        tt.payment_instructions, tt.sort, tt.min_people, tt.max_people, tt.individual_tickets, tt.archived_at, tt.rev,
         ${typeHeld(sql`tt.id`)} AS held, ${typeApproved(sql`tt.id`)} AS approved,
         (SELECT COALESCE(SUM(u.people), 0) FROM tickets u WHERE u.type_id = tt.id AND u.used_at IS NOT NULL) AS admitted
       FROM ticket_types tt WHERE tt.party_id = ${sess.partyId} AND ${sessionValid(sess, MANAGERS, now)}
@@ -194,9 +199,9 @@ export class TypeDb {
     const r = await this.driver.all<{
       id: string; name: string; description: string | null; price: number; quantity: number | null; held: number;
       sales_opens_at: number | null; sales_closes_at: number | null; payment_instructions: string | null; on_sale: number;
-      min_people: number | null; max_people: number | null;
+      min_people: number | null; max_people: number | null; individual_tickets: number;
     }>(sql`SELECT tt.id, tt.name, tt.description, tt.price, tt.quantity, ${typeHeld(sql`tt.id`)} AS held,
-        tt.sales_opens_at, tt.sales_closes_at, tt.payment_instructions, (${onSale(now)}) AS on_sale, tt.min_people, tt.max_people
+        tt.sales_opens_at, tt.sales_closes_at, tt.payment_instructions, (${onSale(now)}) AS on_sale, tt.min_people, tt.max_people, tt.individual_tickets
       FROM ticket_types tt WHERE tt.party_id = ${partyId} AND tt.archived_at IS NULL AND tt.staff_only = 0
       ORDER BY tt.sort, tt.created_at, tt.id`);
     return r.results;
@@ -218,10 +223,10 @@ export class TypeDb {
     const rangeOk = sql`(${val("min_people", null)} IS NULL OR ${val("max_people", null)} IS NULL OR ${val("min_people", null)} <= ${val("max_people", null)})`;
     const rs = await this.driver.batch([
       sql`INSERT INTO ticket_types (id, party_id, name, description, price, quantity, sales_opens_at, sales_closes_at, entry_from,
-          staff_only, payment_instructions, sort, min_people, max_people, created_at, created_by, last_op, last_action)
+          staff_only, payment_instructions, sort, min_people, max_people, individual_tickets, created_at, created_by, last_op, last_action)
         SELECT ${id}, ${p}, ${val("name", "")}, ${val("description", null)}, ${val("price", 0)}, ${val("quantity", null)},
           ${val("sales_opens_at", null)}, ${val("sales_closes_at", null)}, ${val("entry_from", null)}, ${val("staff_only", 0)},
-          ${val("payment_instructions", null)}, ${val("sort", 0)}, ${val("min_people", null)}, ${val("max_people", null)}, ${now}, ${actor}, ${op}, 'type_created'
+          ${val("payment_instructions", null)}, ${val("sort", 0)}, ${val("min_people", null)}, ${val("max_people", null)}, ${val("individual_tickets", 0)}, ${now}, ${actor}, ${op}, 'type_created'
         WHERE ${ok} AND ${windowOk} AND ${roomOk} AND ${rangeOk} AND NOT EXISTS (SELECT 1 FROM ticket_types WHERE id = ${id})`,
       audit(now, actor, "type_created", "ticket_type", sql`SELECT party_id, id, rev FROM ticket_types WHERE id = ${id} AND last_op = ${op}`),
       sql`SELECT ${ok} AS session_ok, ${windowOk} AS window_ok, ${roomOk} AS room_ok, ${rangeOk} AS range_ok,

@@ -155,7 +155,7 @@ export class GuestDb {
    * answers and handle stay on the first ticket; each ticket keeps its own ID photo.
    */
   async signup(a: {
-    id: string; partyId: string; people: number; name: string; email: string; answers: string | null;
+    id: string; partyId: string; people: number; individualTickets?: boolean; name: string; email: string; answers: string | null;
     screenshotKey: string | null; idPhotoKey?: string | null; instagram?: string | null; typeId: string | null; now: number; op: string;
     guestForm?: string | null; rules: string | null; cancellation: string | null; accepted: { terms: string; rules: string | null; privacy: string };
     more?: { id: string; name: string; idPhotoKey?: string | null }[];
@@ -163,8 +163,16 @@ export class GuestDb {
     const more = a.more ?? [];
     const count = 1 + more.length;
     const reg = registrationRules(a.now, a.email, count);
-    const ty = typeRules(a.typeId, a.people * count, a.now);
-    const roomOk = sql`${held(sql`p.id`)} + ${a.people * count} <= p.capacity`;
+    const split = !!a.individualTickets;
+    const totalPeople = split ? count : a.people * count;
+    const ty = typeRules(a.typeId, totalPeople, a.now);
+    const roomOk = sql`${held(sql`p.id`)} + ${totalPeople} <= p.capacity`;
+    const modeOk = a.typeId === null ? sql`${split ? 0 : 1}` : sql`EXISTS (SELECT 1 FROM ticket_types tm WHERE tm.id = ${a.typeId} AND tm.party_id = p.id AND tm.individual_tickets = ${split ? 1 : 0})`;
+    const splitOk = split ? sql`${count % a.people === 0 && count <= 10 ? 1 : 0}` : sql`1`;
+    // Allocate whole-EGP package prices exactly, including prices not divisible by group size.
+    const price = split ? sql`CASE WHEN EXISTS (SELECT 1 FROM ticket_types pk WHERE pk.id = ${a.typeId} AND pk.min_people > 1 AND pk.min_people = pk.max_people)
+      THEN CAST(${ty.price} / ${a.people} AS INTEGER) + CASE WHEN o.i % ${a.people} < ${ty.price} % ${a.people} THEN 1 ELSE 0 END
+      ELSE ${ty.price} END` : ty.price;
     const rulesOk = sql`(p.rules IS ${a.rules} AND p.cancellation_policy IS ${a.cancellation})`;
     const formOk = a.guestForm === undefined ? sql`1` : sql`p.guest_form IS ${a.guestForm}`;
     const orderId = count > 1 ? a.id : null;
@@ -173,14 +181,14 @@ export class GuestDb {
     const ids = [a.id, ...more.map((m) => m.id)];
     const rs = await this.driver.batch([
       sql`WITH o(i, id, nm, idk) AS (VALUES ${rows})
-        INSERT INTO tickets (id, party_id, status, people, guest_name, guest_email, answers, screenshot_key, id_photo_key, instagram, type_id, price,
+        INSERT INTO tickets (id, party_id, status, people, guest_name, guest_email, answers, screenshot_key, id_photo_key, instagram, type_id, price, split_group_size,
           order_id, terms_version, rules_version, privacy_version, terms_accepted_at, created_at, last_op, last_action)
-        SELECT o.id, p.id, 'pending', ${a.people}, o.nm, ${a.email},
+        SELECT o.id, p.id, 'pending', ${split ? 1 : a.people}, o.nm, ${a.email},
           CASE WHEN o.i = 0 THEN ${a.answers} END, CASE WHEN o.i = 0 THEN ${a.screenshotKey} END,
-          o.idk, CASE WHEN o.i = 0 THEN ${a.instagram ?? null} END, ${a.typeId}, ${ty.price},
+          o.idk, CASE WHEN o.i = 0 THEN ${a.instagram ?? null} END, ${a.typeId}, ${price}, ${split ? a.people : null},
           ${orderId}, ${a.accepted.terms}, ${a.accepted.rules}, ${a.accepted.privacy}, ${a.now}, ${a.now}, ${a.op}, 'ticket_requested'
         FROM o, parties p
-        WHERE p.id = ${a.partyId} AND ${peopleOk(a.typeId, a.people)} AND ${roomOk} AND ${rulesOk} AND ${formOk}
+        WHERE p.id = ${a.partyId} AND ${peopleOk(a.typeId, a.people)} AND ${modeOk} AND ${splitOk} AND ${roomOk} AND ${rulesOk} AND ${formOk}
           AND ${reg.opened} AND ${reg.notClosed} AND ${reg.emailOk} AND ${ty.chosenOk} AND ${ty.placesOk}
           AND NOT EXISTS (SELECT 1 FROM tickets x WHERE x.id IN (${inList(ids)}))
         ORDER BY o.i`,
@@ -194,6 +202,7 @@ export class GuestDb {
             WHEN NOT ${reg.notClosed} THEN 'registration_closed'
             WHEN NOT ${reg.emailOk} THEN 'email_limit'
             WHEN NOT ${ty.chosenOk} THEN ${a.typeId === null ? "type_required" : "type_unavailable"}
+            WHEN NOT ${modeOk} OR NOT ${splitOk} THEN 'type_unavailable'
             WHEN NOT ${peopleOk(a.typeId, a.people)} THEN 'people_out_of_range'
             WHEN NOT ${ty.placesOk} THEN 'type_full'
             WHEN NOT ${roomOk} THEN 'full'
