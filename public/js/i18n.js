@@ -1123,3 +1123,6 @@ Object.assign(SahraText.ar, {
   f_nova_instagram: "نوفا على إنستغرام",
   f_wordmark: "سهرة",
 });
+
+Object.assign(SahraText.en, { f_switch_language: "التبديل إلى العربية" });
+Object.assign(SahraText.ar, { f_switch_language: "Switch to English" });

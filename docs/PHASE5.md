@@ -981,3 +981,15 @@ from assistive technology. No new assets, gradients or external requests.
 Repeated the 30 bilingual layout checks, including successful loading of all
 three backdrop images, a wordmark at most 110px, positive panel overlap, zero
 overflow/errors and 44px link targets. Typecheck and all 544 tests pass.
+
+Footer reference correction (18 October 2026): matched the owner's newer black
+footer reference rather than the earlier inset-card treatment. Compact brand
+and description, four desktop columns, outlined circular Instagram/WhatsApp
+buttons and contact icons; navigation links use 13px text and headings 12px.
+A slim divided bottom row puts a working language pill at the start, copyright
+in the center and Nova credit at the end. Privacy and Terms remain in navigation.
+A smaller wordmark overlaps a muted Sahra logo within the same black footer.
+The photo invitation above is retained. Contact values explicitly use LTR in
+Arabic. The footer language control uses the existing language-switch flow,
+including draft preservation. Rechecked 30 bilingual responsive layouts and
+44px tap targets; typecheck and all 544 tests pass. Not deployed.
