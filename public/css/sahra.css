@@ -1,5 +1,5 @@
 /* Sahra design (Phase 5), in Nova's design language (https://bynova.vercel.app/),
-   dark: Space Grotesk headlines, Inter text, an Instrument Serif italic accent,
+   dark: Archivo headlines and text, with IBM Plex Sans Arabic for Arabic,
    small monospace labels, a faint blueprint grid with corner marks, a frosted top
    bar, soft shadows and pill buttons. Owner decisions: a dark charcoal base with
    ONE calm accent (Nova blue), the same all year; colour otherwise only for
@@ -1222,3 +1222,109 @@ select:disabled { opacity: 0.55; cursor: default; }
 
 .f-contact-link { gap: 9px; max-width: 100%; }
 .f-contact-link svg { width: 14px; height: 14px; flex: none; opacity: .65; }
+
+/* Selective Cars reference: self-hosted Archivo, pill navigation and generous panel grids. */
+@font-face { font-family: "Archivo"; src: url("/fonts/archivo-latin-variable.woff2") format("woff2"); font-style: normal; font-weight: 400 700; font-display: swap; unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+:root { --font-head: "Archivo", "Plex Arabic", system-ui, sans-serif; --font-body: "Archivo", "Plex Arabic", system-ui, sans-serif; --radius: 22px; }
+body { font-size: 16px; }
+h1, h2, h3 { font-weight: 600; }
+body:not(.dashboard-page) .topbar-shell { top: 12px; width: calc(100% - 40px); max-width: 1280px; margin: 12px auto 0; border: 1px solid var(--line-strong); border-radius: 24px; background: #111216; backdrop-filter: none; -webkit-backdrop-filter: none; box-shadow: none; }
+body:not(.dashboard-page) .topbar { max-width: none; padding: 10px 20px; gap: 12px; }
+body:not(.dashboard-page) .topbar .brand { font-size: 21px; }
+.public-nav { gap: 6px; border: 0; padding-block: 6px 0; }
+.public-nav a { min-height: 44px; padding: 8px 16px; border: 1px solid transparent; border-radius: 999px; font-size: 14px; color: #b9bcc5; transition: color .18s, background .18s, border-color .18s; }
+.public-nav a:hover, .public-nav a[aria-current="page"] { border-color: var(--line-strong); background: #23252c; color: #fff; }
+body:not(.dashboard-page) .topbar-shell.scrolled { background: #111216; border-color: #41444f; box-shadow: none; }
+body:not(.dashboard-page) .topbar-end .btn { border-radius: 999px; }
+.card, .ab-card, .s-card, .msg-panel { border-radius: 22px; }
+.home #hero { max-width: 1440px; padding: 16px 20px 0; margin-inline: auto; }
+.home .hero { border: 1px solid var(--line); border-radius: 30px; min-height: min(78vh, 780px); }
+.home .hero h1 { font-size: clamp(42px, 6vw, 86px); font-weight: 600; line-height: 1.03; letter-spacing: -.045em; text-shadow: none; }
+.home .hero h1 .serif { font: inherit; color: #c9d4ff; }
+.home .hero p { font-size: 18px; max-width: 38rem; line-height: 1.65; }
+.home main { max-width: 1280px; padding-inline: 24px; }
+.home .parties-section { margin-block: 72px; padding: 36px; border: 1px solid var(--line); border-radius: 28px; background: #111216; }
+.home #app > .parties-section:first-child > .section-head { margin-top: 0; }
+.home .section-head h2, .why-head h2 { font-size: clamp(30px, 3.8vw, 52px); font-weight: 600; letter-spacing: -.035em; line-height: 1.1; }
+.parties-grid { gap: 20px; }
+.party-card { border-radius: 22px; background: #191b20; transition: transform .25s ease, border-color .25s ease; }
+.party-card .cover { aspect-ratio: 4 / 3; }
+.party-card .cover img, .home-photos img { transition: transform .65s cubic-bezier(.2,.7,.2,1); }
+.party-card .info { padding: 24px; gap: 10px; }
+.party-card .name { font-size: 23px; font-weight: 600; letter-spacing: -.025em; }
+.party-card .go { display: flex; justify-content: space-between; align-items: center; align-self: stretch; margin-top: auto; padding-top: 18px; border-top: 1px solid var(--line); font-size: 14px; }
+.party-card .go::after { content: ""; flex: none; width: 9px; height: 9px; border-block-start: 1.5px solid currentColor; border-inline-end: 1.5px solid currentColor; transform: rotate(45deg); }
+[dir="rtl"] .party-card .go::after { transform: rotate(-45deg); }
+.why { margin-block: 80px; }
+.why-head { max-width: 40rem; margin-bottom: 28px; }
+.why-tiles { gap: 14px; border: 0; border-radius: 0; background: transparent; overflow: visible; }
+.why-tile { min-width: 0; min-height: 160px; padding: 28px; border: 1px solid var(--line); border-radius: 22px; background: #15171c; transition: border-color .25s, transform .25s; }
+.why-tile strong { font-size: 28px; font-weight: 600; }
+.why-tile span { font-size: 15px; line-height: 1.65; }
+.home-story { margin-block: 96px; gap: 48px; }
+.home-story h2, .home-guide h2 { font-size: clamp(32px, 4vw, 54px); font-weight: 600; letter-spacing: -.035em; }
+.home-photos { height: 420px; gap: 12px; }
+.home-photos > div { border-radius: 24px; }
+.home .how > .section-head { margin-top: 80px; }
+.home .steps { gap: 18px; margin-top: 28px; }
+.home .step-card { padding: 28px; border: 1px solid var(--line); border-radius: 22px; background: #15171c; transition: border-color .25s, transform .25s; }
+.home .step-card .num { display: inline-flex; justify-content: center; align-items: center; width: 44px; height: 44px; border: 1px solid #41444f; border-radius: 12px; color: #c9d4ff; }
+.home .step-card h3 { margin-block: 24px 12px; font-size: 21px; }
+.home .step-card p { font-size: 15px; line-height: 1.75; }
+.home-guide { padding-block: 56px; gap: 44px; border: 0; }
+.home-guide-list { display: grid; gap: 12px; }
+.home-guide-list li, .home-guide-list li:first-child, .home-guide-list li:last-child { padding: 24px; border: 1px solid var(--line); border-radius: 20px; background: #15171c; }
+.home-guide-list h3 { font-size: 19px; }
+.home-guide-list p { font-size: 15px; line-height: 1.7; }
+.home .faq { display: grid; gap: 12px; margin-block: 56px 0; padding: 32px; border: 1px solid var(--line); border-radius: 28px; background: #111216; }
+.home .faq h2 { margin-bottom: 16px; font-size: clamp(28px, 3vw, 40px); }
+.home .faq details, .home .faq details:last-child { padding: 4px 22px; border: 1px solid var(--line); border-radius: 18px; background: #191b20; }
+.home .faq summary { padding-block: 18px; font-size: 16px; }
+.home .faq details p { font-size: 15px; padding-bottom: 8px; }
+.ab-hero h1 { font-weight: 600; letter-spacing: -.035em; }
+.ab-cards { gap: 18px; }
+.ab-card { border: 1px solid var(--line); background: #15171c; transition: transform .25s, border-color .25s; }
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .party-card:hover, .why-tile:hover, .home .step-card:hover, .ab-card:hover { transform: translateY(-4px); border-color: #555b6a; }
+  .party-card:hover .cover img, .home-photos > div:hover img { transform: scale(1.035); }
+}
+@media (min-width: 900px) {
+  body:not(.dashboard-page) .topbar { flex-wrap: nowrap; }
+  body:not(.dashboard-page) .topbar .brand { order: 1; }
+  body:not(.dashboard-page) .public-nav { order: 2; flex-basis: auto; margin-inline: auto; padding: 0; }
+  body:not(.dashboard-page) .topbar-end { order: 3; margin-inline-start: 0; }
+}
+@media (max-width: 899px) {
+  .home .parties-section { padding: 26px; margin-block: 48px; }
+  .home-story { margin-block: 64px; }
+  .home-photos { height: 350px; }
+  .home-guide { gap: 28px; padding-block: 24px; }
+}
+@media (max-width: 540px) {
+  body:not(.dashboard-page) .topbar-shell { top: 8px; width: calc(100% - 24px); margin-top: 8px; border-radius: 20px; }
+  body:not(.dashboard-page) .topbar { padding: 8px 12px; gap: 6px; }
+  body:not(.dashboard-page) .topbar .brand { font-size: 18px; }
+  .topbar-end { gap: 2px; }
+  .topbar-end .small-btn { max-width: 120px; font-size: 13px; }
+  .public-nav { gap: 2px; justify-content: space-between; }
+  .public-nav a { padding-inline: 9px; font-size: 12px; }
+  .home #hero { padding: 12px 12px 0; }
+  .home .hero { border-radius: 24px; min-height: 580px; padding: 56px 22px; }
+  .home .hero h1 { font-size: 42px; }
+  .home .hero p { font-size: 16px; }
+  .home main { padding-inline: 16px; }
+  .home .parties-section { padding: 20px; border-radius: 24px; }
+  .home .section-head { align-items: flex-start; }
+  .party-card .info { padding: 20px; }
+  .party-card .name { font-size: 21px; }
+  .why-tiles { gap: 12px; }
+  .why-tile { padding: 20px 16px; min-height: 150px; }
+  .why-tile strong { font-size: 23px; }
+  .home .step-card { padding: 24px; }
+  .home .faq { padding: 22px 16px; border-radius: 24px; }
+  .home .faq details, .home .faq details:last-child { padding-inline: 16px; }
+  .home-photos { height: 320px; }
+}
+[dir="rtl"] .home .hero h1, [dir="rtl"] .home .section-head h2, [dir="rtl"] .home-story h2, [dir="rtl"] .home-guide h2 { letter-spacing: 0; line-height: 1.35; }
+
+[dir="rtl"] .party-card .name { letter-spacing: 0; line-height: 1.45; }

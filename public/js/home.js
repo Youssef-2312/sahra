@@ -1,8 +1,7 @@
 // Home page (owner decisions): a full-width hero (the party photos behind the
 // heading, "Discover parties" and "How it works"), the upcoming parties as a
 // wrapping grid of cards (artwork, date and time, name, price, availability,
-// action), ticket steps and preparation tips, party photography, hosting
-// guidance, the organiser sign-in row and the footer.
+// action), ticket steps and preparation tips, party photography and the footer.
 // Sign-in for organisers and staff sits at the top right. A card shows this
 // browser's own ticket for that party when it remembers one (brainstorm idea 4):
 // the links saved by the sign-up and ticket pages (localStorage sahra_tickets),
@@ -180,6 +179,7 @@
         else grid.appendChild(el("p", { class: "muted none", text: t("h_filter_none") }));
         count.textContent = shown.length === 1 ? t("h_count_one") : t("h_count", { n: shown.length });
         chips.querySelectorAll("button").forEach(function (b) { b.setAttribute("aria-pressed", b.dataset.f === filter ? "true" : "false"); });
+        Sahra.reveal(grid);
       };
       if (keys.length > 1) keys.forEach(function (k) {
         var b = el("button", { class: "chip", text: t("h_filter_" + k), attrs: { type: "button" } });
@@ -255,7 +255,7 @@
       }));
   }
 
-  // How tickets work: plain text in three columns, the questions, then the organiser sign-in row.
+  // Guest-focused ticket steps, preparation cards and questions.
   function how() {
     return el("section", { class: "how", attrs: { id: "how" } },
       el("div", { class: "section-head" }, el("h2", { text: t("h_how_title") })),
@@ -266,18 +266,7 @@
           el("p", { text: t("h_step" + n + "_p") }));
       })),
       guide("ready"),
-      faq(),
-      guide("hosts"),
-      // For organisers: a panel over one of the party photos (darkened, flat; no gradient).
-      el("div", { class: "host host-panel" },
-        photo(22, false),
-        el("div", { class: "shade", attrs: { "aria-hidden": "true" } }),
-        el("div", { class: "host-copy" },
-          el("p", { class: "label-line", text: t("h_host_label") }),
-          el("h3", { text: t("h_host_t") }), el("p", { text: t("h_host_p") })),
-        el("div", { class: "host-actions" },
-          el("a", { class: "btn primary", text: t("h_contact"), attrs: { href: "/contact.html" } }),
-          el("a", { class: "btn", text: t("sign_in"), attrs: { href: "/signin.html" } }))));
+      faq());
   }
 
   function render() {
@@ -290,6 +279,7 @@
     app.appendChild(why());
     app.appendChild(story());
     app.appendChild(how());
+    Sahra.reveal(app);
   }
 
   async function load() {
