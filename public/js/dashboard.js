@@ -110,17 +110,6 @@
     return f;
   }
 
-  // Use existing navigation and permissions; the dashboard shell only changes presentation.
-  function sidebar() {
-    return el("aside", { class: "dash-sidebar" },
-      el("a", { class: "dash-brand", attrs: { href: "/" } },
-        el("img", { attrs: { src: "/img/sahra-mark.svg", alt: "", width: 32, height: 32 } }), "Sahra"),
-      el("p", { class: "dash-nav-label", text: t("d_workspace") }),
-      SahraStaff.nav("dashboard", me.staff.role),
-      el("div", { class: "dash-sidebar-note" }, el("span", { class: "dash-live-dot", attrs: { "aria-hidden": "true" } }),
-        el("span", { text: t("d_workspace_note") })));
-  }
-
   function typeTable() {
     var rows = stats.by_type || [];
     var headings = ["d_type_name", "d_type_approved", "d_type_pending", "d_type_arrived", "d_type_available", "d_type_share"];
@@ -156,9 +145,7 @@
       actions: [[t("sign_in"), "/signin", true], [t("nt_home"), "/"]], hint: t("nt_guest_hint") })); return; }
     if (!stats) { app.appendChild(el("p", { class: "muted", text: t("loading") })); return; }
     app.classList.add("dash");
-    var content = el("div", { class: "dash-content" });
-    if (window.SahraStaff) app.appendChild(sidebar());
-    app.appendChild(content);
+    var content = SahraStaff.workspace(app, "dashboard", me.staff.role);
     var when = party && party.starts_at ? Sahra.when(party.starts_at, party.time_zone) : null;
     content.appendChild(el("header", { class: "dash-head" },
       el("div", null,

@@ -129,3 +129,33 @@ html[lang="ar"] .dashboard-page .dash-head h1 { letter-spacing: 0; }
 .dashboard-page main { animation: none; }
 .dashboard-page .topbar-shell.scrolled { background: var(--surface); box-shadow: var(--shadow); }
 .dashboard-page .dash-find .btn.primary { width: auto; }
+
+/* The same workspace contains Requests, Guests, Settings, Emails and Team. */
+.dashboard-page .workspace-content { min-width: 0; }
+.dashboard-page .staff-head { border: 0; padding: 0 0 24px; margin: 0; }
+.dashboard-page .staff-head h1 { font-size: clamp(24px, 2vw, 30px); margin-block: 6px 10px; }
+.dashboard-page .staff-head .lede { max-width: 70ch; font-size: 14px; line-height: 1.7; }
+.dashboard-page .workspace-content :is(.s-card, .req, .o-row) { border-radius: 10px; box-shadow: none; }
+.dashboard-page .workspace-content .tabs { margin-block: 8px 22px; gap: 8px; }
+.dashboard-page .workspace-content .tabs button { border-radius: 7px; font-size: 13px; }
+.dashboard-page .workspace-content .s-layout { gap: 22px; }
+.dashboard-page .workspace-content .s-main { max-width: none; min-width: 0; }
+.dashboard-page .workspace-content :is(.g-cols, .g-side, .g-main, .s-layout, .o-list, .reqs) { min-width: 0; }
+.dashboard-page .workspace-content > .g-tiles { margin-block: 0 24px; }
+.dashboard-page .workspace-content .s-card h2 { font-size: 18px; }
+.dashboard-page .workspace-content :is(input, select, textarea) { border-radius: 7px; }
+.dashboard-page .workspace-content .s-toc a { border-radius: 7px; }
+.dashboard-page .workspace-content .find-box input { min-width: 0; }
+.dashboard-page .workspace-content .find-box .btn.primary { width: auto; }
+.dashboard-page .workspace-content .page-tools { max-width: none; }
+.dashboard-page .workspace-content .s-empty { padding: 24px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.dashboard-page .workspace-content .bulkbar { background: var(--surface); border-color: var(--line-strong); }
+@media (min-width: 1100px) {
+  .dashboard-page main.staff.dash { max-width: none; }
+  .dashboard-page .workspace-content .s-layout { grid-template-columns: 170px minmax(0,1fr); }
+}
+@media (max-width: 540px) {
+  .dashboard-page .workspace-content .s-two { grid-template-columns: minmax(0,1fr); }
+  .dashboard-page .workspace-content .staff-head .dash-actions { flex-wrap: wrap; }
+  .dashboard-page .workspace-content .staff-head .btn { max-width: 100%; white-space: normal; }
+}

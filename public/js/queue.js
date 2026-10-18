@@ -308,34 +308,34 @@
     if (!me) { app.appendChild(Sahra.problem({ kicker: t("nt_kicker_signin"), title: t("nt_staff_t"), text: t("d_sign_in"),
       actions: [[t("sign_in"), "/signin", true], [t("nt_home"), "/"]], hint: t("nt_guest_hint") })); return; }
     app.classList.add("staff");
-    app.appendChild(SahraStaff.nav("queue", me.staff.role));
-    app.appendChild(el("header", { class: "staff-head" }, el("div", null,
+    var content = SahraStaff.workspace(app, "queue", me.staff.role);
+    content.appendChild(el("header", { class: "staff-head" }, el("div", null,
       el("p", { class: "label-line", text: me.party.name }), el("h1", { text: t("q_title") }))));
-    app.appendChild(el("div", { class: "tabs", attrs: { role: "group" } }, TABS.map(function (x) {
+    content.appendChild(el("div", { class: "tabs", attrs: { role: "group" } }, TABS.map(function (x) {
       return el("button", { text: t(x[1]), attrs: { type: "button", "aria-pressed": tab === x[0] ? "true" : "false" },
         on: { click: function () { if (tab !== x[0]) { tab = x[0]; load(false); } } } });
     })));
     // Guests who paid the organiser in cash (brainstorm idea 9), on any tab.
     var cashChip = el("button", { class: "chip", text: t("q_cash_only"), attrs: { type: "button", "aria-pressed": cashOnly ? "true" : "false" },
       on: { click: function () { cashOnly = !cashOnly; load(false); } } });
-    app.appendChild(el("div", { class: "chips q-filters" }, cashChip));
-    if (bulkNote) app.appendChild(el("p", { class: "notice " + bulkNote.cls, text: bulkNote.text }));
-    if (failed) { app.appendChild(el("p", { class: "notice no", text: failed })); return; }
-    if (!rows) { app.appendChild(el("p", { class: "muted", text: t("loading") })); return; }
-    if (!rows.length) app.appendChild(el("p", { class: "empty", text: cashOnly ? t("q_none_cash") : t("q_none") }));
+    content.appendChild(el("div", { class: "chips q-filters" }, cashChip));
+    if (bulkNote) content.appendChild(el("p", { class: "notice " + bulkNote.cls, text: bulkNote.text }));
+    if (failed) { content.appendChild(el("p", { class: "notice no", text: failed })); return; }
+    if (!rows) { content.appendChild(el("p", { class: "muted", text: t("loading") })); return; }
+    if (!rows.length) content.appendChild(el("p", { class: "empty", text: cashOnly ? t("q_none_cash") : t("q_none") }));
     else {
       // The filter redraws only the list below it, so typing keeps its place.
       var list = el("div");
-      app.appendChild(Sahra.findBox({ value: find, placeholder: t("q_find_ph"), onChange: function (v) { find = v; fillList(list); } }));
-      app.appendChild(list);
+      content.appendChild(Sahra.findBox({ value: find, placeholder: t("q_find_ph"), onChange: function (v) { find = v; fillList(list); } }));
+      content.appendChild(list);
       fillList(list);
     }
-    if (next) app.appendChild(el("button", { class: "btn", text: t("q_more"), attrs: { type: "button", disabled: busy }, on: { click: function () { load(true); } } }));
-    app.appendChild(el("div", { class: "page-tools" },
+    if (next) content.appendChild(el("button", { class: "btn", text: t("q_more"), attrs: { type: "button", disabled: busy }, on: { click: function () { load(true); } } }));
+    content.appendChild(el("div", { class: "page-tools" },
       el("div", { class: "stack buttons" }, el("button", { class: "btn", text: t("q_export"), attrs: { type: "button" }, on: { click: exportCsv } })),
       tab === "pending" ? staleTool() : null));
     var bar = bulkbar();
-    if (bar) app.appendChild(bar);
+    if (bar) content.appendChild(bar);
   }
 
   function fillList(list) {

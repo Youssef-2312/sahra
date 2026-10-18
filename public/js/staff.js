@@ -69,6 +69,29 @@ var SahraStaff = (function () {
       }), el("button", { class: "staff-out", text: t("s_sign_out"), attrs: { type: "button" }, on: { click: signOut } }));
   }
 
+  // One workspace shell for every organiser page, including Overview and Requests.
+  // Links remain real URLs, so reload, browser history and deep links keep working.
+  function workspace(root, page, role) {
+    root.classList.add("dash");
+    document.body.classList.add("dashboard-ready");
+    var menu = nav(page, role);
+    root.appendChild(el("aside", { class: "dash-sidebar" },
+      el("a", { class: "dash-brand", attrs: { href: "/" } },
+        el("img", { attrs: { src: "/img/sahra-mark.svg", alt: "", width: 32, height: 32 } }), "Sahra"),
+      el("p", { class: "dash-nav-label", text: t("d_workspace") }), menu,
+      el("div", { class: "dash-sidebar-note" }, el("span", { class: "dash-live-dot", attrs: { "aria-hidden": "true" } }),
+        el("span", { text: t("d_workspace_note") }))));
+    var content = el("div", { class: "dash-content workspace-content", attrs: { "data-workspace-page": page } });
+    root.appendChild(content);
+    var selected = menu.querySelector("[aria-current]");
+    if (selected && menu.scrollWidth > menu.clientWidth) {
+      menu.scrollLeft = document.documentElement.dir === "rtl"
+        ? -(menu.clientWidth - selected.offsetLeft - selected.offsetWidth)
+        : Math.max(0, selected.offsetLeft - 16);
+    }
+    return content;
+  }
+
   function head(o) {
     return el("header", { class: "staff-head" },
       el("div", null,
@@ -96,22 +119,15 @@ var SahraStaff = (function () {
           actions: [[t("sign_in"), "/signin", true], [t("nt_home"), "/"]], hint: t("nt_guest_hint") }));
         return;
       }
-      var menu = nav(opts.page, me.staff.role);
-      app.appendChild(menu);
-      // On a phone the menu scrolls sideways: bring the current page into view.
-      var cur = menu.querySelector("[aria-current]");
-      if (cur && menu.scrollWidth > menu.clientWidth) {
-        var rtl = document.documentElement.dir === "rtl";
-        menu.scrollLeft = rtl ? -(menu.clientWidth - cur.offsetLeft - cur.offsetWidth) + 0 : Math.max(0, cur.offsetLeft - 16);
-      }
+      var content = workspace(app, opts.page, me.staff.role);
       if (opts.owner && me.staff.role !== "owner") {
-        app.appendChild(head({ party: me.party.name, title: t(opts.title) }));
-        app.appendChild(el("p", { class: "notice info", text: t("s_owner_only") }));
+        content.appendChild(head({ party: me.party.name, title: t(opts.title) }));
+        content.appendChild(el("p", { class: "notice info", text: t("s_owner_only") }));
         return;
       }
-      app.appendChild(head({ party: me.party.name, title: t(opts.title), lede: opts.lede ? t(opts.lede) : null,
+      content.appendChild(head({ party: me.party.name, title: t(opts.title), lede: opts.lede ? t(opts.lede) : null,
         actions: opts.actions ? opts.actions(me) : null }));
-      opts.render(me, app);
+      opts.render(me, content);
     }
     Sahra.boot({ render: draw, me: me });
     return me;
@@ -207,5 +223,5 @@ var SahraStaff = (function () {
   function copyButton(text, label) { return Sahra.copyButton(text, label || t("s_copy")); }
 
   return { start: start, act: act, field: field, input: input, select: select, check: check, section: section,
-    say: say, sayMs: sayMs, sayBox: sayBox, why: why, local: local, copyButton: copyButton, sleep: sleep, nav: nav, redraw: redraw, tn: tn };
+    say: say, sayMs: sayMs, sayBox: sayBox, why: why, local: local, copyButton: copyButton, sleep: sleep, nav: nav, workspace: workspace, redraw: redraw, tn: tn };
 })();
