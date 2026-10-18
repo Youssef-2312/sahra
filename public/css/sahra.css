@@ -1131,10 +1131,10 @@ select:disabled { opacity: 0.55; cursor: default; }
 .jump a { text-decoration: none; }
 .s-card { scroll-margin-top: 88px; }
 
-/* Spacious shared footer: flat surfaces, inset navigation and a quiet wordmark. */
+/* Spacious shared footer: flat surfaces and grouped navigation. */
 .site-footer, .home .site-footer {
   display: block; max-width: 1280px; margin: 80px auto 0; padding: 0 24px;
-  border: 0; font-size: 15px; container-type: inline-size;
+  border: 0; font-size: 15px;
 }
 .f-invitation { padding: 56px 24px 60px; text-align: center; border: 1px solid var(--line); border-radius: 32px; background: #101216; }
 .f-eyebrow { margin: 0 0 16px; color: var(--accent); font-size: 12px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; }
@@ -1157,8 +1157,6 @@ select:disabled { opacity: 0.55; cursor: default; }
 .site-footer .f-policies a { display: inline-flex; align-items: center; min-height: 44px; text-decoration: underline; text-underline-offset: 4px; }
 .site-footer .f-credit { display: inline-flex; align-items: center; gap: 9px; min-height: 44px; margin-top: 8px; font-size: 14px; color: var(--text); }
 .f-credit img { border-radius: 5px; }
-.f-wordmark { overflow: hidden; margin: 20px 0 0; padding-bottom: 12px; color: #202329; text-align: center; font-family: var(--font-head); font-size: clamp(72px, 22vw, 280px); font-size: clamp(72px, 24cqi, 300px); font-weight: 700; line-height: 1.05; letter-spacing: -.075em; user-select: none; }
-[dir="rtl"] .f-wordmark { letter-spacing: 0; line-height: 1.35; }
 [dir="rtl"] .f-eyebrow { letter-spacing: 0; }
 @media (max-width: 899px) {
   .f-panel { padding: 32px; }
@@ -1174,27 +1172,22 @@ select:disabled { opacity: 0.55; cursor: default; }
   .f-panel .f-top { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px 20px; }
   .f-panel .f-bottom { margin-top: 24px; }
   .f-policies { gap: 8px 20px; }
-  .f-wordmark { margin-top: 16px; }
 }
 
-/* Footer refinement: smaller wordmark tucked into the panel; party photo backdrop. */
+/* Party photo backdrop for the footer invitation. */
 .f-invitation { position: relative; isolation: isolate; overflow: hidden; }
 .f-photos { position: absolute; inset: 0; z-index: -1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); pointer-events: none; }
 .f-photos img { width: 100%; height: 100%; min-height: 0; object-fit: cover; filter: brightness(.7); }
 .f-photos::after { content: ""; position: absolute; inset: 0; background: rgba(12, 13, 16, .64); }
 .f-invitation .f-eyebrow { color: #c1ccff; }
 .f-invitation-copy { color: #d8dbe4; }
-.f-wordmark { position: relative; z-index: 2; margin-top: -46px; padding-bottom: 8px; font-size: clamp(44px, 10cqi, 110px); line-height: 1.1; pointer-events: none; }
 .f-panel { position: relative; z-index: 1; padding-bottom: 64px; }
-[dir="rtl"] .f-wordmark { margin-top: -52px; line-height: 1.35; }
 @media (max-width: 540px) {
   .f-panel { padding-bottom: 40px; }
-  .f-wordmark { margin-top: -24px; padding-bottom: 4px; }
-  [dir="rtl"] .f-wordmark { margin-top: -28px; }
 }
 
 /* Owner's Selective Cars reference: one black footer, smaller type and circular socials. */
-.f-panel { background: #050505; border: 0; border-radius: 28px 28px 0 0; padding: 52px 48px 0; overflow: hidden; }
+.f-panel { background: #050505; border: 0; border-radius: 28px 28px 0 0; padding: 52px 48px 24px; overflow: hidden; }
 .f-panel .f-top { grid-template-columns: minmax(0, 2.2fr) minmax(0, .85fr) minmax(0, .95fr) minmax(0, 1.3fr); gap: 48px; }
 .f-panel .brand { font-size: 18px; gap: 9px; }
 .f-panel .brand img { width: 28px; height: 28px; }
@@ -1211,27 +1204,20 @@ select:disabled { opacity: 0.55; cursor: default; }
 .f-copyright { text-align: center; line-height: 1.7; color: #999da7; }
 .site-footer .f-credit { justify-self: end; margin: 0; font-size: 12px; color: #b3b7c0; }
 .f-credit img { width: 20px; height: 20px; }
-.f-signature { position: relative; isolation: isolate; margin-top: 56px; text-align: center; }
-.f-wordmark, [dir="rtl"] .f-wordmark { position: relative; z-index: 1; margin: 0; padding-bottom: 8px; color: #33353a; font-size: clamp(44px, 9cqi, 96px); line-height: 1.15; letter-spacing: -.055em; }
-[dir="rtl"] .f-wordmark { line-height: 1.4; letter-spacing: 0; }
-.f-signature-mark { position: absolute; z-index: 0; inset-inline-start: 50%; top: -20px; width: 150px; height: 100px; transform: translateX(-50%); object-fit: contain; filter: grayscale(1); opacity: .12; pointer-events: none; }
-[dir="rtl"] .f-signature-mark { transform: translateX(50%); }
 @media (max-width: 899px) {
-  .f-panel { padding: 36px 32px 0; }
+  .f-panel { padding: 36px 32px 24px; }
   .f-panel .f-top { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 28px 24px; }
   .f-panel .f-brand { grid-column: 1 / -1; }
   .f-panel .f-bottom { grid-template-columns: 1fr 1fr; }
   .f-copyright { grid-row: 2; grid-column: 1 / -1; }
 }
 @media (max-width: 540px) {
-  .f-panel { padding: 28px 24px 0; border-radius: 24px 24px 0 0; }
+  .f-panel { padding: 28px 24px 24px; border-radius: 24px 24px 0 0; }
   .f-panel .f-top { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px 20px; }
   .f-panel .f-bottom { margin-top: 32px; gap: 16px 8px; }
   .f-panel .f-brand p { font-size: 13px; }
   .f-language { padding-inline: 12px; font-size: 11px; }
   .site-footer .f-credit { font-size: 11px; }
-  .f-signature { margin-top: 36px; }
-  .f-signature-mark { width: 110px; height: 74px; top: -14px; }
 }
 
 .f-contact-link { gap: 9px; max-width: 100%; }

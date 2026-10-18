@@ -993,3 +993,9 @@ The photo invitation above is retained. Contact values explicitly use LTR in
 Arabic. The footer language control uses the existing language-switch flow,
 including draft preservation. Rechecked 30 bilingual responsive layouts and
 44px tap targets; typecheck and all 544 tests pass. Not deployed.
+
+Footer simplification (18 October 2026): removed the decorative Sahra wordmark
+and its faded background logo entirely, including unused styles and translations.
+The footer now ends after the language/copyright/Nova row. The compact brand,
+navigation and photo invitation stay. Typecheck, 544 tests and 30 bilingual
+browser layouts pass; no deployment.

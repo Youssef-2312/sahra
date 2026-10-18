@@ -415,10 +415,7 @@ var Sahra = (function () {
         col(t("f_touch"), [["+20 111 999 0639", "tel:+" + WHATSAPP, false, true], [EMAIL, "mailto:" + EMAIL, false, true], ["@novadev.co", NOVA_INSTAGRAM, true, true]])),
       el("div", { class: "f-bottom" }, language,
         el("span", { class: "f-copyright", text: "\u00a9 " + new Date().getFullYear() + " Sahra. " + t("f_rights") }),
-        el("a", { class: "credit f-credit", attrs: { href: NOVA_URL, target: "_blank", rel: "noopener" } }, logo, el("span", { text: t("built_by") }))),
-      el("div", { class: "f-signature", attrs: { "aria-hidden": "true" } },
-        el("img", { class: "f-signature-mark", attrs: { src: "/img/sahra-mark.svg", alt: "", width: 180, height: 114 } }),
-        el("div", { class: "f-wordmark", text: t("f_wordmark") })));
+        el("a", { class: "credit f-credit", attrs: { href: NOVA_URL, target: "_blank", rel: "noopener" } }, logo, el("span", { text: t("built_by") }))));
     node.append(invitation, panel);
   }
 

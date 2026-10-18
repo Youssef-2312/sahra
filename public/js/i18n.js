@@ -1111,7 +1111,6 @@ Object.assign(SahraText.en, {
   f_host: "Host with Sahra",
   f_guests: "For guests",
   f_nova_instagram: "Nova on Instagram",
-  f_wordmark: "SAHRA",
 });
 Object.assign(SahraText.ar, {
   f_kicker: "صحبة حلوة. ليالٍ لا تُنسى.",
@@ -1121,7 +1120,6 @@ Object.assign(SahraText.ar, {
   f_host: "نظّم حفلتك مع سهرة",
   f_guests: "للضيوف",
   f_nova_instagram: "نوفا على إنستغرام",
-  f_wordmark: "سهرة",
 });
 
 Object.assign(SahraText.en, { f_switch_language: "التبديل إلى العربية" });
