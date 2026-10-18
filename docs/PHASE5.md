@@ -947,3 +947,27 @@ English and Arabic, with zero horizontal overflow and JavaScript errors. Checks
 include switching shared/individual modes, language draft restoration, two
 returned links, the EGP 301 group total, saving both checkbox states and copying
 a type with the option retained. No real signup or email was sent.
+
+### Reference-inspired shared footer (18 October 2026)
+
+Rebuilt the shared footer around the owner's reference: a centered closing
+invitation, a spacious rounded navigation panel and an oversized decorative
+wordmark below it. Uses Sahra's flat dark surfaces, blue accent and self-hosted
+fonts. English and Arabic have their own copy and wordmarks; Arabic columns and
+alignment mirror naturally. Existing destinations, WhatsApp/email fallbacks,
+Privacy, Terms and the linked Built by Nova credit are retained. The scanner's
+existing footer exclusion stays in place. No gradients, inline scripts/styles,
+external assets or dependencies were added to the application.
+
+The invitation links to the party list and hosting contact page. The panel
+adapts from four desktop columns to a full-width brand block and compact link
+columns on smaller screens. Container-relative wordmark sizing also fits the
+new dashboard sidebar. All footer links have a measured minimum 44px tap height.
+
+Local Playwright validation covers 30 layouts: home, contact, ticket, dashboard
+and settings at 390/768/1440 px in English and Arabic. Staff page checks include
+the sidebar-ready layout using signed-out fixtures. Every layout has zero
+horizontal overflow, JavaScript errors or broken footer images. Language
+switching rebuilds a single footer with translated copy. Screenshot capture
+hides the sticky header via CSSOM solely to show the complete footer clearly.
+TypeScript and all 544 Vitest tests pass. No production or staging deployment.

@@ -1102,3 +1102,24 @@ Object.assign(SahraText.ar, {
   individual_group_size: "مجموعة من {n}، تذكرة برمز QR لكل شخص",
   group_price_from: "يبدأ من {amount}. راجع أنواع التذاكر لأسعار المجموعات.",
 });
+
+Object.assign(SahraText.en, {
+  f_kicker: "Good company. Great nights.",
+  f_invitation: "Make a night of it.",
+  f_invitation_copy: "Find your next house party, bring your people and leave the tickets to Sahra.",
+  f_explore: "Explore parties",
+  f_host: "Host with Sahra",
+  f_guests: "For guests",
+  f_nova_instagram: "Nova on Instagram",
+  f_wordmark: "SAHRA",
+});
+Object.assign(SahraText.ar, {
+  f_kicker: "صحبة حلوة. ليالٍ لا تُنسى.",
+  f_invitation: "خلّيها سهرة.",
+  f_invitation_copy: "اكتشف حفلتك الجاية، واجمع أصحابك، وسيب التذاكر لسهرة.",
+  f_explore: "اكتشف الحفلات",
+  f_host: "نظّم حفلتك مع سهرة",
+  f_guests: "للضيوف",
+  f_nova_instagram: "نوفا على إنستغرام",
+  f_wordmark: "سهرة",
+});

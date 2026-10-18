@@ -363,31 +363,42 @@ var Sahra = (function () {
     return svg;
   }
 
-  // The footer (owner: after Nova's): Sahra and one line on what it is, then Site,
-  // Get in touch and Legal; below, the copyright and the Nova credit.
+  // Shared footer: a closing invitation, inset navigation panel and decorative wordmark.
   var WHATSAPP = "201119990639", EMAIL = "novadevco@icloud.com";
   function footer(node) {
     clear(node);
     var logo = el("img", { attrs: { src: NOVA_LOGO, alt: "", width: 24, height: 24 } });
     logo.addEventListener("error", function () { logo.remove(); });
-    var col = function (title, links) {
-      return el("nav", { class: "f-col", attrs: { "aria-label": title } }, el("p", { class: "f-title", text: title }),
-        el("ul", null, links.map(function (l) {
-          return el("li", null, el("a", { text: l[0], attrs: { href: l[1], dir: l[2] ? "ltr" : null, target: l[3] ? "_blank" : null, rel: l[3] ? "noopener" : null } }));
-        })));
+    var link = function (label, href, external) {
+      return el("a", { text: label, attrs: { href: href, target: external ? "_blank" : null, rel: external ? "noopener" : null } });
     };
-    node.appendChild(el("div", { class: "f-top" },
-      el("div", { class: "f-brand" },
-        el("a", { class: "brand", attrs: { href: "/" } }, el("img", { attrs: { src: "/img/sahra-mark.svg", alt: "", width: 28, height: 28 } }), "Sahra"),
-        el("p", { text: t("f_desc") })),
-      col(t("f_site"), [[t("tab_home"), "/"], [t("about"), "/about.html"], [t("contact"), "/contact.html"], [t("find_tickets"), "/find"], [t("sign_in"), "/signin.html"]]),
-      col(t("f_touch"), [[t("f_wa"), "https://wa.me/" + WHATSAPP, false, true], [t("email"), "mailto:" + EMAIL], [t("f_ig"), NOVA_INSTAGRAM, false, true]]),
-      col(t("f_legal"), [[t("privacy"), "/privacy.html"], [t("terms"), "/terms.html"]])));
-    node.appendChild(el("div", { class: "f-bottom" },
-      el("span", { text: "\u00a9 " + new Date().getFullYear() + " Sahra. " + t("f_rights") }),
-      el("span", { class: "nova" },
-        el("a", { class: "credit", attrs: { href: NOVA_URL, target: "_blank", rel: "noopener" } }, logo, el("span", { text: t("built_by") })),
-        el("a", { class: "icon-link", attrs: { href: NOVA_INSTAGRAM, target: "_blank", rel: "noopener", "aria-label": "Nova on Instagram" } }, instagramIcon()))));
+    var col = function (title, links) {
+      return el("nav", { class: "f-col", attrs: { "aria-label": title } }, el("h3", { class: "f-title", text: title }),
+        el("ul", null, links.map(function (l) { return el("li", null, link(l[0], l[1], l[2])); })));
+    };
+    var invitation = el("section", { class: "f-invitation", attrs: { "aria-labelledby": "footer-invitation" } },
+      el("p", { class: "f-eyebrow", text: t("f_kicker") }),
+      el("h2", { attrs: { id: "footer-invitation" }, text: t("f_invitation") }),
+      el("p", { class: "f-invitation-copy", text: t("f_invitation_copy") }),
+      el("div", { class: "f-actions" },
+        el("a", { class: "btn primary", text: t("f_explore"), attrs: { href: "/#parties" } }),
+        el("a", { class: "f-host-link", text: t("f_host"), attrs: { href: "/contact.html" } })));
+    var panel = el("div", { class: "f-panel" },
+      el("div", { class: "f-top" },
+        el("div", { class: "f-brand" },
+          el("a", { class: "brand", attrs: { href: "/" } }, el("img", { attrs: { src: "/img/sahra-mark.svg", alt: "", width: 32, height: 32 } }), "Sahra"),
+          el("p", { text: t("f_desc") }),
+          el("div", { class: "f-socials" },
+            el("a", { class: "icon-link", attrs: { href: NOVA_INSTAGRAM, target: "_blank", rel: "noopener", "aria-label": t("f_nova_instagram") } }, instagramIcon()),
+            link(t("f_wa"), "https://wa.me/" + WHATSAPP, true))),
+        col(t("f_site"), [[t("tab_home"), "/"], [t("about"), "/about.html"], [t("contact"), "/contact.html"]]),
+        col(t("f_guests"), [[t("f_explore"), "/#parties"], [t("find_tickets"), "/find"], [t("sign_in"), "/signin.html"]]),
+        col(t("f_touch"), [[t("f_wa"), "https://wa.me/" + WHATSAPP, true], [t("email"), "mailto:" + EMAIL], [t("f_ig"), NOVA_INSTAGRAM, true]])),
+      el("div", { class: "f-bottom" },
+        el("span", { text: "\u00a9 " + new Date().getFullYear() + " Sahra. " + t("f_rights") }),
+        el("nav", { class: "f-policies", attrs: { "aria-label": t("f_legal") } }, link(t("privacy"), "/privacy.html"), link(t("terms"), "/terms.html"))),
+      el("a", { class: "credit f-credit", attrs: { href: NOVA_URL, target: "_blank", rel: "noopener" } }, logo, el("span", { text: t("built_by") })));
+    node.append(invitation, panel, el("div", { class: "f-wordmark", text: t("f_wordmark"), attrs: { "aria-hidden": "true" } }));
   }
 
   /**

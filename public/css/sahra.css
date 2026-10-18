@@ -1130,3 +1130,49 @@ select:disabled { opacity: 0.55; cursor: default; }
 .jump { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 18px; }
 .jump a { text-decoration: none; }
 .s-card { scroll-margin-top: 88px; }
+
+/* Spacious shared footer: flat surfaces, inset navigation and a quiet wordmark. */
+.site-footer, .home .site-footer {
+  display: block; max-width: 1280px; margin: 80px auto 0; padding: 0 24px;
+  border: 0; font-size: 15px; container-type: inline-size;
+}
+.f-invitation { padding: 56px 24px 60px; text-align: center; border: 1px solid var(--line); border-radius: 32px; background: #101216; }
+.f-eyebrow { margin: 0 0 16px; color: var(--accent); font-size: 12px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; }
+.f-invitation h2 { color: var(--text); margin: 0; font-family: var(--font-head); font-size: clamp(32px, 4vw, 52px); font-weight: 500; letter-spacing: -.035em; line-height: 1.15; }
+.f-invitation-copy { max-width: 31rem; margin: 20px auto 0; font-size: 16px; line-height: 1.7; color: #a9adb6; }
+.f-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 12px 24px; margin-top: 28px; }
+.f-actions .btn { width: auto; margin: 0; min-height: 48px; padding-inline: 24px; }
+.site-footer .f-host-link { display: inline-flex; align-items: center; min-height: 48px; color: var(--text); text-decoration: underline; text-underline-offset: 5px; }
+.f-panel { margin-top: 20px; padding: 44px; border: 1px solid var(--line); border-radius: 28px; background: #15171c; font-size: 15px; }
+.f-panel .f-top { grid-template-columns: minmax(0, 2.3fr) repeat(3, minmax(0, 1fr)); gap: 40px; }
+.f-panel .f-brand { grid-column: auto; }
+.f-panel .brand { min-height: 44px; font-size: 24px; gap: 10px; }
+.f-panel .f-brand p { margin-top: 20px; max-width: 24rem; font-size: 14px; line-height: 1.75; }
+.f-panel .f-title { margin-bottom: 16px; font-size: 14px; }
+.site-footer .f-col a { min-height: 44px; font-size: 14px; line-height: 1.5; }
+.f-socials { display: flex; align-items: center; gap: 16px; margin-top: 16px; }
+.f-socials > a { display: inline-flex; align-items: center; min-height: 44px; font-size: 14px; }
+.f-panel .f-bottom { margin-top: 32px; padding-top: 20px; gap: 12px 24px; font-size: 14px; line-height: 1.6; }
+.f-policies { display: flex; flex-wrap: wrap; gap: 8px 24px; }
+.site-footer .f-policies a { display: inline-flex; align-items: center; min-height: 44px; text-decoration: underline; text-underline-offset: 4px; }
+.site-footer .f-credit { display: inline-flex; align-items: center; gap: 9px; min-height: 44px; margin-top: 8px; font-size: 14px; color: var(--text); }
+.f-credit img { border-radius: 5px; }
+.f-wordmark { overflow: hidden; margin: 20px 0 0; padding-bottom: 12px; color: #202329; text-align: center; font-family: var(--font-head); font-size: clamp(72px, 22vw, 280px); font-size: clamp(72px, 24cqi, 300px); font-weight: 700; line-height: 1.05; letter-spacing: -.075em; user-select: none; }
+[dir="rtl"] .f-wordmark { letter-spacing: 0; line-height: 1.35; }
+[dir="rtl"] .f-eyebrow { letter-spacing: 0; }
+@media (max-width: 899px) {
+  .f-panel { padding: 32px; }
+  .f-panel .f-top { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 28px 20px; }
+  .f-panel .f-brand { grid-column: 1 / -1; }
+}
+@media (max-width: 540px) {
+  .site-footer, .home .site-footer { margin-top: 48px; padding-inline: 16px; }
+  .f-invitation { padding: 40px 20px; border-radius: 24px; }
+  .f-eyebrow { font-size: 11px; }
+  .f-actions { flex-direction: column; gap: 8px; }
+  .f-panel { padding: 28px 24px 20px; border-radius: 24px; }
+  .f-panel .f-top { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px 20px; }
+  .f-panel .f-bottom { margin-top: 24px; }
+  .f-policies { gap: 8px 20px; }
+  .f-wordmark { margin-top: 16px; }
+}
