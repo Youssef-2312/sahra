@@ -1176,3 +1176,19 @@ select:disabled { opacity: 0.55; cursor: default; }
   .f-policies { gap: 8px 20px; }
   .f-wordmark { margin-top: 16px; }
 }
+
+/* Footer refinement: smaller wordmark tucked into the panel; party photo backdrop. */
+.f-invitation { position: relative; isolation: isolate; overflow: hidden; }
+.f-photos { position: absolute; inset: 0; z-index: -1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); pointer-events: none; }
+.f-photos img { width: 100%; height: 100%; min-height: 0; object-fit: cover; filter: brightness(.7); }
+.f-photos::after { content: ""; position: absolute; inset: 0; background: rgba(12, 13, 16, .64); }
+.f-invitation .f-eyebrow { color: #c1ccff; }
+.f-invitation-copy { color: #d8dbe4; }
+.f-wordmark { position: relative; z-index: 2; margin-top: -46px; padding-bottom: 8px; font-size: clamp(44px, 10cqi, 110px); line-height: 1.1; pointer-events: none; }
+.f-panel { position: relative; z-index: 1; padding-bottom: 64px; }
+[dir="rtl"] .f-wordmark { margin-top: -52px; line-height: 1.35; }
+@media (max-width: 540px) {
+  .f-panel { padding-bottom: 40px; }
+  .f-wordmark { margin-top: -24px; padding-bottom: 4px; }
+  [dir="rtl"] .f-wordmark { margin-top: -28px; }
+}

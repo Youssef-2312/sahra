@@ -377,6 +377,9 @@ var Sahra = (function () {
         el("ul", null, links.map(function (l) { return el("li", null, link(l[0], l[1], l[2])); })));
     };
     var invitation = el("section", { class: "f-invitation", attrs: { "aria-labelledby": "footer-invitation" } },
+      el("div", { class: "f-photos", attrs: { "aria-hidden": "true" } }, [18, 20, 22].map(function (n) {
+        return el("img", { attrs: { src: "/img/hero/hero-" + n + ".jpg", alt: "", loading: "lazy", decoding: "async" } });
+      })),
       el("p", { class: "f-eyebrow", text: t("f_kicker") }),
       el("h2", { attrs: { id: "footer-invitation" }, text: t("f_invitation") }),
       el("p", { class: "f-invitation-copy", text: t("f_invitation_copy") }),

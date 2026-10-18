@@ -971,3 +971,13 @@ horizontal overflow, JavaScript errors or broken footer images. Language
 switching rebuilds a single footer with translated copy. Screenshot capture
 hides the sticky header via CSSOM solely to show the complete footer clearly.
 TypeScript and all 544 Vitest tests pass. No production or staging deployment.
+
+Footer follow-up (18 October 2026): reduced the decorative wordmark to a 110px
+maximum (44px on a 390px phone) and overlapped it with the panel's lower edge,
+rather than giving it a separate oversized section. Added three existing local
+party photos behind the closing invitation, with a flat dark overlay and
+brighter text for readability. Images are decorative, lazy-loaded and hidden
+from assistive technology. No new assets, gradients or external requests.
+Repeated the 30 bilingual layout checks, including successful loading of all
+three backdrop images, a wordmark at most 110px, positive panel overlap, zero
+overflow/errors and 44px link targets. Typecheck and all 544 tests pass.
