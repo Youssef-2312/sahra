@@ -999,3 +999,41 @@ and its faded background logo entirely, including unused styles and translations
 The footer now ends after the language/copyright/Nova row. The compact brand,
 navigation and photo invitation stay. Typecheck, 544 tests and 30 bilingual
 browser layouts pass; no deployment.
+
+### Selective Cars design reference (18 October 2026)
+
+Removed the homepage's “Hosting a party?” photo banner and the separate host
+preparation block. The guest journey, preparation tips, FAQs, organiser sign-in
+and hosting contact destinations remain available.
+
+Inspected https://selective-cars.vercel.app/ in a browser. Adapted its Archivo
+typography, pill navigation, rounded panels, card grid, generous section spacing
+and restrained motion to Sahra. The existing dark palette, blue accent, English
+and Arabic wording and party collage remain. No car branding, content or images
+were copied. The shared navigation now includes Find my tickets. Public headers
+use a compact floating panel with pill links; existing dashboard/sidebar layouts
+retain their own placement. Shared cards have consistent rounded corners.
+
+The homepage now has a framed 1/2/3-column party grid, individual fact/step cards,
+boxed preparation tips and FAQ rows, and a larger asymmetric photo grid. Scroll
+reveals use IntersectionObserver and the Web Animations API without hiding
+content before JavaScript or scrolling. Removed DOM nodes are unobserved after
+rerenders and filters; the effects run once per node. Reduced-motion preferences
+skip these reveals and the additional hover movement. Admission, authentication,
+pricing, requests and email behavior are unchanged. No deploy or migration.
+
+Archivo is a 34,928-byte Latin variable WOFF2 (400–700), served locally under the
+existing CSP. IBM Plex Sans Arabic remains the Arabic fallback. The Google Fonts
+source and SIL OFL license are recorded in public/fonts/LICENSES.txt and
+ARCHIVO-OFL.txt; no browser requests to a font CDN are introduced.
+
+Validation: TypeScript and all 544 Vitest tests pass. Six new complete homepage
+flows cover English/Arabic at 390, 768 and 1440 px, using eight explicitly synthetic
+parties only in browser fixtures. Verified 1/2/3 grid columns, removed host blocks,
+search/clear, FAQ expansion, language switching and normal/reduced motion. These
+fixtures do not alter real parties. Further local browser suites pass: 30 shared
+page layouts, 66 guest layouts/six guest flows, six contact layouts, 12 group-ticket
+flows and 18 platform role/language/width combinations. No overflow or unexpected
+JavaScript errors. Contact controls remain 52px high, with Send button insets of
+21px on phone/tablet and 29px on desktop. FormSubmit is stubbed; no real email.
+Screenshots outside the repository show the homepage, hero and sample party grid.

@@ -288,7 +288,7 @@ var Sahra = (function () {
     var sw = el("button", { class: "lang-switch", attrs: { type: "button" } });
     var foot = el("footer", { class: "site-footer" });
     var publicNav = el("nav", { class: "public-nav" });
-    var navItems = [["tab_home", "/"], ["about", "/about.html"], ["contact", "/contact.html"]];
+    var navItems = [["tab_home", "/"], ["find_tickets", "/find"], ["about", "/about.html"], ["contact", "/contact.html"]];
     function label() {
       if (me) showName(me.staff ? me.staff.name : me.name); else account.textContent = t("sign_in");
       sw.textContent = t("lang_other");
@@ -318,6 +318,7 @@ var Sahra = (function () {
     // The door scanner shows only the camera and the result (brainstorm idea 12): no footer there.
     if (!opts || opts.footer !== false) document.body.appendChild(foot);
     if (renderFn) renderFn();
+    revealSections(document.querySelector("main"));
   }
 
   /**
@@ -337,6 +338,30 @@ var Sahra = (function () {
       if (who) { show({ name: who.name, href: "/platform" }); return; }
       if (p.status === 401) store.del(SESSION_KEY);
     }
+  }
+
+  // Progressive enhancement: content is never hidden while waiting for JS or scrolling.
+  var revealObserver = null;
+  var revealed = new WeakSet();
+  var revealPending = new Set();
+  function revealSections(root) {
+    if (!root || typeof IntersectionObserver === "undefined" || typeof Element.prototype.animate !== "function"
+      || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    if (!revealObserver) revealObserver = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (!entry.isIntersecting) return;
+        revealObserver.unobserve(entry.target);
+        revealPending.delete(entry.target);
+        if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+        entry.target.animate([{ opacity: .35, transform: "translateY(18px)" }, { opacity: 1, transform: "translateY(0)" }],
+          { duration: 560, easing: "cubic-bezier(.2,.7,.2,1)" });
+      });
+    }, { threshold: .12 });
+    revealPending.forEach(function (node) { if (!node.isConnected) { revealObserver.unobserve(node); revealPending.delete(node); } });
+    root.querySelectorAll(".party-card, .why-tile, .step-card, .home-story-copy, .home-photos, .home-guide-head, .home-guide-list li, .faq details, .ab-card, .ab-section").forEach(function (node) {
+      if (revealed.has(node)) return;
+      revealed.add(node); revealPending.add(node); revealObserver.observe(node);
+    });
   }
 
   /** The top bar gets a shadow once the page scrolls (it then floats over the content). */
@@ -494,5 +519,5 @@ var Sahra = (function () {
   }
 
   return { t: t, el: el, clear: clear, api: api, errorText: errorText, money: money, amount: amount, when: when, date: date, time: time, rel: rel,
-    lang: lang, boot: boot, store: store, SESSION_KEY: SESSION_KEY, token: token, title: title, problem: problem, signinView: signinView, copyButton: copyButton, fold: fold, matches: matches, findBox: findBox, confirm: confirmBox, notify: notify, ask: ask, contactCard: contactCard, ref: function (id) { return id ? "SAH-" + String(id).slice(0, 6) : ""; } };
+    lang: lang, boot: boot, reveal: revealSections, store: store, SESSION_KEY: SESSION_KEY, token: token, title: title, problem: problem, signinView: signinView, copyButton: copyButton, fold: fold, matches: matches, findBox: findBox, confirm: confirmBox, notify: notify, ask: ask, contactCard: contactCard, ref: function (id) { return id ? "SAH-" + String(id).slice(0, 6) : ""; } };
 })();
