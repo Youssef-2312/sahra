@@ -1456,3 +1456,23 @@ Object.assign(SahraText.ar, {
   s_individual_tickets: "تذكرة برمز QR منفصل لكل شخص",
   s_individual_tickets_h: "يبقى سعر المجموعة كما هو. يحصل كل شخص على تذكرة خاصة ويمكنه الوصول بمفرده. حتى 10 أشخاص لكل حجز. تُرسل الروابط والرسائل إلى المشتري ليشاركها.",
 });
+
+// Dashboard workspace (kept in both languages, including the mobile layout).
+Object.assign(SahraText.en, {
+  d_workspace: "WORKSPACE", d_workspace_note: "Your night, at a glance",
+  d_summary: "Party overview", d_summary_hint: "Live figures from your guest list",
+  d_type_table: "Ticket overview", d_type_hint: "Places by ticket type. Pending places are held until reviewed.",
+  d_type_name: "Ticket type", d_type_approved: "Approved", d_type_pending: "Pending",
+  d_type_arrived: "Checked in", d_type_available: "Places left", d_type_share: "Share of held places",
+  d_type_unlimited: "No type limit", d_type_empty: "Ticket activity will appear here when guests request places.",
+  d_find_help: "Look up a guest by name, email or ticket code."
+});
+Object.assign(SahraText.ar, {
+  d_workspace: "مساحة العمل", d_workspace_note: "كل تفاصيل ليلتك في مكان واحد",
+  d_summary: "نظرة عامة على الحفلة", d_summary_hint: "أرقام مباشرة من قائمة الضيوف",
+  d_type_table: "نظرة عامة على التذاكر", d_type_hint: "الأماكن حسب نوع التذكرة. الأماكن المعلقة محجوزة حتى مراجعتها.",
+  d_type_name: "نوع التذكرة", d_type_approved: "المقبول", d_type_pending: "قيد المراجعة",
+  d_type_arrived: "تم الدخول", d_type_available: "الأماكن المتبقية", d_type_share: "نسبة الأماكن المحجوزة",
+  d_type_unlimited: "بلا حد للنوع", d_type_empty: "سيظهر نشاط التذاكر هنا عندما يطلب الضيوف أماكن.",
+  d_find_help: "ابحث عن ضيف بالاسم أو البريد الإلكتروني أو رمز التذكرة."
+});
