@@ -947,3 +947,55 @@ English and Arabic, with zero horizontal overflow and JavaScript errors. Checks
 include switching shared/individual modes, language draft restoration, two
 returned links, the EGP 301 group total, saving both checkbox states and copying
 a type with the option retained. No real signup or email was sent.
+
+### Reference-inspired shared footer (18 October 2026)
+
+Rebuilt the shared footer around the owner's reference: a centered closing
+invitation, a spacious rounded navigation panel and an oversized decorative
+wordmark below it. Uses Sahra's flat dark surfaces, blue accent and self-hosted
+fonts. English and Arabic have their own copy and wordmarks; Arabic columns and
+alignment mirror naturally. Existing destinations, WhatsApp/email fallbacks,
+Privacy, Terms and the linked Built by Nova credit are retained. The scanner's
+existing footer exclusion stays in place. No gradients, inline scripts/styles,
+external assets or dependencies were added to the application.
+
+The invitation links to the party list and hosting contact page. The panel
+adapts from four desktop columns to a full-width brand block and compact link
+columns on smaller screens. Container-relative wordmark sizing also fits the
+new dashboard sidebar. All footer links have a measured minimum 44px tap height.
+
+Local Playwright validation covers 30 layouts: home, contact, ticket, dashboard
+and settings at 390/768/1440 px in English and Arabic. Staff page checks include
+the sidebar-ready layout using signed-out fixtures. Every layout has zero
+horizontal overflow, JavaScript errors or broken footer images. Language
+switching rebuilds a single footer with translated copy. Screenshot capture
+hides the sticky header via CSSOM solely to show the complete footer clearly.
+TypeScript and all 544 Vitest tests pass. No production or staging deployment.
+
+Footer follow-up (18 October 2026): reduced the decorative wordmark to a 110px
+maximum (44px on a 390px phone) and overlapped it with the panel's lower edge,
+rather than giving it a separate oversized section. Added three existing local
+party photos behind the closing invitation, with a flat dark overlay and
+brighter text for readability. Images are decorative, lazy-loaded and hidden
+from assistive technology. No new assets, gradients or external requests.
+Repeated the 30 bilingual layout checks, including successful loading of all
+three backdrop images, a wordmark at most 110px, positive panel overlap, zero
+overflow/errors and 44px link targets. Typecheck and all 544 tests pass.
+
+Footer reference correction (18 October 2026): matched the owner's newer black
+footer reference rather than the earlier inset-card treatment. Compact brand
+and description, four desktop columns, outlined circular Instagram/WhatsApp
+buttons and contact icons; navigation links use 13px text and headings 12px.
+A slim divided bottom row puts a working language pill at the start, copyright
+in the center and Nova credit at the end. Privacy and Terms remain in navigation.
+A smaller wordmark overlaps a muted Sahra logo within the same black footer.
+The photo invitation above is retained. Contact values explicitly use LTR in
+Arabic. The footer language control uses the existing language-switch flow,
+including draft preservation. Rechecked 30 bilingual responsive layouts and
+44px tap targets; typecheck and all 544 tests pass. Not deployed.
+
+Footer simplification (18 October 2026): removed the decorative Sahra wordmark
+and its faded background logo entirely, including unused styles and translations.
+The footer now ends after the language/copyright/Nova row. The compact brand,
+navigation and photo invitation stay. Typecheck, 544 tests and 30 bilingual
+browser layouts pass; no deployment.

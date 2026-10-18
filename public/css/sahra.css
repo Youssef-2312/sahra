@@ -1130,3 +1130,95 @@ select:disabled { opacity: 0.55; cursor: default; }
 .jump { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 18px; }
 .jump a { text-decoration: none; }
 .s-card { scroll-margin-top: 88px; }
+
+/* Spacious shared footer: flat surfaces and grouped navigation. */
+.site-footer, .home .site-footer {
+  display: block; max-width: 1280px; margin: 80px auto 0; padding: 0 24px;
+  border: 0; font-size: 15px;
+}
+.f-invitation { padding: 56px 24px 60px; text-align: center; border: 1px solid var(--line); border-radius: 32px; background: #101216; }
+.f-eyebrow { margin: 0 0 16px; color: var(--accent); font-size: 12px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; }
+.f-invitation h2 { color: var(--text); margin: 0; font-family: var(--font-head); font-size: clamp(32px, 4vw, 52px); font-weight: 500; letter-spacing: -.035em; line-height: 1.15; }
+.f-invitation-copy { max-width: 31rem; margin: 20px auto 0; font-size: 16px; line-height: 1.7; color: #a9adb6; }
+.f-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 12px 24px; margin-top: 28px; }
+.f-actions .btn { width: auto; margin: 0; min-height: 48px; padding-inline: 24px; }
+.site-footer .f-host-link { display: inline-flex; align-items: center; min-height: 48px; color: var(--text); text-decoration: underline; text-underline-offset: 5px; }
+.f-panel { margin-top: 20px; padding: 44px; border: 1px solid var(--line); border-radius: 28px; background: #15171c; font-size: 15px; }
+.f-panel .f-top { grid-template-columns: minmax(0, 2.3fr) repeat(3, minmax(0, 1fr)); gap: 40px; }
+.f-panel .f-brand { grid-column: auto; }
+.f-panel .brand { min-height: 44px; font-size: 24px; gap: 10px; }
+.f-panel .f-brand p { margin-top: 20px; max-width: 24rem; font-size: 14px; line-height: 1.75; }
+.f-panel .f-title { margin-bottom: 16px; font-size: 14px; }
+.site-footer .f-col a { min-height: 44px; font-size: 14px; line-height: 1.5; }
+.f-socials { display: flex; align-items: center; gap: 16px; margin-top: 16px; }
+.f-socials > a { display: inline-flex; align-items: center; min-height: 44px; font-size: 14px; }
+.f-panel .f-bottom { margin-top: 32px; padding-top: 20px; gap: 12px 24px; font-size: 14px; line-height: 1.6; }
+.f-policies { display: flex; flex-wrap: wrap; gap: 8px 24px; }
+.site-footer .f-policies a { display: inline-flex; align-items: center; min-height: 44px; text-decoration: underline; text-underline-offset: 4px; }
+.site-footer .f-credit { display: inline-flex; align-items: center; gap: 9px; min-height: 44px; margin-top: 8px; font-size: 14px; color: var(--text); }
+.f-credit img { border-radius: 5px; }
+[dir="rtl"] .f-eyebrow { letter-spacing: 0; }
+@media (max-width: 899px) {
+  .f-panel { padding: 32px; }
+  .f-panel .f-top { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 28px 20px; }
+  .f-panel .f-brand { grid-column: 1 / -1; }
+}
+@media (max-width: 540px) {
+  .site-footer, .home .site-footer { margin-top: 48px; padding-inline: 16px; }
+  .f-invitation { padding: 40px 20px; border-radius: 24px; }
+  .f-eyebrow { font-size: 11px; }
+  .f-actions { flex-direction: column; gap: 8px; }
+  .f-panel { padding: 28px 24px 20px; border-radius: 24px; }
+  .f-panel .f-top { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px 20px; }
+  .f-panel .f-bottom { margin-top: 24px; }
+  .f-policies { gap: 8px 20px; }
+}
+
+/* Party photo backdrop for the footer invitation. */
+.f-invitation { position: relative; isolation: isolate; overflow: hidden; }
+.f-photos { position: absolute; inset: 0; z-index: -1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); pointer-events: none; }
+.f-photos img { width: 100%; height: 100%; min-height: 0; object-fit: cover; filter: brightness(.7); }
+.f-photos::after { content: ""; position: absolute; inset: 0; background: rgba(12, 13, 16, .64); }
+.f-invitation .f-eyebrow { color: #c1ccff; }
+.f-invitation-copy { color: #d8dbe4; }
+.f-panel { position: relative; z-index: 1; padding-bottom: 64px; }
+@media (max-width: 540px) {
+  .f-panel { padding-bottom: 40px; }
+}
+
+/* Owner's Selective Cars reference: one black footer, smaller type and circular socials. */
+.f-panel { background: #050505; border: 0; border-radius: 28px 28px 0 0; padding: 52px 48px 24px; overflow: hidden; }
+.f-panel .f-top { grid-template-columns: minmax(0, 2.2fr) minmax(0, .85fr) minmax(0, .95fr) minmax(0, 1.3fr); gap: 48px; }
+.f-panel .brand { font-size: 18px; gap: 9px; }
+.f-panel .brand img { width: 28px; height: 28px; }
+.f-panel .f-brand p { max-width: 22rem; margin-top: 20px; font-size: 13px; line-height: 1.8; }
+.f-panel .f-title { margin-bottom: 12px; color: #999da7; font-size: 12px; font-weight: 600; }
+.site-footer .f-panel .f-col a { color: #d8dbe4; font-size: 13px; min-height: 44px; }
+.site-footer .f-panel .f-col a:hover { color: #fff; text-decoration: underline; text-underline-offset: 4px; }
+.f-socials { gap: 8px; margin-top: 24px; }
+.site-footer .f-socials .icon-link { width: 44px; height: 44px; padding: 12px; border: 1px solid #303136; border-radius: 50%; color: #f3f2ef; }
+.f-socials svg { width: 18px; height: 18px; flex: none; }
+.f-panel .f-bottom { display: grid; grid-template-columns: 1fr 1.5fr 1fr; margin-top: 44px; padding-top: 20px; gap: 20px; align-items: center; border-top: 1px solid #232427; font-size: 12px; }
+.f-language { justify-self: start; min-height: 44px; padding: 8px 16px; border: 1px solid #303136; border-radius: 999px; background: transparent; color: #f3f2ef; font: 600 12px var(--font-body); cursor: pointer; }
+.f-language:hover { border-color: #999da7; }
+.f-copyright { text-align: center; line-height: 1.7; color: #999da7; }
+.site-footer .f-credit { justify-self: end; margin: 0; font-size: 12px; color: #b3b7c0; }
+.f-credit img { width: 20px; height: 20px; }
+@media (max-width: 899px) {
+  .f-panel { padding: 36px 32px 24px; }
+  .f-panel .f-top { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 28px 24px; }
+  .f-panel .f-brand { grid-column: 1 / -1; }
+  .f-panel .f-bottom { grid-template-columns: 1fr 1fr; }
+  .f-copyright { grid-row: 2; grid-column: 1 / -1; }
+}
+@media (max-width: 540px) {
+  .f-panel { padding: 28px 24px 24px; border-radius: 24px 24px 0 0; }
+  .f-panel .f-top { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px 20px; }
+  .f-panel .f-bottom { margin-top: 32px; gap: 16px 8px; }
+  .f-panel .f-brand p { font-size: 13px; }
+  .f-language { padding-inline: 12px; font-size: 11px; }
+  .site-footer .f-credit { font-size: 11px; }
+}
+
+.f-contact-link { gap: 9px; max-width: 100%; }
+.f-contact-link svg { width: 14px; height: 14px; flex: none; opacity: .65; }
