@@ -159,3 +159,39 @@ html[lang="ar"] .dashboard-page .dash-head h1 { letter-spacing: 0; }
   .dashboard-page .workspace-content .staff-head .dash-actions { flex-wrap: wrap; }
   .dashboard-page .workspace-content .staff-head .btn { max-width: 100%; white-space: normal; }
 }
+
+/* Repeated cards read across each row: 1–2, then 3–4, in document order. */
+.dashboard-page .workspace-content :is(.o-list, .reqs, .g-list:not(.s-health-grid)) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-auto-flow: row;
+  gap: 16px;
+  max-width: none;
+}
+.dashboard-page .workspace-content :is(.o-list > .o-row, .reqs > .req, .g-list > .g-row) {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.dashboard-page .workspace-content .o-row { display: flex; flex-direction: column; }
+.dashboard-page .workspace-content .o-row > .g-actions { margin-top: auto; padding-top: 16px; }
+.dashboard-page .workspace-content .s-card .g-list > .g-row {
+  padding: 16px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: var(--surface);
+}
+@media (min-width: 1100px) {
+  .dashboard-page .workspace-content :is(.o-list, .reqs, .g-list:not(.s-health-grid)) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  /* Leave enough room for two guest cards, with helper forms below the list. */
+  .dashboard-page [data-workspace-page="guests"] > .g-cols { grid-template-columns: minmax(0, 1fr); }
+  .dashboard-page [data-workspace-page="guests"] > .g-cols > .g-side {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 20px;
+    align-items: start;
+  }
+  .dashboard-page [data-workspace-page="guests"] > .g-cols > .g-side > .card { margin: 0; }
+}
