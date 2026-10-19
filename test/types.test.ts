@@ -4,6 +4,7 @@
 import { env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { newId } from "../src/lib/crypto";
+import { clearPartyListCache } from "../src/routes/guests";
 import { api, guestParty, harness, logEntry, openParty, scan, seedDoor, seedOwner, seedSession, signup, viewTicket, type Harness } from "./helpers";
 
 let logs: string[] = [];
@@ -453,5 +454,97 @@ describe("roles", () => {
     const admin = await seedOwner(party, undefined, "admin");
     const as = await seedSession(party, admin.id, "admin", h.clock);
     expect((await newType(h, as, { name: "Early" })).status).toBe(201);
+  });
+});
+
+describe("hidden ticket waves", () => {
+  it("keeps Wave 2 hidden and rejects direct requests until 30 Wave 1 purchases are approved", async () => {
+    const h = await harness();
+    const { party, os } = await guestParty(h);
+    const early = (await newType(h, os, { name: "Wave 1", price: 200, quantity: 30 })).body.type!.id;
+    const next = (await newType(h, os, { name: "Wave 2", price: 250, wave_mode: "sales", wave_after_id: early, wave_after_sales: 30 })).body.type!.id;
+    const later = (await newType(h, os, { name: "Later", price: 300, wave_mode: "sales", wave_after_id: early, wave_after_sales: 30,
+      sales_opens_at: h.clock.now() + 3600000 })).body.type!.id;
+    await env.DB.prepare("UPDATE parties SET starts_at = ? WHERE id = ?").bind(h.clock.now() + 86400000, party).run();
+    clearPartyListCache();
+    const listing = await (await h.req("/api/guest/parties")).json() as { parties: {id: string; from_price: number; price_count: number}[] };
+    expect(listing.parties.find(p => p.id === party)).toMatchObject({ from_price: 200, price_count: 1 });
+    expect((await form(h, party)).types.map(t => t.id)).toEqual([early]);
+    expect((await typedSignup(h, party, next)).body.error).toBe("type_unavailable");
+    const ids: string[] = [];
+    for (let i = 0; i < 30; i++) {
+      const r = await typedSignup(h, party, early, { email: `wave${i}@example.com`, people: 1 });
+      expect(r.status).toBe(201); ids.push(r.body.ticket_id!);
+    }
+    expect((await form(h, party)).types.some(t => t.id === next)).toBe(false);
+    for (const chunk of [ids.slice(0, 20), ids.slice(20, 29)]) {
+      const approved = await h.req("/api/tickets/approve", api(os, { ids: chunk }));
+      expect(approved.status).toBe(200);
+      expect(Object.values((await approved.json() as {results: Record<string, string>}).results)).toEqual(chunk.map(() => "done"));
+    }
+    expect((await form(h, party)).types.some(t => t.id === next)).toBe(false);
+    await h.req("/api/tickets/approve", api(os, { ids: ids.slice(29) }));
+    expect((await form(h, party)).types.find(t => t.id === next)?.on_sale).toBe(true);
+    expect((await form(h, party)).types.some(t => t.id === later)).toBe(false);
+    h.clock.advance(3600000);
+    expect((await form(h, party)).types.find(t => t.id === later)?.on_sale).toBe(true);
+    expect((await typedSignup(h, party, next, { email: "next@example.com", people: 1 })).status).toBe(201);
+    expect((await ticket(ids[0]!))!.price).toBe(200);
+    const state = await logEntry("ticket_type", next, 1) as { state?: Record<string, unknown> };
+    expect(state.state).toMatchObject({ wave_mode: "sales", wave_after_id: early, wave_after_sales: 30 });
+  });
+
+  it("supports hidden manual and scheduled waves, including date boundaries and manual override", async () => {
+    const h = await harness();
+    const { party, os } = await guestParty(h);
+    const now = h.clock.now();
+    const manual = (await newType(h, os, { name: "Manual", wave_mode: "manual" })).body.type!.id;
+    const timed = (await newType(h, os, { name: "Timed", wave_mode: "scheduled", sales_opens_at: now + 1000, sales_closes_at: now + 2000 })).body.type!.id;
+    expect((await form(h, party)).types).toEqual([]);
+    expect((await typedSignup(h, party, null)).body.error).toBe("type_required");
+    expect((await typedSignup(h, party, manual)).body.error).toBe("type_unavailable");
+    expect((await editType(h, os, manual, { wave_mode: null })).status).toBe(200);
+    expect((await form(h, party)).types.map(t => t.id)).toEqual([manual]);
+    h.clock.advance(1000);
+    expect((await form(h, party)).types.find(t => t.id === timed)?.on_sale).toBe(true);
+    h.clock.advance(1000);
+    expect((await typedSignup(h, party, timed)).body.error).toBe("type_unavailable");
+  });
+
+  it("sell-out waits for approved places, not pending holds; groups count once for sales thresholds", async () => {
+    const h = await harness();
+    const { party, os } = await guestParty(h);
+    const duo = (await newType(h, os, { name: "Duo", price: 301, quantity: 2, min_people: 2, max_people: 2 })).body.type!.id;
+    const sold = (await newType(h, os, { name: "Sold", wave_mode: "sold_out", wave_after_id: duo })).body.type!.id;
+    const twoSales = (await newType(h, os, { name: "Two purchases", wave_mode: "sales", wave_after_id: duo, wave_after_sales: 2 })).body.type!.id;
+    const one = await typedSignup(h, party, duo, { people: 2 });
+    expect(one.status).toBe(201);
+    expect((await form(h, party)).types.map(t => t.id)).toEqual([duo]);
+    await release(h, os, one.body.ticket_id!);
+    const visible = (await form(h, party)).types;
+    expect(visible.find(t => t.id === sold)?.on_sale).toBe(true);
+    expect(visible.some(t => t.id === twoSales)).toBe(false);
+    // A later cancellation does not hide a wave that has already opened.
+    expect((await h.req(`/api/tickets/${one.body.ticket_id}/cancel`, api(os, { op: newId() }))).status).toBe(200);
+    expect((await form(h, party)).types.find(t => t.id === sold)?.on_sale).toBe(true);
+    // Archive the old type without losing its sales history or the new wave.
+    await editType(h, os, duo, { archived: true });
+    expect((await form(h, party)).types.find(t => t.id === sold)?.on_sale).toBe(true);
+  });
+
+  it("rejects missing dates, invalid thresholds, foreign sources, unlimited sell-out and cycles", async () => {
+    const h = await harness();
+    const a = await guestParty(h), b = await guestParty(h);
+    const source = (await newType(h, a.os, { name: "Source" })).body.type!.id;
+    const foreign = (await newType(h, b.os, { name: "Foreign", quantity: 2 })).body.type!.id;
+    for (const rule of [
+      { wave_mode: "scheduled" }, { wave_mode: "sales", wave_after_id: source },
+      { wave_mode: "sales", wave_after_id: foreign, wave_after_sales: 30 },
+      { wave_mode: "sold_out", wave_after_id: source },
+    ]) expect((await newType(h, a.os, { name: "Bad", ...rule })).body.error).toBe("invalid_wave");
+    expect((await newType(h, a.os, { name: "Bad", wave_mode: "sales", wave_after_sales: 0 })).status).toBe(400);
+    const next = (await newType(h, a.os, { name: "Next", wave_mode: "sales", wave_after_id: source, wave_after_sales: 1 })).body.type!.id;
+    expect((await editType(h, a.os, source, { wave_mode: "sales", wave_after_id: next, wave_after_sales: 1 })).body.error).toBe("invalid_wave");
+    expect((await editType(h, a.os, source, { wave_mode: "sales", wave_after_id: source, wave_after_sales: 1 })).body.error).toBe("invalid_wave");
   });
 });

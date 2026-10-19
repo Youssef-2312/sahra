@@ -1102,3 +1102,57 @@ JavaScript errors. Contact controls remain 52px high with button insets of 21px
 on phone/tablet and 29px on desktop; all submissions use a FormSubmit stub.
 Ticket-wave backend and editor changes are a separate release needing migration
 0029; the artwork/navigation release does not depend on it.
+
+### Hidden ticket waves and easier type editing (19 October 2026)
+
+Settings > Ticket types now has immediate, manual, scheduled, approved-purchase
+threshold and previous-type sell-out opening options. For example: give Wave 1
+30 places for single-person tickets, then configure Wave 2 to wait for Wave 1
+to sell out, or explicitly choose 30 approved purchases. Wave 2 is omitted from
+the public form and homepage price summary until its trigger and any additional
+opening date are satisfied. Guessing its ID cannot bypass the same condition
+inside the guest INSERT. Manual Open now asks for confirmation and replaces the
+opening rule; closing times, party request windows and capacity still apply.
+
+Thresholds count distinct approved bookings, grouping split QR tickets by their
+order ID. Pending requests never unlock a wave. Sell-out counts approved places
+against the source allocation, which matters for duo/group types. Historical
+approval timestamps remain after cancellation, so a later cancellation does not
+hide an unlocked wave again. A sales threshold does not itself close the source
+type; use its allocation, closing time or archive control for that. Rules can
+reference an existing type in the same party; self references, dependency cycles,
+missing scheduled dates and unlimited sell-out sources are rejected inside the
+mutation statement. Existing type behavior stays immediate by default.
+
+Type rows have clearer card grouping, a Change price shortcut and a live preview
+of the guest-facing name, price and description. Price help states that edits
+apply to new requests and existing tickets keep their original price. Copied
+names now respect the 60-character API limit. EN/AR labels, field-level error
+labels, RTL and phone action wrapping are included. Existing archive, per-person
+QR and one-time admission behavior is preserved.
+
+Migration: **0029_ticket_waves.sql**, main database only. Three nullable additive
+columns keep old recovery snapshots compatible. A partial history index covers
+only typed, previously approved tickets; synthetic untyped load-test tickets
+retain their measured write costs. Generic ledger snapshots and backup export
+include the new fields. No remote migration was applied. The owner must apply
+0029 on staging first and then production before this backend/editor release is
+merged or deployed. The preceding frontend release (PR #20) needs no migration.
+
+Validation: TypeScript and all 549 tests pass, including hidden-wave direct
+request refusal, exactly 29 versus 30 approved purchases, hidden homepage price
+counts, combined date/threshold rules, manual/scheduled opening boundaries,
+approved versus pending sell-out, group purchase counts, cancellation stability,
+source archiving, same-party enforcement and cycle rejection. Existing paid QR
+price preservation and one-use scanner regressions also pass. Local browser
+checks cover all editor modes, preview updates, save serialization, confirmed
+and cancelled manual opening, and 24 EN/AR layouts at 390/768/1440 px, with zero
+overflow or unexpected JavaScript errors. All API writes are synthetic fixtures.
+
+The independent frontend release is live through main merge
+1753f09ada9adf1e3212a61618b0bd2a0ee2b342. Workers Builds reports success. Eighteen
+read-only production layouts of Home, About and Contact pass in both languages
+at the same widths, with 0px overflow and zero unexpected JavaScript errors.
+The language label measures 13px and the search target 44 by 44px. The live ticket
+fan asset matches the local SHA-256. No real email, guest mutation, staging
+branch push or staging deployment was used.

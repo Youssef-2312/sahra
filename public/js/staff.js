@@ -176,7 +176,7 @@ var SahraStaff = (function () {
   }
   function sayBox() { return el("p", { class: "say", attrs: { role: "status", "aria-live": "polite" } }); }
 
-  var FIELD_LABELS = { name: "s_name", description: "s_description", venue_name: "s_venue", address: "s_address", map_url: "s_map",
+  var FIELD_LABELS = { wave_mode: "s_wave_rule", wave_after_id: "s_wave_source", wave_after_sales: "s_wave_threshold", name: "s_name", description: "s_description", venue_name: "s_venue", address: "s_address", map_url: "s_map",
     rules: "s_entry_rules", cancellation_policy: "s_cancellation", payment_instructions: "s_payment", capacity: "s_capacity",
     starts_at: "s_starts", ends_at: "s_ends", registration_closes_at: "s_closes",
     max_people_per_ticket: "s_people", review_time: "s_review_time", support_phone: "s_contact_phone", support_email: "s_contact_email" };

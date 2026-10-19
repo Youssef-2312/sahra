@@ -309,6 +309,12 @@
     var bits = [Sahra.money(x.price) + (!x.price ? "" : x.min_people > 1 && x.min_people === x.max_people ? " " + t("s_per_package", { n: x.min_people }) : " " + t("s_pp")), peopleLine(x),
       x.quantity !== null ? t("s_type_places", { held: x.held, of: x.quantity }) : t("s_type_held", { held: x.held })];
     var tags = [];
+    if (x.wave_mode && !x.archived) tags.push([x.on_sale ? "yes" : "maybe", t(x.on_sale ? "s_wave_live" : "s_wave_waiting")]);
+    if (x.wave_mode === "sales" || x.wave_mode === "sold_out") {
+      var source = (types || []).find(function (y) { return y.id === x.wave_after_id; });
+      bits.push(t(x.wave_mode === "sales" ? "s_wave_after_summary" : "s_wave_sold_summary", { name: source ? source.name : "", n: x.wave_after_sales, sold: source ? source.sales || 0 : 0 }));
+    }
+    if (x.sales_opens_at) bits.push(t("s_sale_from") + ": " + Sahra.when(x.sales_opens_at, tz));
     if (x.individual_tickets) tags.push(["", t("s_individual_tickets")]);
     if (x.staff_only) tags.push(["", t("s_staff_only")]);
     if (x.archived) tags.push(["no", t("s_archived")]);
@@ -321,16 +327,33 @@
     var copy = el("button", { class: "btn small-btn", text: t("s_type_copy"), attrs: { type: "button" } });
     copy.addEventListener("click", function () {
       editing = "new";
-      preset = { name: t("s_type_copy_of", { name: x.name }).slice(0, 80), price: x.price, quantity: x.quantity, min_people: x.min_people, max_people: x.max_people,
+      preset = { name: t("s_type_copy_of", { name: x.name }).slice(0, 60), price: x.price, quantity: x.quantity, min_people: x.min_people, max_people: x.max_people,
         sales_opens_at: x.sales_opens_at, sales_closes_at: x.sales_closes_at, entry_from: x.entry_from, staff_only: x.staff_only,
-        individual_tickets: x.individual_tickets, description: x.description, payment_instructions: x.payment_instructions };
+        wave_mode: x.wave_mode, wave_after_id: x.wave_after_id, wave_after_sales: x.wave_after_sales, individual_tickets: x.individual_tickets, description: x.description, payment_instructions: x.payment_instructions };
       rebuild("types"); focusEditor();
     });
-    return el("li", { class: x.archived ? "off" : null },
+    var open = null;
+    if (x.wave_mode && !x.archived && !x.on_sale) {
+      open = el("button", { class: "btn small-btn primary", text: t("s_wave_open"), attrs: { type: "button" } });
+      open.addEventListener("click", async function () {
+        if (!await Sahra.confirm(t("s_wave_open_confirm", { name: x.name }))) return;
+        open.disabled = true;
+        var r = await S.act("/api/tickets/types/" + encodeURIComponent(x.id), { wave_mode: null, wave_after_id: null, wave_after_sales: null, sales_opens_at: null });
+        open.disabled = false;
+        if (!r.ok) { S.say(notesBox, "no", S.why(r)); return; }
+        var g = await Sahra.api.get("/api/tickets/types");
+        if (g.ok) types = g.body.types;
+        rebuild("types", ["yes", t("s_saved")]);
+      });
+    }
+    var priceEdit = el("button", { class: "btn small-btn", text: t("s_price_edit"), attrs: { type: "button" } });
+    priceEdit.addEventListener("click", function () { editing = x.id; preset = null; rebuild("types"); focusEditor(); document.querySelector("#type-editor [name=price]").focus(); });
+    var notesBox = S.sayBox();
+    return el("li", { class: "s-ticket-card" + (x.archived ? " off" : "") },
       el("div", { class: "s-type-text" }, el("strong", { text: x.name, attrs: { dir: "auto" } }),
         el("span", { class: "muted small", text: bits.join(" · ") }),
         tags.length ? el("span", { class: "s-tags" }, tags.map(function (g) { return el("span", { class: "pill " + g[0], text: g[1] }); })) : null),
-      el("span", { class: "s-type-acts" }, copy, edit));
+      el("span", { class: "s-type-acts" }, open, priceEdit, copy, edit), notesBox);
   }
 
   function focusEditor() {
@@ -356,6 +379,20 @@
     var cancel = el("button", { class: "btn link", text: t("q_cancel"), attrs: { type: "button" } });
     cancel.addEventListener("click", function () { editing = null; rebuild("types"); });
     row.node.insertBefore(cancel, box);
+    var mode = S.select("wave_mode", [["", t("s_wave_now")], ["manual", t("s_wave_manual")], ["scheduled", t("s_wave_scheduled")], ["sales", t("s_wave_sales")], ["sold_out", t("s_wave_sold_out")]], x.wave_mode || "");
+    var source = S.select("wave_after_id", [["", t("s_wave_choose")]].concat((types || []).filter(function (y) { return y.id !== x.id; }).map(function (y) { return [y.id, y.name]; })), x.wave_after_id || "");
+    var sourceField = S.field(t("s_wave_source"), source);
+    var thresholdField = S.field(t("s_wave_threshold"), S.input("wave_after_sales", "number", { min: 1, max: 100000, value: x.wave_after_sales || 30 }), t("s_wave_count_h"));
+    var waveFields = el("div", { class: "s-wave-fields s-two" }, sourceField, thresholdField);
+    function showWaveFields() {
+      sourceField.hidden = !["sales", "sold_out"].includes(mode.value);
+      thresholdField.hidden = mode.value !== "sales";
+    }
+    mode.addEventListener("change", showWaveFields); showWaveFields();
+    var previewName = el("strong", { text: x.name || t("s_new_type") });
+    var previewPrice = el("span", { class: "s-ticket-price", text: Sahra.money(x.price) });
+    var previewDesc = el("p", { class: "muted", text: x.description || t("s_ticket_preview_h") });
+    var preview = el("div", { class: "s-ticket-preview" }, el("span", { class: "label-line", text: t("s_ticket_preview") }), previewName, previewPrice, previewDesc);
     var f = el("form", { class: "s-editor", attrs: { id: "type-editor", novalidate: true } },
       el("h3", { text: editing === "new" ? t("s_new_type") : t("s_edit_type", { name: x.name }) }),
       el("div", { class: "s-two" },
@@ -367,6 +404,7 @@
       el("div", { class: "s-two" },
         S.field(t("s_type_quantity"), S.input("quantity", "number", { min: 1, max: 100000, value: x.quantity == null ? "" : x.quantity, placeholder: t("s_no_limit") }), t("s_type_quantity_h")),
         S.field(t("s_type_sort"), S.input("sort", "number", { min: 0, max: 1000, value: x.sort || 0 }), t("s_type_sort_h"))),
+      S.field(t("s_wave_rule"), mode, t("s_wave_hidden_h")), waveFields,
       el("div", { class: "s-two" },
         S.field(t("s_sale_from"), S.input("sales_opens_at_local", "datetime-local", { value: S.local(x.sales_opens_at, tz) })),
         S.field(t("s_sale_until"), S.input("sales_closes_at_local", "datetime-local", { value: S.local(x.sales_closes_at, tz) }), t("s_sale_h"))),
@@ -377,11 +415,20 @@
         S.check("individual_tickets", t("s_individual_tickets"), x.individual_tickets, t("s_individual_tickets_h")),
         S.check("staff_only", t("s_staff_only"), x.staff_only, t("s_staff_only_h")),
         editing !== "new" ? S.check("archived", t("s_archive"), x.archived, t("s_archive_h")) : null),
-      row.node);
+      preview, row.node);
+    f.addEventListener("input", function () {
+      previewName.textContent = val(f, "name") || t("s_new_type");
+      previewPrice.textContent = Sahra.money(Number(f.elements.price.value || 0));
+      previewDesc.textContent = val(f, "description") || t("s_ticket_preview_h");
+    });
     f.addEventListener("submit", async function (e) {
       e.preventDefault();
       if (!val(f, "name")) { S.say(box, "no", t("s_name_needed")); return; }
-      var body = { name: val(f, "name"), price: Number(f.elements.price.value || 0), sort: Number(f.elements.sort.value || 0),
+      if ((["sales", "sold_out"].includes(mode.value) && !source.value) || (mode.value === "scheduled" && !f.elements.sales_opens_at_local.value)) {
+        S.say(box, "no", t("s_wave_invalid")); return;
+      }
+      var body = { wave_mode: mode.value || null, wave_after_id: ["sales", "sold_out"].includes(mode.value) ? source.value : null,
+        wave_after_sales: mode.value === "sales" ? num(f, "wave_after_sales") : null, name: val(f, "name"), price: Number(f.elements.price.value || 0), sort: Number(f.elements.sort.value || 0),
         quantity: num(f, "quantity"), min_people: num(f, "min_people"), max_people: num(f, "max_people"),
         individual_tickets: f.elements.individual_tickets.checked, staff_only: f.elements.staff_only.checked, description: textOrNull(f, "description"), payment_instructions: textOrNull(f, "payment_instructions"),
         sales_opens_at_local: localOrNull(f, "sales_opens_at_local"), sales_closes_at_local: localOrNull(f, "sales_closes_at_local"), entry_from_local: localOrNull(f, "entry_from_local") };
