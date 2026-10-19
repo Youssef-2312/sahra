@@ -28,9 +28,24 @@ export const typeHeld = (typeId: Sql) =>
 export const typeApproved = (typeId: Sql) =>
   sql`(SELECT COALESCE(SUM(h.people), 0) FROM tickets h WHERE h.type_id = ${typeId} AND h.status = 'approved')`;
 
+/** Approved purchases, not pending requests. Split QR tickets count as one purchase.
+ * Approval history is retained on cancellation, so a later refund does not hide a wave again. */
+export const typeSales = (id: Sql) => sql`(SELECT COUNT(DISTINCT COALESCE(w.order_id, w.id)) FROM tickets w
+  WHERE w.type_id = ${id} AND w.approved_at IS NOT NULL)`;
+const waveTriggered = (now: number) => sql`(tt.wave_mode IS NULL
+  OR (tt.wave_mode = 'scheduled' AND tt.sales_opens_at IS NOT NULL AND tt.sales_opens_at <= ${now})
+  OR (tt.wave_mode = 'sales' AND ${typeSales(sql`tt.wave_after_id`)} >= tt.wave_after_sales)
+  OR (tt.wave_mode = 'sold_out' AND EXISTS (SELECT 1 FROM ticket_types ws WHERE ws.id = tt.wave_after_id
+    AND ws.party_id = tt.party_id AND ws.quantity IS NOT NULL AND
+    (SELECT COALESCE(SUM(w.people), 0) FROM tickets w WHERE w.type_id = ws.id AND w.approved_at IS NOT NULL) >= ws.quantity)))`;
+
+/** A hidden wave must satisfy its trigger and any additional opening date. */
+export const waveReady = (now: number) => sql`(${waveTriggered(now)}
+  AND (tt.wave_mode IS NULL OR tt.sales_opens_at IS NULL OR tt.sales_opens_at <= ${now}))`;
+
 /** The type is on sale to guests at `now`: active, public, inside its sales window. `tt` is the type's alias. */
 export const onSale = (now: number) => sql`tt.archived_at IS NULL AND tt.staff_only = 0
-  AND (tt.sales_opens_at IS NULL OR tt.sales_opens_at <= ${now}) AND (tt.sales_closes_at IS NULL OR tt.sales_closes_at > ${now})`;
+  AND ${waveReady(now)} AND (tt.sales_opens_at IS NULL OR tt.sales_opens_at <= ${now}) AND (tt.sales_closes_at IS NULL OR tt.sales_closes_at > ${now})`;
 
 /** True when the party has public types (then every guest request must name one). */
 export const hasPublicTypes = (partyId: Sql) =>
@@ -61,7 +76,7 @@ export const ticketTotal = (t: string) => raw(`(COALESCE(${t}.price, 0) * CASE W
 
 export const TYPE_FIELDS = [
   "name", "description", "price", "quantity", "sales_opens_at", "sales_closes_at", "entry_from", "staff_only",
-  "payment_instructions", "sort", "min_people", "max_people", "individual_tickets",
+  "payment_instructions", "sort", "min_people", "max_people", "individual_tickets", "wave_mode", "wave_after_id", "wave_after_sales",
 ] as const;
 type TypeField = (typeof TYPE_FIELDS)[number];
 const TIMES = ["sales_opens_at", "sales_closes_at", "entry_from"] as const;
@@ -83,6 +98,9 @@ export interface TicketTypeRow {
   min_people: number | null;
   max_people: number | null;
   individual_tickets: number;
+  wave_mode: string | null;
+  wave_after_id: string | null;
+  wave_after_sales: number | null;
   archived_at: number | null;
   rev: number;
 }
@@ -121,6 +139,19 @@ export function parseType(b: Record<string, unknown>, timeZone: string | null, c
     const s = text(b.payment_instructions, 1000, true);
     if (s === undefined) return bad("payment_instructions");
     v.payment_instructions = s;
+  }
+  if ("wave_mode" in b) {
+    if (b.wave_mode !== null && (typeof b.wave_mode !== "string" || !["manual", "scheduled", "sales", "sold_out"].includes(b.wave_mode))) return bad("wave_mode");
+    v.wave_mode = b.wave_mode as string | null;
+  }
+  if ("wave_after_id" in b) {
+    if (b.wave_after_id !== null && !isTypeId(b.wave_after_id)) return bad("wave_after_id");
+    v.wave_after_id = b.wave_after_id as string | null;
+  }
+  if ("wave_after_sales" in b) {
+    const n = b.wave_after_sales;
+    if (n !== null && (typeof n !== "number" || !Number.isInteger(n) || n < 1 || n > MAX_TYPE_QUANTITY)) return bad("wave_after_sales");
+    v.wave_after_sales = n as number | null;
   }
   if ("price" in b) {
     const n = b.price;
@@ -177,16 +208,31 @@ export function parseType(b: Record<string, unknown>, timeZone: string | null, c
 
 export type TypeChange =
   | { status: "created" | "changed" | "already" }
-  | { status: "rejected"; reason: "not_allowed" | "not_found" | "too_many_types" | "sales_close_before_open" | "quantity_below_held" | "people_min_above_max" | "package_change_held"; held?: number };
+  | { status: "rejected"; reason: "invalid_wave" | "not_allowed" | "not_found" | "too_many_types" | "sales_close_before_open" | "quantity_below_held" | "people_min_above_max" | "package_change_held"; held?: number };
+
+/** A wave must reference a real type in the same party and may not form a dependency cycle. */
+function validWave(p: string, id: string, val: (f: TypeField, d: string | number | null) => Sql): Sql {
+  const mode = val("wave_mode", null), source = val("wave_after_id", null);
+  return sql`(${mode} IS NULL OR ${mode} = 'manual'
+    OR (${mode} = 'scheduled' AND ${val("sales_opens_at", null)} IS NOT NULL)
+    OR (${mode} IN ('sales', 'sold_out') AND EXISTS (SELECT 1 FROM ticket_types ws
+      WHERE ws.id = ${source} AND ws.party_id = ${p} AND ws.id != ${id}
+        AND (${mode} != 'sold_out' OR ws.quantity IS NOT NULL))
+      AND (${mode} != 'sales' OR ${val("wave_after_sales", null)} IS NOT NULL)
+      AND NOT EXISTS (WITH RECURSIVE deps(id) AS (SELECT ${source} UNION
+        SELECT d.wave_after_id FROM ticket_types d JOIN deps ON d.id = deps.id
+          WHERE d.wave_mode IN ('sales', 'sold_out')) SELECT 1 FROM deps WHERE id = ${id})))`;
+}
 
 export class TypeDb {
   constructor(readonly driver: SqlDriver) {}
 
   /** Owner/admin list: every type (archived too) with places held, approved and admitted. */
   async list(sess: SessionRef, now: number) {
-    const r = await this.driver.all<TicketTypeRow & { held: number; approved: number; admitted: number }>(sql`SELECT tt.id, tt.party_id,
+    const r = await this.driver.all<TicketTypeRow & { held: number; approved: number; admitted: number; on_sale: number; sales: number }>(sql`SELECT tt.id, tt.party_id,
         tt.name, tt.description, tt.price, tt.quantity, tt.sales_opens_at, tt.sales_closes_at, tt.entry_from, tt.staff_only,
-        tt.payment_instructions, tt.sort, tt.min_people, tt.max_people, tt.individual_tickets, tt.archived_at, tt.rev,
+        tt.payment_instructions, tt.sort, tt.min_people, tt.max_people, tt.individual_tickets, tt.wave_mode, tt.wave_after_id, tt.wave_after_sales, tt.archived_at, tt.rev,
+        (${onSale(now)}) AS on_sale, ${typeSales(sql`tt.id`)} AS sales,
         ${typeHeld(sql`tt.id`)} AS held, ${typeApproved(sql`tt.id`)} AS approved,
         (SELECT COALESCE(SUM(u.people), 0) FROM tickets u WHERE u.type_id = tt.id AND u.used_at IS NOT NULL) AS admitted
       FROM ticket_types tt WHERE tt.party_id = ${sess.partyId} AND ${sessionValid(sess, MANAGERS, now)}
@@ -202,7 +248,7 @@ export class TypeDb {
       min_people: number | null; max_people: number | null; individual_tickets: number;
     }>(sql`SELECT tt.id, tt.name, tt.description, tt.price, tt.quantity, ${typeHeld(sql`tt.id`)} AS held,
         tt.sales_opens_at, tt.sales_closes_at, tt.payment_instructions, (${onSale(now)}) AS on_sale, tt.min_people, tt.max_people, tt.individual_tickets
-      FROM ticket_types tt WHERE tt.party_id = ${partyId} AND tt.archived_at IS NULL AND tt.staff_only = 0
+      FROM ticket_types tt WHERE tt.party_id = ${partyId} AND tt.archived_at IS NULL AND tt.staff_only = 0 AND ${waveReady(now)}
       ORDER BY tt.sort, tt.created_at, tt.id`);
     return r.results;
   }
@@ -219,24 +265,26 @@ export class TypeDb {
     const val = (f: TypeField, d: string | number | null) => sql`${f in v ? v[f] ?? null : d}`;
     const windowOk = sql`(${val("sales_opens_at", null)} IS NULL OR ${val("sales_closes_at", null)} IS NULL
       OR ${val("sales_closes_at", null)} > ${val("sales_opens_at", null)})`;
+    const waveOk = validWave(p, id, val);
     const roomOk = sql`(SELECT COUNT(*) FROM ticket_types WHERE party_id = ${p} AND archived_at IS NULL) < ${MAX_ACTIVE_TYPES}`;
     const rangeOk = sql`(${val("min_people", null)} IS NULL OR ${val("max_people", null)} IS NULL OR ${val("min_people", null)} <= ${val("max_people", null)})`;
     const rs = await this.driver.batch([
       sql`INSERT INTO ticket_types (id, party_id, name, description, price, quantity, sales_opens_at, sales_closes_at, entry_from,
-          staff_only, payment_instructions, sort, min_people, max_people, individual_tickets, created_at, created_by, last_op, last_action)
+          staff_only, payment_instructions, sort, min_people, max_people, individual_tickets, wave_mode, wave_after_id, wave_after_sales, created_at, created_by, last_op, last_action)
         SELECT ${id}, ${p}, ${val("name", "")}, ${val("description", null)}, ${val("price", 0)}, ${val("quantity", null)},
           ${val("sales_opens_at", null)}, ${val("sales_closes_at", null)}, ${val("entry_from", null)}, ${val("staff_only", 0)},
-          ${val("payment_instructions", null)}, ${val("sort", 0)}, ${val("min_people", null)}, ${val("max_people", null)}, ${val("individual_tickets", 0)}, ${now}, ${actor}, ${op}, 'type_created'
-        WHERE ${ok} AND ${windowOk} AND ${roomOk} AND ${rangeOk} AND NOT EXISTS (SELECT 1 FROM ticket_types WHERE id = ${id})`,
+          ${val("payment_instructions", null)}, ${val("sort", 0)}, ${val("min_people", null)}, ${val("max_people", null)}, ${val("individual_tickets", 0)}, ${val("wave_mode", null)}, ${val("wave_after_id", null)}, ${val("wave_after_sales", null)}, ${now}, ${actor}, ${op}, 'type_created'
+        WHERE ${ok} AND ${windowOk} AND ${roomOk} AND ${rangeOk} AND ${waveOk} AND NOT EXISTS (SELECT 1 FROM ticket_types WHERE id = ${id})`,
       audit(now, actor, "type_created", "ticket_type", sql`SELECT party_id, id, rev FROM ticket_types WHERE id = ${id} AND last_op = ${op}`),
-      sql`SELECT ${ok} AS session_ok, ${windowOk} AS window_ok, ${roomOk} AS room_ok, ${rangeOk} AS range_ok,
+      sql`SELECT ${ok} AS session_ok, ${waveOk} AS wave_ok, ${windowOk} AS window_ok, ${roomOk} AS room_ok, ${rangeOk} AS range_ok,
           (SELECT party_id FROM ticket_types WHERE id = ${id}) AS existing_party`,
     ]);
     if (rs[0]!.meta.changes === 1) return { status: "created" };
-    const d = rs[2]!.results[0] as { session_ok: number; window_ok: number; room_ok: number; range_ok: number; existing_party: string | null };
+    const d = rs[2]!.results[0] as { session_ok: number; wave_ok: number; window_ok: number; room_ok: number; range_ok: number; existing_party: string | null };
     if (!d.session_ok) return { status: "rejected", reason: "not_allowed" };
     if (d.existing_party === p) return { status: "already" };
     if (d.existing_party !== null) return { status: "rejected", reason: "not_allowed" };
+    if (!d.wave_ok) return { status: "rejected", reason: "invalid_wave" };
     if (!d.window_ok) return { status: "rejected", reason: "sales_close_before_open" };
     if (!d.room_ok) return { status: "rejected", reason: "too_many_types" };
     if (!d.range_ok) return { status: "rejected", reason: "people_min_above_max" };
@@ -266,6 +314,7 @@ export class TypeDb {
     const differs = sql`(${join(diffs, " OR ")})`;
     const windowOk = sql`(${merged("sales_opens_at")} IS NULL OR ${merged("sales_closes_at")} IS NULL
       OR ${merged("sales_closes_at")} > ${merged("sales_opens_at")})`;
+    const waveOk = validWave(p, id, (f) => merged(f));
     const qtyOk = "quantity" in v && v.quantity != null ? sql`${v.quantity} >= ${typeHeld(sql`${id}`)}` : sql`1`;
     const rangeOk = sql`(${merged("min_people")} IS NULL OR ${merged("max_people")} IS NULL OR ${merged("min_people")} <= ${merged("max_people")})`;
     // A sold ticket's total follows its type's pricing (ticketTotal), so a type cannot switch
@@ -280,18 +329,19 @@ export class TypeDb {
     const action = archived === true ? "type_archived" : archived === false && fields.length === 0 ? "type_restored" : "type_changed";
     const rs = await this.driver.batch([
       sql`UPDATE ticket_types SET ${join(sets, ", ")}, rev = rev + 1, last_op = ${op}, last_action = ${action}
-        WHERE id = ${id} AND party_id = ${p} AND ${ok} AND ${differs} AND ${windowOk} AND ${qtyOk} AND ${roomOk} AND ${rangeOk} AND ${pkgOk}`,
+        WHERE id = ${id} AND party_id = ${p} AND ${ok} AND ${differs} AND ${windowOk} AND ${qtyOk} AND ${roomOk} AND ${rangeOk} AND ${pkgOk} AND ${waveOk}`,
       audit(now, actor, action, "ticket_type", sql`SELECT party_id, id, rev FROM ticket_types WHERE id = ${id} AND last_op = ${op}`,
         fields.join(",") || null),
-      sql`SELECT ${ok} AS session_ok, ${differs} AS differs, ${windowOk} AS window_ok, ${roomOk} AS room_ok, ${rangeOk} AS range_ok, ${pkgOk} AS pkg_ok,
+      sql`SELECT ${ok} AS session_ok, ${waveOk} AS wave_ok, ${differs} AS differs, ${windowOk} AS window_ok, ${roomOk} AS room_ok, ${rangeOk} AS range_ok, ${pkgOk} AS pkg_ok,
           ${typeHeld(sql`${id}`)} AS held
         FROM ticket_types WHERE id = ${id} AND party_id = ${p}`,
     ]);
     if (rs[0]!.meta.changes === 1) return { status: "changed" };
-    const d = rs[2]!.results[0] as undefined | { session_ok: number; differs: number; window_ok: number; room_ok: number; range_ok: number; pkg_ok: number; held: number };
+    const d = rs[2]!.results[0] as undefined | { session_ok: number; wave_ok: number; differs: number; window_ok: number; room_ok: number; range_ok: number; pkg_ok: number; held: number };
     if (!d) return { status: "rejected", reason: "not_found" };
     if (!d.session_ok) return { status: "rejected", reason: "not_allowed" };
     if (!d.differs) return { status: "already" };
+    if (!d.wave_ok) return { status: "rejected", reason: "invalid_wave" };
     if (!d.window_ok) return { status: "rejected", reason: "sales_close_before_open" };
     if (!d.room_ok) return { status: "rejected", reason: "too_many_types" };
     if ("quantity" in v && v.quantity != null && (v.quantity as number) < d.held) return { status: "rejected", reason: "quantity_below_held", held: d.held };

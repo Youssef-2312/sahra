@@ -117,7 +117,7 @@ ticketRoutes.get("/types", requireAuth(MANAGERS), async (c) => {
   const types = await new TypeDb(c.var.db.driver).list(sess, now);
   return json(c, 200, {
     currency: "EGP",
-    types: types.map((t) => ({ ...t, individual_tickets: !!t.individual_tickets, staff_only: !!t.staff_only, archived: t.archived_at !== null,
+    types: types.map((t) => ({ ...t, on_sale: !!t.on_sale, individual_tickets: !!t.individual_tickets, staff_only: !!t.staff_only, archived: t.archived_at !== null,
       places_left: t.quantity === null ? null : Math.max(0, t.quantity - t.held) })),
   });
 });
@@ -128,7 +128,7 @@ async function partyZone(c: Ctx, partyId: string) {
 
 function typeAnswer(c: Ctx, r: Awaited<ReturnType<TypeDb["create"]>>) {
   if (r.status !== "rejected") return null;
-  const code = r.reason === "not_found" ? 404 : r.reason === "sales_close_before_open" || r.reason === "people_min_above_max" ? 400 : 409;
+  const code = r.reason === "not_found" ? 404 : r.reason === "invalid_wave" || r.reason === "sales_close_before_open" || r.reason === "people_min_above_max" ? 400 : 409;
   return json(c, code, { error: r.reason, ...(r.held !== undefined ? { held: r.held } : {}) });
 }
 

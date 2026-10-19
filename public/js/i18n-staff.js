@@ -127,7 +127,7 @@ Object.assign(SahraText.en, {
   s_add_type: "Add ticket type",
   s_type_name: "Name",
   s_type_price: "Price per person (EGP)",
-  s_type_price_h: "0 for a free ticket.",
+  s_type_price_h: "0 for a free ticket. Price edits apply to new requests only; existing tickets keep their original price.",
   s_type_min: "People per ticket, at least",
   s_type_max: "People per ticket, at most",
   s_type_max_h: "1 and 1 for a single ticket, 2 and 6 for a group. Empty uses the party's setting.",
@@ -685,7 +685,7 @@ Object.assign(SahraText.ar, {
   s_add_type: "إضافة النوع",
   s_type_name: "الاسم",
   s_type_price: "السعر للشخص (ج.م.)",
-  s_type_price_h: "0 لتذكرة مجانية.",
+  s_type_price_h: "0 لتذكرة مجانية. تغيير السعر يسري على الطلبات الجديدة فقط وتحتفظ التذاكر الحالية بسعرها الأصلي.",
   s_type_min: "الأشخاص لكل تذكرة، على الأقل",
   s_type_max: "الأشخاص لكل تذكرة، على الأكثر",
   s_type_max_h: "1 و1 لتذكرة فردية، 2 و6 لمجموعة. الفراغ يستخدم إعداد الحفلة.",
@@ -1476,3 +1476,53 @@ Object.assign(SahraText.ar, {
   d_type_unlimited: "بلا حد للنوع", d_type_empty: "سيظهر نشاط التذاكر هنا عندما يطلب الضيوف أماكن.",
   d_find_help: "ابحث عن ضيف بالاسم أو البريد الإلكتروني أو رمز التذكرة."
 });
+
+Object.assign(SahraText.en, {
+  "s_wave_rule": "Open this ticket",
+  "s_wave_now": "Immediately",
+  "s_wave_manual": "Manually with Open now",
+  "s_wave_scheduled": "On a date and time",
+  "s_wave_sales": "After a number of sales",
+  "s_wave_sold_out": "After another type sells out",
+  "s_wave_source": "Wait for this ticket type",
+  "s_wave_choose": "Choose a ticket type",
+  "s_wave_threshold": "Approved purchases needed",
+  "s_wave_count_h": "One approved booking counts as one purchase, even with several QR tickets. Unpaid requests do not count. Later cancellations do not reset the count.",
+  "s_wave_hidden_h": "Future waves stay hidden from guests until their rule is met. Party request hours and available places still apply. Sell-out means all allocated places have been approved, not just requested.",
+  "s_wave_live": "Open",
+  "s_wave_waiting": "Hidden until ready",
+  "s_wave_after_summary": "After {n} approved purchases of {name} ({sold} so far)",
+  "s_wave_sold_summary": "After {name} sells out",
+  "s_wave_open": "Open now",
+  "s_wave_open_confirm": "Open {name} now and replace its opening rule? Closing time and party request settings still apply.",
+  "s_wave_invalid": "Choose a source ticket, or set an opening date for a scheduled wave. Sell-out needs a source with a places limit. Dependencies cannot loop.",
+  "s_price_edit": "Change price",
+  "s_ticket_preview": "Guest preview",
+  "s_ticket_preview_h": "Add a short description to help guests choose."
+});
+Object.assign(SahraText.ar, {
+  "s_wave_rule": "فتح هذه التذكرة",
+  "s_wave_now": "فورًا",
+  "s_wave_manual": "يدويًا بزر افتح الآن",
+  "s_wave_scheduled": "في تاريخ ووقت محددين",
+  "s_wave_sales": "بعد عدد من المبيعات",
+  "s_wave_sold_out": "بعد نفاد نوع آخر",
+  "s_wave_source": "انتظر نوع التذكرة هذا",
+  "s_wave_choose": "اختر نوع التذكرة",
+  "s_wave_threshold": "عدد عمليات الشراء المعتمدة",
+  "s_wave_count_h": "كل حجز معتمد يُحسب عملية شراء واحدة حتى مع عدة تذاكر QR. الطلبات غير المدفوعة لا تُحسب. الإلغاء لاحقًا لا يعيد العداد.",
+  "s_wave_hidden_h": "تظل الموجات القادمة مخفية عن الضيوف حتى يتحقق الشرط. تظل مواعيد طلبات الحفلة والأماكن المتاحة سارية. النفاد يعني اعتماد كل الأماكن المخصصة وليس مجرد طلبها.",
+  "s_wave_live": "مفتوح",
+  "s_wave_waiting": "مخفي حتى يحين فتحه",
+  "s_wave_after_summary": "بعد {n} عملية شراء معتمدة من {name} ({sold} حتى الآن)",
+  "s_wave_sold_summary": "بعد نفاد {name}",
+  "s_wave_open": "افتح الآن",
+  "s_wave_open_confirm": "هل تريد فتح {name} الآن واستبدال شرط فتحه؟ يظل موعد الإغلاق وإعدادات طلبات الحفلة ساريين.",
+  "s_wave_invalid": "اختر تذكرة سابقة أو حدد موعد فتح للموجة المجدولة. شرط النفاد يحتاج نوعًا له حد للأماكن. لا يمكن تكوين دائرة من الشروط.",
+  "s_price_edit": "تغيير السعر",
+  "s_ticket_preview": "معاينة للضيف",
+  "s_ticket_preview_h": "أضف وصفًا مختصرًا لمساعدة الضيوف على الاختيار."
+});
+
+SahraText.en.e_invalid_wave = SahraText.en.s_wave_invalid;
+SahraText.ar.e_invalid_wave = SahraText.ar.s_wave_invalid;

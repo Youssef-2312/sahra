@@ -18,7 +18,7 @@ import { audit, sessionValid, type SessionRef } from "../db/index";
 import { inList, join, sql, type Sql } from "../db/sql";
 import { isBase32 } from "../lib/crypto";
 import { outboxInsert, type OutboxRow } from "../outbox";
-import { hasPublicTypes, onSale, peopleOk, ticketTotal, typeApproved, typeHeld } from "./types";
+import { hasPublicTypes, onSale, peopleOk, ticketTotal, typeApproved, typeHeld, waveReady } from "./types";
 
 const MANAGERS = ["owner", "admin"] as const;
 
@@ -230,7 +230,7 @@ export class GuestDb {
       sql`SELECT p.id, p.name, p.starts_at, p.ends_at, p.time_zone, p.capacity, ${held(sql`p.id`)} AS held,
           p.registration_opens_at, p.registration_closes_at, p.support_phone, p.cancelled_at,
           (SELECT json_array(MIN(tt.price), COUNT(DISTINCT tt.price)) FROM ticket_types tt
-            WHERE tt.party_id = p.id AND tt.archived_at IS NULL AND tt.staff_only = 0) AS prices,
+            WHERE tt.party_id = p.id AND tt.archived_at IS NULL AND tt.staff_only = 0 AND ${waveReady(now)}) AS prices,
           ${flyerListJson(sql`p.id`)} AS flyers
         FROM parties p
         WHERE p.disabled_at IS NULL AND p.starts_at IS NOT NULL AND COALESCE(p.ends_at, p.starts_at + 43200000) > ${now}
