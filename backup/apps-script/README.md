@@ -54,7 +54,7 @@ while the site runs; a restore goes into new databases with
   switched on by `appsscript.json`; if it is missing, items go to the trash and
   the owner gets an email.
 - Email to the owner (from this account to itself, or `ALERT_EMAIL`), at most one
-  per problem per 6 hours: a backup could not start; failed 3 runs in a row
+  per calendar day across all problems in the script time zone: a backup could not start; failed 3 runs in a row
   (abandoned, the next hour starts a new one); a screenshot failed its check; no
   successful backup for 3 hours (in hourly mode) or 30 hours; the daily time
   budget is used up.
@@ -114,9 +114,53 @@ while the site runs; a restore goes into new databases with
 8. Production: repeat with a second script project, a separate Drive folder and
    a separate key, once staging has run for a few days.
 
-To stop backups: delete the triggers (Triggers page of the script) or remove
-the `BACKUP_KEY` secret from the Worker (every call then answers 503 and the
-script emails you).
+## Stop the annoying emails without stopping backups
+
+On Windows run `setup.bat`, option **16**, or double-click
+`backup-email-setup.bat`. Choose English or Arabic and then:
+
+1. **Mute backup alerts**: no custom email from `alert_`. Failures still appear
+   in Apps Script Executions and `LAST_ERROR`.
+2. **Daily alerts**: at most one email attempt per calendar day across all
+   problems, not one per problem. This is a limit on alert emails, not a daily
+   digest and not a change to backup frequency.
+
+Paste the exact editor URL for your **Sahra backup** Apps Script project.
+The Playwright helper opens installed Chrome or Edge using a separate profile
+under `%LOCALAPPDATA%\Sahra\backup-email-helper`, outside the repository.
+Sign in yourself and open `Code.gs`. It verifies Sahra backup markers, refuses
+Halloween-26 or unrecognised mail code, backs up the original file privately,
+and changes only `alert_`. Script Properties, backup keys, Drive folders,
+backup functions and triggers stay intact. It reads the edited code back and
+asks you to confirm Google's saved indicator. No Cloudflare deployment is
+needed because time triggers use the saved script.
+
+Google login and editor access cannot be verified from Codex's cloud browser.
+If Google rejects an automated browser or changes its editor, the helper gives
+you a small `alert-function-off.txt` or `alert-function-daily.txt` file to paste
+in a normal browser in place of only the old `alert_` function. It never claims
+an unverified edit succeeded. Clipboard contents are used for editor copy/paste;
+source and credentials are never printed. No test email is sent. Run it for
+**each obsolete Sahra backup project** that is sending mail, not just production.
+
+The earlier `GET /api/backup/schedule ... 404 ... error code: 1042` message is
+sent by Apps Script when its configured Worker URL cannot be reached. Closing
+a staging Worker or deleting its Git branch does **not** remove Google's time
+trigger. Check `BACKUP_URL` privately in that script's properties. Production is
+`https://sahra.bynova.workers.dev`; the corresponding `BACKUP_KEY` must belong to
+that same Worker. Do not point a staging script at production with its staging
+key. Muting mail does not repair a broken backup connection.
+
+If the email is Google's own **Summary of failures**, it is a separate sender.
+The helper opens this project's Triggers page after editing. Edit each backup
+trigger and choose **Failure notification settings > Notify me daily**, leaving
+its hourly cadence alone. Google trigger notification controls are not the
+custom `alert_` function and are not automatically changed by this helper.
+
+To stop backups entirely, delete only that Sahra backup project's `hourly` and
+`continueBackup` triggers. Removing the Worker's secret is not a way to stop
+email: it causes more failed requests. Never change Halloween-26 scripts.
+
 
 ## Limits to keep in mind
 

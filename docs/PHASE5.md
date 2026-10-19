@@ -1103,6 +1103,23 @@ on phone/tablet and 29px on desktop; all submissions use a FormSubmit stub.
 Ticket-wave backend and editor changes are a separate release needing migration
 0029; the artwork/navigation release does not depend on it.
 
+
+### Single ticket motion on About (19 October 2026)
+
+Corrected the artwork placement: the standalone ticket fan remains in the Home
+options guide, while About has one original paper-ticket render. Its pose follows
+scroll progress and mouse position with interpolated perspective rotation and
+translation, inspired by the owner's Keynote reference. Motion settles when
+still and stops offscreen; reduced motion keeps a static image. EN/AR captions,
+self-hosted artwork, CSP and the original photo homepage hero remain intact.
+
+Local browser checks cover 12 About combinations: EN/AR, 390/768/1440 px and
+normal/reduced motion. Scroll changes the pose only with normal motion; desktop
+pointer changes are checked, with 0px overflow and zero unexpected JavaScript
+errors. The decorative image has no usable QR credential. A local motion video
+and screenshots are saved outside the repository. TypeScript and the full 549
+Vitest suite pass. This correction needs no database migration.
+
 ### Hidden ticket waves and easier type editing (19 October 2026)
 
 Settings > Ticket types now has immediate, manual, scheduled, approved-purchase
@@ -1156,3 +1173,36 @@ at the same widths, with 0px overflow and zero unexpected JavaScript errors.
 The language label measures 13px and the search target 44 by 44px. The live ticket
 fan asset matches the local SHA-256. No real email, guest mutation, staging
 branch push or staging deployment was used.
+
+### Local backup email controls (19 October 2026)
+
+Added `setup.bat` option 16 and `backup-email-setup.bat`. On the owner's Windows
+PC the launcher installs pinned Playwright outside the checkout and opens the
+selected Sahra backup Apps Script project in installed Chrome/Edge. The owner
+signs in and selects Code.gs. Positive source/project checks precede an edit of
+only `alert_`, with a private original-file copy, exact editor read-back and an
+owner-confirmed Google save. Unrecognised scripts, other mail code and
+Halloween-26 are refused. If automated login/editor access fails, a local
+function-only replacement is provided for a normal browser. No backup runs,
+real test emails, trigger deletion, Script Property edits or Cloudflare changes.
+
+The source script defaults to one email attempt per Cairo calendar day across
+all problems; mute is the launcher's recommended choice. Mail failures are
+logged without crashing a backup. Backup frequency is unchanged. Google-issued
+failure summaries have a separate per-trigger daily notification setting;
+README and launcher explain how to change it without changing hourly backups.
+The installed Google script cannot be changed from this cloud environment.
+
+Read-only endpoint checks on 19 October found staging's backup schedule returning
+404/error 1042, matching the earlier email; production returns the expected
+401/not_signed without credentials. This identifies a plausible obsolete staging
+URL, not proof of the installed script's private configuration. Closing a Worker
+or branch does not delete Google's triggers. The helper must be run for each
+Sahra backup project still sending mail.
+
+Validation: 5 Node checks pass for mute, one shared daily limit across error kinds,
+Cairo midnight reset, mail-service failure handling, patch isolation and protected
+project/URL refusal. The Playwright editor fixture verifies real clipboard
+copy/paste, both modes, full source read-back, save shortcut and wrong-project
+refusal with every Google request intercepted. Real Google login/editor behavior
+and Windows batch execution were not available in this Linux cloud environment.
