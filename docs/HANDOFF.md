@@ -11,6 +11,14 @@ You are continuing work on **Sahra**, a ticket platform for private house partie
 - Work branch: `claude/p5-frontend`. Pull it and work only on it.
 - Stack: Cloudflare Workers Free, D1 (SQLite), Hono, TypeScript, and plain HTML/CSS/JS in `public/` (no framework, no build step for the frontend).
 
+## Current environment status (19 October 2026)
+
+The owner has deleted staging. Production is the only active environment.
+Do not require staging migrations, recreate staging, or push to its branch.
+The owner confirmed applying production migration 0029 on 19 October 2026.
+Ticket waves remain optional; do not configure them for AFTERDARK unless asked.
+Older staging instructions below are historical and do not apply to this release.
+
 ## IMPORTANT before any staging deploy (updated 9 October 2026)
 
 The code on `claude/p5-frontend` now reads columns added by migrations **0023,

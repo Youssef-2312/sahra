@@ -1152,9 +1152,11 @@ Migration: **0029_ticket_waves.sql**, main database only. Three nullable additiv
 columns keep old recovery snapshots compatible. A partial history index covers
 only typed, previously approved tickets; synthetic untyped load-test tickets
 retain their measured write costs. Generic ledger snapshots and backup export
-include the new fields. No remote migration was applied. The owner must apply
-0029 on staging first and then production before this backend/editor release is
-merged or deployed. The preceding frontend release (PR #20) needs no migration.
+include the new fields. The owner confirmed applying migration 0029 to
+production on 19 October 2026. Staging has been deleted; production is the only
+active environment. No remote migration was run by this agent. Waves remain
+optional and AFTERDARK ticket settings are unchanged. The preceding frontend
+release (PR #20) needs no migration.
 
 Validation: TypeScript and all 549 tests pass, including hidden-wave direct
 request refusal, exactly 29 versus 30 approved purchases, hidden homepage price
