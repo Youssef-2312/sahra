@@ -15,6 +15,7 @@
   var mine = [];          // [{ link, status, party_id, party_name, starts_at, time_zone }]
   var heroBox = document.getElementById("hero");
   var filter = "all";
+  var experienceChoice = 0;
   var partyFind = "";     // the party search (shown once there are several parties)     // the chips above the parties (this page only, not remembered)
   // Twenty-two distinct photos, with similar scenes spaced apart.
   var HERO = [1, 17, 8, 18, 14, 19, 3, 20, 10, 16, 22, 6, 5, 24, 13, 2, 15, 9, 4, 11, 12, 7];
@@ -189,7 +190,13 @@
       });
       head.appendChild(el("div", { class: "head-tools" }, keys.length > 1 ? chips : null, count));
       fill();
-      if (parties.length > 6) list.push(Sahra.findBox({ value: partyFind, placeholder: t("h_find_ph"), onChange: function (v) { partyFind = v; fill(); } }));
+      var search = Sahra.findBox({ value: partyFind, placeholder: t("h_find_ph"), onChange: function (v) { partyFind = v; fill(); } });
+      search.id = "party-search";
+      list.push(search);
+      if (new URLSearchParams(location.search).get("search") === "1") requestAnimationFrame(function () {
+        var input = document.querySelector("#party-search input");
+        if (input && !document.activeElement.matches("input,textarea,select")) input.focus();
+      });
       list.push(grid);
     }
     return list;
@@ -203,6 +210,42 @@
         return el("div", { class: "why-tile" }, el("strong", { text: t("h_fact" + n + "_t") }), el("span", { text: t("h_fact" + n + "_p") }));
       })),
       el("a", { class: "why-more", text: t("h_why_more"), attrs: { href: "/about" } }));
+  }
+
+  // An interactive guide to real ticket configurations, not an invented live event.
+  function ticketExperience() {
+    var buttons = [], panel = el("div", { class: "home-ticket-stage", attrs: { id: "ticket-experience-panel", role: "tabpanel", tabindex: "0" } });
+    var modes = ["solo", "individual", "shared"];
+    function draw() {
+      var mode = modes[experienceChoice];
+      buttons.forEach(function (button, i) { button.setAttribute("aria-selected", String(i === experienceChoice)); button.tabIndex = i === experienceChoice ? 0 : -1; });
+      panel.setAttribute("aria-labelledby", "ticket-choice-" + mode);
+      var tickets = el("div", { class: "home-ticket-stack", attrs: { "aria-hidden": "true" } },
+        el("img", { class: "home-ticket-fan", attrs: { src: "/img/sahra-ticket-fan.webp", alt: "", width: 1672, height: 941, loading: "lazy", decoding: "async" } }));
+      panel.replaceChildren(el("div", { class: "home-stage-label" }, el("span", { class: "label-line", text: t("h_x_preview") }),
+        el("span", { class: "pill", text: t("h_x_" + mode + "_tag") })), tickets,
+        el("div", { class: "home-stage-note" }, el("h3", { text: t("h_x_" + mode + "_title") }), el("p", { text: t("h_x_" + mode + "_p") })));
+      if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches && panel.animate) {
+        panel.animate([{ opacity: .65, transform: "translateY(6px)" }, { opacity: 1, transform: "none" }], { duration: 280, easing: "ease-out" });
+      }
+    }
+    var tabs = el("div", { class: "home-ticket-tabs", attrs: { role: "tablist", "aria-label": t("h_x_choose"), "aria-orientation": "vertical" } });
+    modes.forEach(function (mode, i) {
+      var button = el("button", { class: "home-ticket-tab", attrs: { type: "button", role: "tab", id: "ticket-choice-" + mode, "aria-controls": "ticket-experience-panel" } },
+        el("span", { class: "home-guide-number", text: "0" + (i + 1), attrs: { "aria-hidden": "true" } }),
+        el("span", null, el("strong", { text: t("h_x_" + mode + "_label") }), el("span", { text: t("h_x_" + mode + "_short") })));
+      button.addEventListener("click", function () { experienceChoice = i; draw(); });
+      button.addEventListener("keydown", function (e) {
+        var next = e.key === "ArrowDown" ? (i + 1) % 3 : e.key === "ArrowUp" ? (i + 2) % 3 : e.key === "Home" ? 0 : e.key === "End" ? 2 : null;
+        if (next === null) return; e.preventDefault(); experienceChoice = next; draw(); buttons[next].focus();
+      });
+      buttons.push(button); tabs.appendChild(button);
+    });
+    draw();
+    return el("section", { class: "home-experience" },
+      el("div", { class: "home-experience-copy" }, el("p", { class: "label-line", text: t("h_x_label") }),
+        el("h2", { text: t("h_x_title") }), el("p", { class: "lede", text: t("h_x_p") }), tabs,
+        el("a", { class: "why-more", attrs: { href: "#parties" }, text: t("h_x_action") })), panel);
   }
 
   // Existing owner-supplied photos are decorative, never used as party artwork.
@@ -277,6 +320,7 @@
     if (m) m.forEach(function (n) { app.appendChild(n); });
     app.appendChild(el("div", { class: "parties-section" }, partiesSection()));
     app.appendChild(why());
+    app.appendChild(ticketExperience());
     app.appendChild(story());
     app.appendChild(how());
     Sahra.reveal(app);

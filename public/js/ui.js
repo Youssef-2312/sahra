@@ -278,19 +278,26 @@ var Sahra = (function () {
     var me = (opts && opts.me) || null;
     applyLang();
     var brand = el("a", { class: "brand", attrs: { href: "/" } }, el("img", { attrs: { src: "/img/sahra-mark.svg", alt: "", width: 28, height: 28 } }), "Sahra");
-    var account = el("a", { class: "btn small-btn", attrs: { href: me ? (me.staff.role === "door" ? "/scan.html" : "/dashboard.html") : "/signin.html" } });
+    var checkingAccount = !me && ["party", "platform"].includes(store.get(SESSION_KEY));
+    var account = el("a", { class: "btn small-btn nav-account" + (checkingAccount ? " account-checking" : ""), attrs: { href: me ? (me.staff.role === "door" ? "/scan.html" : "/dashboard.html") : "/signin.html" } });
     // The signed-in person's name on the button; never a whole email address (owner), and the full name on hover.
     function showName(n) {
       n = String(n || "");
       account.textContent = n.indexOf("@") > 0 ? n.slice(0, n.indexOf("@")) : n;
       account.setAttribute("title", n);
     }
+    var search = el("a", { class: "nav-search", attrs: { href: "/?search=1#parties" } });
     var sw = el("button", { class: "lang-switch", attrs: { type: "button" } });
     var foot = el("footer", { class: "site-footer" });
     var publicNav = el("nav", { class: "public-nav" });
     var navItems = [["tab_home", "/"], ["find_tickets", "/find"], ["about", "/about.html"], ["contact", "/contact.html"]];
     function label() {
-      if (me) showName(me.staff ? me.staff.name : me.name); else account.textContent = t("sign_in");
+      if (me) showName(me.staff ? me.staff.name : me.name);
+      else if (checkingAccount && store.get(SESSION_KEY)) {
+        account.textContent = t("nav_account"); account.setAttribute("href", store.get(SESSION_KEY) === "platform" ? "/platform" : "/dashboard.html");
+      } else { account.textContent = t("sign_in"); account.setAttribute("href", "/signin.html"); }
+      search.setAttribute("aria-label", t("nav_search"));
+      search.setAttribute("title", t("nav_search"));
       sw.textContent = t("lang_other");
       sw.setAttribute("lang", lang() === "en" ? "ar" : "en");
       publicNav.replaceChildren();
@@ -311,8 +318,11 @@ var Sahra = (function () {
       restoreDrafts(draft);
     });
     label();
-    if (!me) signedIn(function (who) { me = who; showName(who.name); account.setAttribute("href", who.href); });
-    document.body.insertBefore(el("div", { class: "topbar-shell" }, el("header", { class: "topbar" }, brand, el("span", { class: "topbar-end" }, sw, account))), document.body.firstChild);
+    if (!me) signedIn(function (who) { me = who; showName(who.name); account.setAttribute("href", who.href); }).finally(function () {
+      if (!me) label();
+      account.classList.remove("account-checking");
+    });
+    document.body.insertBefore(el("div", { class: "topbar-shell" }, el("header", { class: "topbar" }, brand, el("span", { class: "topbar-end" }, search, sw, account))), document.body.firstChild);
     if (!opts || opts.footer !== false) document.querySelector(".topbar").appendChild(publicNav);
     motion();
     // The door scanner shows only the camera and the result (brainstorm idea 12): no footer there.
@@ -358,7 +368,7 @@ var Sahra = (function () {
       });
     }, { threshold: .12 });
     revealPending.forEach(function (node) { if (!node.isConnected) { revealObserver.unobserve(node); revealPending.delete(node); } });
-    root.querySelectorAll(".party-card, .why-tile, .step-card, .home-story-copy, .home-photos, .home-guide-head, .home-guide-list li, .faq details, .ab-card, .ab-section, .tile.stat, .dash .charts .card").forEach(function (node) {
+    root.querySelectorAll(".party-card, .why-tile, .step-card, .home-story-copy, .home-photos, .home-guide-head, .home-guide-list li, .faq details, .ab-card, .ab-section, .ab-ticket-render, .s-card, .msg-panel, .contact-form, .home-experience-copy, .home-ticket-stage, .tile.stat, .dash .charts .card").forEach(function (node) {
       if (revealed.has(node)) return;
       revealed.add(node); revealPending.add(node); revealObserver.observe(node);
     });

@@ -1067,3 +1067,38 @@ ratio, usable search width, preserved search through refresh, owner/admin menus,
 and normal/reduced motion without repeated refresh entrances. Existing group
 booking/settings checks pass all 12 flows. No real account, email, remote
 migration or deployment was used. Screenshots are synthetic local fixtures.
+
+### Ticket artwork, guest guide and shared motion (19 October 2026)
+
+Added an original compressed WebP fan of Sahra ticket concepts to About and a
+new interactive homepage guide. The three keyboard-accessible options explain
+single tickets, individual QR group bookings and shared group tickets, with
+availability qualified by the host's configuration. The ticket art contains no
+real party listings or usable admission credentials. The existing party grid
+stays separate. The homepage hero artwork swap is a browser-route experiment
+only and is not part of the source or release. Removed language support as a
+headline selling point from the homepage facts and About facts; EN/AR support
+and RTL remain in place.
+
+The public header has a 44px search target that opens and focuses the party
+filter, now available even with fewer than seven parties. The language label is
+13px with its existing 44px tap area. A known staff session reserves the account
+button while revalidating instead of flashing Sign in. No name, token or CSRF
+value is cached. A network failure keeps a generic Account destination; a 401
+clears the session hint and restores Sign in.
+
+Shared motion adds short page transitions where supported, navigation entrances,
+button feedback, dialog/detail entrances, more section reveals, and one gentle
+4.5-second ticket-art movement. Reduced-motion preferences disable these
+movements. No scanner verdict or admission logic changes.
+
+Local checks cover six complete homepage flows and twelve additional guide
+layouts with keyboard controls, preserved selection across language switches,
+separate party listings, and normal/reduced motion. Header tests delay the
+account response while navigating About and Contact in both languages and at
+390/768/1440 px. Wave-editor, About and header checks cover 24 layouts, plus two
+local-only hero screenshots. These checks report zero horizontal overflow and
+JavaScript errors. Contact controls remain 52px high with button insets of 21px
+on phone/tablet and 29px on desktop; all submissions use a FormSubmit stub.
+Ticket-wave backend and editor changes are a separate release needing migration
+0029; the artwork/navigation release does not depend on it.
