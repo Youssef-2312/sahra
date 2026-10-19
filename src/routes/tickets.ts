@@ -26,6 +26,7 @@ import { base32, isBase32, isUuid, newId, sha256, sha256hex } from "../lib/crypt
 import { chargeStaff } from "../limits";
 import type { OutboxRow } from "../outbox";
 import { PartyDb } from "../party/db";
+import { BookingDb, summarize } from "../guests/bookings";
 import { getIdPhoto, getScreenshot, getAnswerPhoto } from "../storage";
 import { guestEmail } from "./guests";
 
@@ -67,12 +68,18 @@ ticketRoutes.get("/", requireAuth(MANAGERS), async (c) => {
   const after = c.req.query("after");
   const m = after === undefined ? null : /^([0-9]{1,15})\.([0-9A-Z]{16})$/.exec(after);
   const payment = c.req.query("payment");
-  if (!STATUSES.has(status) || !limit || (after !== undefined && !m) || (payment !== undefined && payment !== "cash")) return json(c, 400, { error: "invalid_request" });
+  const filters = { q: (c.req.query("q") || "").trim(), typeId: c.req.query("type"), delivery: c.req.query("delivery"), entry: c.req.query("entry"), booking: c.req.query("booking") };
+  if ((!STATUSES.has(status) && status !== "all") || !limit || (after !== undefined && !m) || (payment !== undefined && payment !== "cash")
+    || filters.q.length > 80 || (filters.typeId !== undefined && !isTypeId(filters.typeId))
+    || (filters.delivery !== undefined && !["released","unreleased","emailed"].includes(filters.delivery))
+    || (filters.entry !== undefined && !["used","unused"].includes(filters.entry))
+    || (filters.booking !== undefined && !["group","single","partial"].includes(filters.booking))) return json(c, 400, { error: "invalid_request" });
   const { sess, now } = sessOf(c);
-  const rows = await new GuestDb(c.var.db.driver).list(sess, status, m ? { at: Number(m[1]), id: m[2]! } : null, limit, now, payment === "cash");
+  const rows = await new GuestDb(c.var.db.driver).list(sess, status, m ? { at: Number(m[1]), id: m[2]! } : null, limit, now, payment === "cash", filters);
   const last = rows.at(-1);
+  const summaries = await new BookingDb(c.var.db.driver).summaries(sess, rows.map(r => String(r.id)), now);
   return json(c, 200, {
-    tickets: rows.map((r) => ({ ...r, answers: r.answers ? JSON.parse(String(r.answers)) : {}, has_screenshot: !!r.has_screenshot, has_id_photo: !!r.has_id_photo })),
+    tickets: rows.map((r) => ({ ...r, booking: summaries.get(String(r.order_id || r.id)), answers: r.answers ? JSON.parse(String(r.answers)) : {}, has_screenshot: !!r.has_screenshot, has_id_photo: !!r.has_id_photo })),
     next: rows.length === limit && last ? `${last.created_at}.${last.id}` : null,
   });
 });
@@ -274,7 +281,49 @@ ticketRoutes.get("/search", requireAuth(MANAGERS), async (c) => {
   if (q.length < 2 || q.length > 80) return json(c, 400, { error: "invalid_request", q: "2..80 characters" });
   const { sess, now } = sessOf(c);
   const rows = await new GuestDb(c.var.db.driver).search(sess, q, now);
-  return json(c, 200, { tickets: rows.map(({ link_version: _v, ...r }) => r) });
+  const summaries = await new BookingDb(c.var.db.driver).summaries(sess, rows.map(r => String(r.id)), now);
+  return json(c, 200, { tickets: rows.map(({ link_version: _v, ...r }) => ({ ...r, booking: summaries.get(String(r.order_id || r.id)) })) });
+});
+
+/** Complete booking, including members outside the current status/search/page. */
+ticketRoutes.get("/:id/booking", requireAuth(MANAGERS), async (c) => {
+  const id = c.req.param("id");
+  if (!isTicketId(id)) return json(c, 400, { error: "invalid_request" });
+  const { sess, now } = sessOf(c);
+  const members = await new BookingDb(c.var.db.driver).members(sess, id, now);
+  if (!members.length) return json(c, 404, { error: "not_found" });
+  if (members.length > 10) return json(c, 409, { error: "booking_too_large" });
+  return json(c, 200, { booking: summarize(members[0]!.order_id || id, members), members });
+});
+
+/** Explicit whole-booking action. A single-ticket cancel never expands scope. */
+ticketRoutes.post("/:id/cancel-booking", requireAuth(MANAGERS), async (c) => {
+  const id = c.req.param("id"), b = await readJson(c);
+  if (!isTicketId(id) || !b || !isUuid(b.op) || !Array.isArray(b.expected) || !b.expected.length || b.expected.length > 10
+    || !b.expected.every(x => x && typeof x === "object" && isTicketId(x.id) && Number.isInteger(x.rev) && x.rev >= 1)
+    || new Set(b.expected.map(x => x.id)).size !== b.expected.length) return json(c, 400, { error: "invalid_request" });
+  const { sess, actor, now } = sessOf(c);
+  const db = new BookingDb(c.var.db.driver);
+  let members = await db.members(sess, id, now);
+  if (!members.length) return json(c, 404, { error: "not_found" });
+  if (members.length > 10) return json(c, 409, { error: "booking_too_large" });
+  if (members.some(x => x.used_at != null)) return json(c, 409, { error: "booking_used" });
+  const expected = b.expected as { id: string; rev: number }[];
+  const summary = () => summarize(members[0]!.order_id || id, members);
+  // A retried operation may find every member already inactive. Still finish the
+  // ledger confirmation before returning a verified read-back.
+  if (summary().active) {
+    if (members.length !== expected.length || members.some(x => !expected.some(e => e.id === x.id && e.rev === x.rev))) {
+      return json(c, 409, { error: "booking_changed" });
+    }
+    await recordIntent(c.var.ledger, b.op, sess.partyId, "cancelled",
+      members.filter(x => ["pending", "approved"].includes(x.status)).map(x => ({ entity: "ticket", id: x.id })), now);
+    await db.cancel(sess, id, expected, actor, now, b.op);
+  }
+  await flushChangeLog(c.var.db, c.var.ledger, now, members.map(x => x.id));
+  members = await db.members(sess, id, now);
+  if (!members.length || summary().active || summary().used) return json(c, 409, { error: "booking_changed" });
+  return json(c, 200, { status: "verified", booking: summary(), members });
 });
 
 /**
@@ -436,6 +485,9 @@ async function intentChange(c: Ctx, action: "cancelled" | "reissued" | "restored
     status = "done";
   }
   await flushChangeLog(c.var.db, c.var.ledger, now, [id]);
+  if (action === "cancelled" && (await tdb.getTicket(sess.partyId, id))?.status !== "cancelled") {
+    return json(c, 409, { error: "booking_changed" });
+  }
   return json(c, 200, { status });
 }
 

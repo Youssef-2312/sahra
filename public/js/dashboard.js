@@ -14,6 +14,7 @@
   var busy = false;
   var drawn = false;      // the bars grow in on the first drawing only, not on every refresh
   var REFRESH_MS = 60000;
+  var mobileTab = "overview";
 
   // A stat card: label, the number, a line under it, and a small visual.
   function tile(label, big, sub, visual) {
@@ -52,10 +53,38 @@
       fourth);
   }
 
+  // Phone overview follows the compact app layout; desktop keeps its charts
+  // and original metric row. Every figure uses the same live stats response.
+  function mobileOverview() {
+    var C = window.SahraCharts;
+    var week = C ? C.perDay(stats, party, 7).map(function (d) { return d.value; }) : [];
+    function metric(label, value, sub, href, cls) {
+      return el("a", {class:"dm-metric " + (cls || ""),attrs:{href:href}},
+        el("span",{class:"label",text:label}),el("strong",{text:value}),el("span",{class:"small muted",text:sub}));
+    }
+    return el("section",{class:"dash-mobile-overview",attrs:{"aria-label":t("dm_overview")}},
+      el("div",{class:"dm-hero"},
+        el("div",{class:"dm-hero-top"},el("span",{class:"label",text:t("d_inside")}),
+          admission ? el("span",{class:"pill " + (admission.open?"yes":"maybe"),text:t(admission.open?"d_doors_open":"d_doors_paused")}):null),
+        el("div",{class:"dm-capacity"},el("strong",{text:String(stats.inside)}),el("span",{text:"/ " + stats.capacity})),
+        el("p",{class:"muted small",text:t("dm_capacity_hint",{approved:stats.approved,left:stats.places_left})}),
+        meter([{value:stats.inside,cls:"yes"}],stats.capacity)),
+      el("div",{class:"dm-grid"},
+        metric(t("d_waiting"),String(stats.pending_requests),t("dm_review_hint"),"/queue.html","dm-waiting"),
+        metric(t("d_approved"),String(stats.approved),t("dm_active_hint"),"/guests.html?status=approved","dm-guests"),
+        metric(t("dm_ready"),String(stats.released),t("dm_ready_hint"),"/guests.html?status=approved&delivery=released","dm-ready"),
+        metric(t("d_money"),new Intl.NumberFormat(Sahra.lang()==="ar"?"ar-EG-u-nu-latn":"en-GB").format(stats.money_expected),t("dm_revenue_hint"),"/guests.html?status=approved","dm-revenue")),
+      el("nav",{class:"dm-shortcuts",attrs:{"aria-label":t("dm_shortcuts")}},
+        [["d_find_t","/guests.html#find"],["dm_add_guest","/guests.html#issue"],["dm_email_shortcut","/outbox.html"]].map(function(x){return el("a",{class:"btn",text:t(x[0]),attrs:{href:x[1]}});})),
+      el("div",{class:"dm-trend"},el("div",null,el("span",{class:"label",text:t("dm_week")}),
+        el("strong",{text:String(week.reduce(function(a,b){return a+b;},0))})),C?C.spark(week,C.palette[0]):null));
+  }
+
   async function doors(action) {
     if (busy) return;
     if (action === "pause" && !(await Sahra.confirm(t("d_pause_confirm"), { danger: true }))) return;
     busy = true;
+    render();
     // A pending answer (503) is retried with the same body, as everywhere else.
     for (var i = 0; i < 5; i++) {
       var r = await Sahra.api.post("/api/admission", { action: action });
@@ -70,13 +99,13 @@
   // The three things done most on the night, beside the party's name.
   function headActions() {
     var list = [];
-    list.push(el("a", { class: "btn primary small-btn", text: stats.pending_requests > 0 ? t("d_review_n", { n: stats.pending_requests }) : t("d_review"), attrs: { href: "/queue.html" } }));
+    list.push(el("a", { class: "btn primary small-btn dash-review", text: stats.pending_requests > 0 ? t("d_review_n", { n: stats.pending_requests }) : t("d_review"), attrs: { href: "/queue.html" } }));
     if (admission) {
       list.push(admission.open
-        ? el("button", { class: "btn no small-btn", text: t("d_pause_doors"), attrs: { type: "button" }, on: { click: function () { doors("pause"); } } })
-        : el("button", { class: "btn yes small-btn", text: t("d_open_doors"), attrs: { type: "button" }, on: { click: function () { doors("open"); } } }));
+        ? el("button", { class: "btn no small-btn dash-admission", text: t(busy ? "loading" : "d_pause_doors"), attrs: { type: "button", disabled:busy, title:t("d_admission_help") }, on: { click: function () { doors("pause"); } } })
+        : el("button", { class: "btn yes small-btn dash-admission", text: t(busy ? "loading" : "d_open_doors"), attrs: { type: "button", disabled:busy, title:t("d_admission_help") }, on: { click: function () { doors("open"); } } }));
     }
-    list.push(el("a", { class: "btn small-btn", text: t("d_scanner"), attrs: { href: "/scan.html" } }));
+    list.push(el("a", { class: "btn small-btn dash-scan", text: t("d_scanner"), attrs: { href: "/scan.html" } }));
     return el("div", { class: "dash-actions" }, list);
   }
 
@@ -119,7 +148,8 @@
       actions: [[t("sign_in"), "/signin", true], [t("nt_home"), "/"]], hint: t("nt_guest_hint") })); return; }
     if (!stats) { app.appendChild(el("p", { class: "muted", text: t("loading") })); return; }
     app.classList.add("dash");
-    if (window.SahraStaff) app.appendChild(SahraStaff.nav("dashboard", me.staff.role));
+    app.setAttribute("data-mobile-tab",mobileTab);
+    if (window.SahraStaff) SahraStaff.workspace(app,"dashboard", me.staff.role);
     var when = party && party.starts_at ? Sahra.when(party.starts_at, party.time_zone) : null;
     app.appendChild(el("header", { class: "dash-head" },
       el("div", null,
@@ -136,14 +166,23 @@
     else if (party && !party.support_phone) app.appendChild(el("div", { class: "notice maybe dash-warn" },
       el("p", { text: t("d_contact_missing") }), el("a", { class: "btn small-btn", text: t("d_contact_add"), attrs: { href: "/party.html#contact" } })));
     if (me.staff.role !== "door") app.appendChild(findGuest());
+    var mobileTabs = [["overview","dm_tab_overview"],["activity","dm_tab_activity"],["types","dm_tab_types"]];
+    function chooseMobileTab(key) { mobileTab=key;render();var selected=document.getElementById("dm-tab-"+key);if(selected)selected.focus({preventScroll:true}); }
+    app.appendChild(el("div",{class:"dm-tabs",attrs:{role:"tablist","aria-label":t("dm_overview")}},mobileTabs.map(function(x,index){
+      var button=el("button",{text:t(x[1]),attrs:{type:"button",role:"tab",id:"dm-tab-"+x[0],"aria-selected":mobileTab===x[0]?"true":"false","aria-controls":"dm-panel-"+x[0],tabindex:mobileTab===x[0]?0:-1},on:{click:function(){chooseMobileTab(x[0]);}}});
+      button.addEventListener("keydown",function(e){var n=index;if(e.key==="Home")n=0;else if(e.key==="End")n=2;else if(e.key==="ArrowRight"||e.key==="ArrowLeft")n=(index+(e.key==="ArrowRight"?1:-1)*(document.documentElement.dir==="rtl"?-1:1)+3)%3;else return;e.preventDefault();chooseMobileTab(mobileTabs[n][0]);});
+      return button;
+    })));
+    var overview=mobileOverview();overview.id="dm-panel-overview";overview.setAttribute("role","tabpanel");overview.setAttribute("aria-labelledby","dm-tab-overview");app.appendChild(overview);
     app.appendChild(tiles());
     var C = window.SahraCharts;
     var charts = el("div", { class: "charts" + (drawn ? "" : " animate"), attrs: { id: "charts" } });
     drawn = true;
     if (C) {
       var types = C.types(stats);
-      charts.appendChild(el("div", { class: "dash-main" }, C.requests(stats, party, true), C.arrivals(stats, party),
-        types ? el("div", { class: "dash-pair" }, types) : null));
+      charts.appendChild(el("div", { class: "dash-main" },
+        el("div",{class:"dm-activity-panel",attrs:{id:"dm-panel-activity",role:"tabpanel","aria-labelledby":"dm-tab-activity"}},C.requests(stats,party,true),C.arrivals(stats,party)),
+        el("div", { class: "dash-pair dm-types-panel",attrs:{id:"dm-panel-types",role:"tabpanel","aria-labelledby":"dm-tab-types"} }, types || el("p",{class:"muted",text:t("dm_no_types")}))));
       charts.appendChild(el("div", { class: "dash-side" }, quickActions()));
     } else {
       charts.appendChild(quickActions());

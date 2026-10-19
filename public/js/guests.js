@@ -9,7 +9,11 @@
   var stats = null, types = [], found = null, query = "", party = null;
   var ops = {};        // "action:ticket" -> op id, kept until the server confirms (a retry is the same change)
   var notes = {};      // ticket id -> [cls, text, link?]
-  var searchSeq = 0;
+  var searchSeq = 0, nextFound = null, loadingMore = false, pageIndex = 0, pageCursors = [null], filters = { status:"approved" };
+  var initialFilters = new URLSearchParams(location.search);
+  ["status","type","delivery","entry","booking","payment"].forEach(function(k){if(initialFilters.has(k))filters[k]=initialFilters.get(k);});
+  var guestView = initialFilters.has("q") || filters.status !== "approved" ? "all" : "approved";
+  if (guestView === "all" && !initialFilters.has("status")) filters.status = "all";
   var open = {};       // ticket id -> which tool is open ("transfer")
   var drafts = { issue: null, announce: null };
 
@@ -21,7 +25,7 @@
     if (x.status === "approved") return x.released_at ? ["yes", t("g_st_sent")] : ["maybe", t("g_st_approved")];
     if (x.status === "pending") return ["maybe", t("g_st_pending")];
     if (x.status === "rejected") return ["no", t("g_st_rejected")];
-    if (x.status === "cancelled") return ["no", t("g_st_cancelled")];
+    if (x.status === "cancelled") return ["no", t(x.approved_at == null ? "bk_deleted" : "bk_position_cancelled")];
     return ["", x.status];
   }
 
@@ -39,15 +43,29 @@
 
   // ------------------------------------------------------------- find a guest
 
-  async function search(q) {
+  async function search(q, direction) {
+    var move = direction === 1 || direction === -1 ? direction : 0;
+    if (move && (loadingMore || (move < 0 && !pageIndex) || (move > 0 && !nextFound))) return;
+    var target = move ? pageIndex + move : 0;
+    if (!move) pageCursors = [null];
+    if (move > 0) pageCursors[target] = nextFound;
     query = q;
     var seq = ++searchSeq;
-    found = "loading";
+    loadingMore = !!move;
+    if (!move) { found = "loading"; nextFound = null; pageIndex = 0; }
     redrawFind();
-    var r = await Sahra.api.get("/api/tickets/search?q=" + encodeURIComponent(q));
+    var params = SahraBooking.params(Object.assign({}, filters, {q:q.trim(),status:filters.status || "all",limit:20}));
+    if (pageCursors[target]) params.set("after", pageCursors[target]);
+    var r = await Sahra.api.get("/api/tickets?" + params.toString());
     if (seq !== searchSeq) return;
-    found = r.ok ? r.body.tickets : { error: r };
+    loadingMore = false;
+    found = r.ok ? r.body.tickets : { error:r }; pageIndex = target;
+    nextFound = r.ok ? r.body.next : null;
     redrawFind();
+    if (move && r.ok) {
+      var first = findNode.querySelector('.g-row') || findNode.querySelector('.bk-pager');
+      if (first) { first.scrollIntoView({block:"start"}); first.focus({preventScroll:true}); }
+    }
   }
 
   async function run(x, action, body, confirmText, safe) {
@@ -67,7 +85,9 @@
     } else {
       notes[x.id] = ["yes", t("g_done_" + action), link];
       delete open[x.id];
-      if (query) await search(query);
+      if (query || Array.isArray(found)) await search(query);
+      await loadStats();
+      try { localStorage.setItem("sahra_ticket_change", String(Date.now())); } catch (_) {}
     }
     redrawFind();
   }
@@ -81,16 +101,18 @@
       x.status === "approved" && !x.used_at ? el("button", { class: "btn small-btn", text: t("g_reissue"), attrs: { type: "button" }, on: { click: function () { run(x, "reissue", null, t("g_reissue_confirm")); } } }) : null,
       live && !x.used_at ? el("button", { class: "btn small-btn", text: t("g_change_email"), attrs: { type: "button", "aria-expanded": open[x.id] === "email" ? "true" : "false" }, on: { click: function () { open[x.id] = open[x.id] === "email" ? null : "email"; redrawFind(); } } }) : null,
       live && !x.used_at ? el("button", { class: "btn small-btn", text: t("g_transfer"), attrs: { type: "button", "aria-expanded": open[x.id] === "transfer" ? "true" : "false" }, on: { click: function () { open[x.id] = open[x.id] === "transfer" ? null : "transfer"; redrawFind(); } } }) : null,
-      live && !x.used_at ? el("button", { class: "btn no small-btn", text: t("g_cancel"), attrs: { type: "button" }, on: { click: function () { run(x, "cancel", null, t("g_cancel_confirm", { name: x.guest_name || x.id })); } } }) : null,
+      live && !x.used_at ? el("button", { class: "btn no small-btn", text: t(x.status === "pending" ? "bk_delete_request" : "bk_cancel_one"), attrs: { type: "button" }, on: { click: function () { li.querySelector(".bk-card").cancelOne(); } } }) : null,
       // A cancelled ticket can be brought back (owner request), with a new QR code.
-      x.status === "cancelled" && !x.used_at ? el("button", { class: "btn small-btn", text: t("g_restore"), attrs: { type: "button" }, on: { click: function () { run(x, "restore", null, t("g_restore_confirm", { name: x.guest_name || Sahra.ref(x.id) }), true); } } }) : null);
+      x.status === "cancelled" && !x.used_at ? el("button", { class: "btn small-btn", text: t(x.approved_at == null ? "bk_restore_request" : "g_restore"), attrs: { type: "button" }, on: { click: function () { run(x, "restore", null, t(x.approved_at == null ? "bk_restore_request_confirm" : "g_restore_confirm", { name: x.guest_name || Sahra.ref(x.id) }), true); } } }) : null);
     var note = notes[x.id];
-    var li = el("li", { class: "g-row" },
+    var li = el("li", { class: "g-row", attrs:{"data-ticket":x.id,tabindex:-1} },
       el("div", { class: "g-who" },
         el("div", { class: "g-name-line" }, el("strong", { text: x.guest_name || t("g_no_name"), attrs: { dir: "auto" } }), el("span", { class: "pill " + st[0], text: st[1] })),
         el("span", { class: "muted small", text: meta, attrs: { dir: "auto" } }),
         el("span", { class: "faint small mono", text: Sahra.ref(x.id), attrs: { dir: "ltr" } })),
       actions);
+    if (!live) li.appendChild(el("p", { class: "small muted", text: t("bk_inactive") }));
+    li.appendChild(SahraBooking.card(x, function () { if (query || Array.isArray(found)) search(query); loadStats(); }));
     var photos = Object.keys(x.answers || {}).filter(function (id) { return typeof x.answers[id] === "string" && /^photo:f[1-4]:[1-9][0-9]*$/.test(x.answers[id]); });
     if (photos.length) li.appendChild(el("ul", { class: "facts" }, photos.map(function (id) {
       return el("li", null, el("span", { text: id + ": ", attrs: { dir: "auto" } }),
@@ -142,25 +164,32 @@
 
   var findNode = null;
   function findCard() {
-    var input = S.input("q", "search", { minlength: 2, maxlength: 80, placeholder: t("g_search_ph"), value: query, autocomplete: "off", enterkeyhint: "search" });
-    var clear = el("button", { class: "btn small-btn", text: t("clear_search"), attrs: { type: "button", disabled: !query && found === null } });
-    input.addEventListener("input", function () { query = input.value; clear.disabled = !query && found === null; });
-    clear.addEventListener("click", function () { searchSeq++; query = ""; found = null; redrawFind(); findNode.querySelector("input[name=q]").focus(); });
-    var f = el("form", { class: "g-search", attrs: { role: "search", "aria-busy": found === "loading" ? "true" : "false" } }, input, el("button", { class: "btn primary small-btn", text: found === "loading" ? t("loading") : t("g_search"), attrs: { type: "submit", disabled: found === "loading" } }), clear);
-    f.addEventListener("submit", function (e) {
-      e.preventDefault();
-      var q = input.value.trim();
-      if (q.length >= 2) search(q);
-    });
+    var f = SahraBooking.filters(Object.assign({}, filters, {q:query}), types, function (v) {
+      filters = v; if (guestView === "approved") filters.status = "approved"; search(v.q || "");
+    }, guestView === "all");
+    var tabs = el("div", {class:"tabs",attrs:{"aria-label":t("g_title")}}, [["approved","bf_active_guests"],["all","bf_all_records"]].map(function(x){
+      return el("button",{text:t(x[1]),attrs:{type:"button","aria-pressed":guestView===x[0]?"true":"false"},on:{click:function(){guestView=x[0];filters.status=x[0]==="approved"?"approved":"all";search(query);}}});
+    }));
     var body;
     if (found === null) body = el("p", { class: "small muted", text: t("g_search_h") });
     else if (found === "loading") body = el("p", { class: "muted", text: t("loading") });
     else if (found.error) body = el("p", { class: "notice no", text: S.why(found.error) });
-    else if (!found.length) body = el("p", { class: "s-empty muted", text: t("g_none", { q: query }) });
-    else body = el("ul", { class: "g-list" }, found.map(guestRow));
+    else if (!found.length) body = el("div", null, el("p", { class: "s-empty muted", text: t("g_none", { q: query }) }));
+    else {
+      body = el("div", { class: "g-results" });
+      [["bk_entry_guests", function (x) { return x.status === "approved"; }],
+       ["bk_waiting_requests", function (x) { return x.status === "pending"; }],
+       ["bk_history", function (x) { return x.status !== "approved" && x.status !== "pending"; }]].forEach(function (section) {
+        var list = found.filter(section[1]);
+        if (list.length) body.appendChild(el("section", null, el("h3", { class: "s-sub", text: t(section[0]) }), el("ul", { class: "g-list" }, list.map(guestRow))));
+      });
+    }
+    if (Array.isArray(found)) body.appendChild(SahraBooking.pager(found.length, nextFound, loadingMore, function (direction) { search(query, direction); }, function () {
+      var input = findNode.querySelector('input[name=q]'); input.scrollIntoView({block:"center"}); input.focus({preventScroll:true});
+    }, pageIndex));
     body.setAttribute("role", "status");
     body.setAttribute("aria-live", "polite");
-    findNode = S.section("find", t("g_find"), null, f, body);
+    findNode = S.section("find", t("g_find"), null, tabs, SahraBooking.guide(), f, body);
     return findNode;
   }
   function redrawFind() {
@@ -529,6 +558,10 @@
     if (tilesNode && tilesNode.parentNode) { var n = tiles(); tilesNode.parentNode.replaceChild(n, tilesNode); tilesNode = n; }
   }
 
+  function refreshTickets() { if ((query || Array.isArray(found)) && found !== "loading") search(query); loadStats(); }
+  window.addEventListener("storage", function (e) { if (e.key === "sahra_ticket_change") refreshTickets(); });
+  document.addEventListener("visibilitychange", function () { if (document.visibilityState === "visible") refreshTickets(); });
+
   var first = true;
   SahraStaff.start({
     page: "guests", title: "g_title", lede: "g_lede",
@@ -551,6 +584,7 @@
           var finder = document.getElementById("find");
           if (finder && finder.scrollIntoView) finder.scrollIntoView({ block: "start" });
         }
+        if (q0.length < 2 && initialFilters.size) search("");
         setInterval(function () { if (document.visibilityState === "visible") loadStats(); }, 60000);
         if (me.staff.role === "owner") loadHolds();
       });

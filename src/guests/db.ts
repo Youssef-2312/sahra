@@ -110,6 +110,7 @@ export interface GuestTicket {
 export type BulkResult = Record<string, "done" | "already" | "refused">;
 
 export const MAX_BULK = 20;
+export interface TicketFilters { q?: string; typeId?: string; delivery?: string; entry?: string; booking?: string }
 
 export class GuestDb {
   constructor(readonly driver: SqlDriver) {}
@@ -328,17 +329,31 @@ export class GuestDb {
   }
 
   /** Approval queue and other lists: the party's tickets with one status, oldest first, paged by (created_at, id). */
-  async list(sess: SessionRef, status: string, after: { at: number; id: string } | null, limit: number, now: number, cashOnly = false) {
+  async list(sess: SessionRef, status: string, after: { at: number; id: string } | null, limit: number, now: number, cashOnly = false, filters: TicketFilters = {}) {
     const cursor = after ? sql`AND (t.created_at > ${after.at} OR (t.created_at = ${after.at} AND t.id > ${after.id}))` : sql``;
     // "Cash only" (brainstorm idea 9): guests who paid the organiser in cash (migrations/0027).
     const cash = cashOnly ? sql`AND t.payment = 'cash'` : sql``;
+    const like = `%${(filters.q || "").replace(/[\\%_]/g, m => `\\${m}`)}%`;
+    const ref = /^SAH-?([0-9A-Z]{6})$/i.exec(filters.q || "");
+    const query = !filters.q ? sql`` : ref ? sql`AND substr(t.id,1,6) = ${ref[1]!.toUpperCase()}`
+      : sql`AND (t.guest_name LIKE ${like} ESCAPE '\\' OR t.guest_email LIKE ${like} ESCAPE '\\'
+        OR t.id LIKE ${like} ESCAPE '\\' OR t.instagram LIKE ${like} ESCAPE '\\')`;
+    const type = filters.typeId ? sql`AND t.type_id = ${filters.typeId}` : sql``;
+    const entry = filters.entry === "used" ? sql`AND t.used_at IS NOT NULL` : filters.entry === "unused" ? sql`AND t.used_at IS NULL` : sql``;
+    const delivery = filters.delivery === "released" ? sql`AND t.released_at IS NOT NULL`
+      : filters.delivery === "unreleased" ? sql`AND t.released_at IS NULL`
+      : filters.delivery === "emailed" ? sql`AND EXISTS (SELECT 1 FROM outbox o WHERE o.party_id = t.party_id AND o.ticket_id = t.id AND o.status='sent' AND o.kind IN ('ticket_released','ticket_link'))` : sql``;
+    const booking = filters.booking === "group" ? sql`AND t.order_id IS NOT NULL`
+      : filters.booking === "single" ? sql`AND t.order_id IS NULL`
+      : filters.booking === "partial" ? sql`AND EXISTS (SELECT 1 FROM tickets b WHERE b.party_id=t.party_id AND COALESCE(b.order_id,b.id)=COALESCE(t.order_id,t.id) AND b.status='cancelled')
+        AND EXISTS (SELECT 1 FROM tickets b WHERE b.party_id=t.party_id AND COALESCE(b.order_id,b.id)=COALESCE(t.order_id,t.id) AND b.status IN ('pending','approved') AND b.used_at IS NULL)` : sql``;
     // same_email: the address's other pending/approved tickets (the duplicate warning; index tickets_party_email).
     const r = await this.driver.all(sql`SELECT t.id, t.status, t.people, t.guest_name, t.guest_email, t.answers,
         t.screenshot_key IS NOT NULL AS has_screenshot, t.id_photo_key IS NOT NULL AS has_id_photo, t.instagram, t.order_id, t.created_at, t.approved_at, t.released_at, t.reject_reason, t.hold_at,
         t.used_at, t.qr_version, t.rev, t.type_id, (SELECT name FROM ticket_types WHERE id = t.type_id) AS type_name, t.price, ${ticketTotal("t")} AS total, t.payment,
         CASE WHEN t.guest_email IS NULL THEN 0 ELSE (SELECT COUNT(*) FROM tickets d WHERE d.party_id = t.party_id
           AND d.guest_email = t.guest_email AND d.id != t.id AND d.status IN ('pending', 'approved')) END AS same_email
-      FROM tickets t WHERE t.party_id = ${sess.partyId} AND t.status = ${status} ${cash} ${cursor}
+      FROM tickets t WHERE t.party_id = ${sess.partyId} AND (${status} = 'all' OR t.status = ${status}) ${cash} ${cursor} ${query} ${type} ${entry} ${delivery} ${booking}
         AND ${sessionValid(sess, MANAGERS, now)}
       ORDER BY t.created_at, t.id LIMIT ${limit}`);
     return r.results;
@@ -573,7 +588,7 @@ export class GuestDb {
     const where = ref ? sql`substr(t.id, 1, 6) = ${ref[1]!.toUpperCase()}` : isBase32(q, 16) ? sql`t.id = ${q}`
       : q.includes("@") ? sql`t.guest_email LIKE ${`${like.toLowerCase()}%`} ESCAPE '\\'`
         : sql`t.guest_name LIKE ${`%${like}%`} ESCAPE '\\'`;
-    const r = await this.driver.all(sql`SELECT t.id, t.status, t.people, t.guest_name, t.guest_email, t.created_at, t.approved_at,
+    const r = await this.driver.all(sql`SELECT t.id, t.order_id, t.status, t.people, t.guest_name, t.guest_email, t.created_at, t.approved_at,
         t.released_at, t.used_at, t.hold_at, t.link_version, (SELECT name FROM ticket_types WHERE id = t.type_id) AS type_name
       FROM tickets t WHERE t.party_id = ${sess.partyId} AND ${where} AND ${sessionValid(sess, MANAGERS, now)}
       ORDER BY t.created_at DESC LIMIT ${limit}`);
