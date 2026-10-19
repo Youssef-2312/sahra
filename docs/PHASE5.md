@@ -1117,8 +1117,8 @@ Local browser checks cover 12 About combinations: EN/AR, 390/768/1440 px and
 normal/reduced motion. Scroll changes the pose only with normal motion; desktop
 pointer changes are checked, with 0px overflow and zero unexpected JavaScript
 errors. The decorative image has no usable QR credential. A local motion video
-and screenshots are saved outside the repository. TypeScript and the full 549
-Vitest suite pass. This correction needs no database migration.
+and screenshots are saved outside the repository. TypeScript and all 545 release
+Vitest tests pass. This correction needs no database migration.
 
 ### Hidden ticket waves and easier type editing (19 October 2026)
 
