@@ -43,6 +43,7 @@ echo   11  Verify ledger records vs admissions (STAGING, read-only)
 echo   12  Measure CPU per endpoint, cold vs warm (STAGING)
 echo   13  Revoke ALL door invitations and door sessions (STAGING)
 echo   15  Peak-load test on STAGING (about 45 min, uses about half of the day's free writes)
+echo   16  Mute backup emails or make them daily (Google Apps Script)
 echo  Recovery
 echo   20  Controlled recovery on STAGING (rehearsal: Time Travel restore + replay)
 echo   21  Controlled recovery on PRODUCTION (only when something went wrong)
@@ -66,6 +67,7 @@ if "%choice%"=="12" node scripts\ops.mjs measure-cpu
 if "%choice%"=="13" node scripts\ops.mjs revoke-door-staging
 if "%choice%"=="14" node scripts\ops.mjs create-site-owner
 if "%choice%"=="15" node scripts\ops.mjs load-test
+if "%choice%"=="16" call backup-email-setup.bat
 if "%choice%"=="20" node scripts\recover.mjs staging
 if "%choice%"=="21" node scripts\recover.mjs prod
 pause

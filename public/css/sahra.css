@@ -1400,3 +1400,8 @@ body:not(.dashboard-page) .topbar-end .btn { border-radius: 999px; }
 
 .nav-account { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 600px) { .nav-account { max-width: 112px; } }
+
+/* About uses one paper ticket; the Home guide keeps its fan. */
+.ab-ticket-render[data-ticket-motion] { perspective: 1000px; isolation: isolate; }
+.ab-ticket-render[data-ticket-motion] img { animation: none; transform-origin: 50% 50%; }
+@media (prefers-reduced-motion: reduce) { .ab-ticket-render[data-ticket-motion] img { transform: none !important; } }
