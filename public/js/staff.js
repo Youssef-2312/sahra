@@ -69,27 +69,18 @@ var SahraStaff = (function () {
       }), el("button", { class: "staff-out", text: t("s_sign_out"), attrs: { type: "button" }, on: { click: signOut } }));
   }
 
-  // One workspace shell for every organiser page, including Overview and Requests.
-  // Links remain real URLs, so reload, browser history and deep links keep working.
+  // The original horizontal staff menu, shared by every organiser page.
+  // Keep the helper API so pages retain their current controls and loading behavior.
   function workspace(root, page, role) {
-    root.classList.add("dash");
-    document.body.classList.add("dashboard-ready");
     var menu = nav(page, role);
-    root.appendChild(el("aside", { class: "dash-sidebar" },
-      el("a", { class: "dash-brand", attrs: { href: "/" } },
-        el("img", { attrs: { src: "/img/sahra-mark.svg", alt: "", width: 32, height: 32 } }), "Sahra"),
-      el("p", { class: "dash-nav-label", text: t("d_workspace") }), menu,
-      el("div", { class: "dash-sidebar-note" }, el("span", { class: "dash-live-dot", attrs: { "aria-hidden": "true" } }),
-        el("span", { text: t("d_workspace_note") }))));
-    var content = el("div", { class: "dash-content workspace-content", attrs: { "data-workspace-page": page } });
-    root.appendChild(content);
+    root.appendChild(menu);
     var selected = menu.querySelector("[aria-current]");
     if (selected && menu.scrollWidth > menu.clientWidth) {
       menu.scrollLeft = document.documentElement.dir === "rtl"
         ? -(menu.clientWidth - selected.offsetLeft - selected.offsetWidth)
         : Math.max(0, selected.offsetLeft - 16);
     }
-    return content;
+    return root;
   }
 
   function head(o) {

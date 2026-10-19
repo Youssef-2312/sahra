@@ -110,80 +110,47 @@
     return f;
   }
 
-  function typeTable() {
-    var rows = stats.by_type || [];
-    var headings = ["d_type_name", "d_type_approved", "d_type_pending", "d_type_arrived", "d_type_available", "d_type_share"];
-    var table = el("table", { class: "dash-table" },
-      el("caption", { class: "sr-only", text: t("d_type_table") }),
-      el("thead", null, el("tr", null, headings.map(function (key) { return el("th", { text: t(key), attrs: { scope: "col" } }); }))),
-      el("tbody", null, rows.map(function (row) {
-        var held = Number(row.approved) + Number(row.pending);
-        var share = stats.held > 0 ? Math.round(held / stats.held * 100) : 0;
-        return el("tr", null,
-          el("th", { attrs: { scope: "row", dir: "auto" }, text: row.name === "No type" ? t("d_no_type") : row.name }),
-          el("td", null, el("span", { class: "dash-number yes", text: row.approved })),
-          el("td", null, el("span", { class: "dash-number pending", text: row.pending })),
-          el("td", { text: row.admitted }),
-          el("td", { text: row.places_left === null ? t("d_type_unlimited") : row.places_left }),
-          el("td", null, el("div", { class: "dash-share" }, meter([{ value: held }], stats.held), el("span", { text: share + "%" }))));
-      })));
-    return el("section", { class: "card dash-ticket-section", attrs: { "aria-labelledby": "dash-tickets-title" } },
-      el("div", { class: "dash-table-toolbar" },
-        el("div", null, el("h2", { attrs: { id: "dash-tickets-title" }, text: t("d_type_table") }),
-          el("p", { class: "muted", text: t("d_type_hint") })),
-        el("a", { class: "btn small-btn", text: t("d_guests"), attrs: { href: "/guests.html" } })),
-      rows.length ? el("div", { class: "dash-table-scroll", attrs: { tabindex: "0", role: "region", "aria-label": t("d_type_table") } }, table)
-        : el("p", { class: "dash-empty muted", text: t("d_type_empty") }));
-  }
-
   function render() {
+    var firstLayout = !drawn;
     var typing = document.activeElement && document.activeElement.id === "d-find";
     var caret = typing ? document.activeElement.selectionStart : null;
     Sahra.clear(app);
-    document.body.classList.toggle("dashboard-ready", !!me && !!stats);
     if (!me) { app.appendChild(Sahra.problem({ kicker: t("nt_kicker_signin"), title: t("nt_staff_t"), text: t("d_sign_in"),
       actions: [[t("sign_in"), "/signin", true], [t("nt_home"), "/"]], hint: t("nt_guest_hint") })); return; }
     if (!stats) { app.appendChild(el("p", { class: "muted", text: t("loading") })); return; }
     app.classList.add("dash");
-    var content = SahraStaff.workspace(app, "dashboard", me.staff.role);
+    if (window.SahraStaff) app.appendChild(SahraStaff.nav("dashboard", me.staff.role));
     var when = party && party.starts_at ? Sahra.when(party.starts_at, party.time_zone) : null;
-    content.appendChild(el("header", { class: "dash-head" },
+    app.appendChild(el("header", { class: "dash-head" },
       el("div", null,
         el("p", { class: "label-line", text: t("d_label") }),
         el("h1", { text: party ? party.name : me.party.name, attrs: { dir: "auto" } }),
         el("p", { class: "dash-meta" }, when ? el("span", { text: when }) : null,
           admission ? el("span", { class: "pill " + (admission.open ? "yes" : "maybe"), text: admission.open ? t("d_doors_open") : t("d_doors_paused") }) : null)),
       headActions()));
-    content.appendChild(el("div", { class: "notice dash-warn" }, el("p", { text: t("d_admission_help") }), el("a", { class: "btn small-btn", text: t("d_request_settings"), attrs: { href: "/party.html#requests" } })));
-    if (party && party.cancelled_at) content.appendChild(el("div", { class: "notice no dash-warn" },
+    app.appendChild(el("div", { class: "notice dash-warn" }, el("p", { text: t("d_admission_help") }), el("a", { class: "btn small-btn", text: t("d_request_settings"), attrs: { href: "/party.html#requests" } })));
+    if (party && party.cancelled_at) app.appendChild(el("div", { class: "notice no dash-warn" },
       el("p", { text: t("d_cancelled", { when: Sahra.when(party.cancelled_at, party.time_zone) }) }),
       el("a", { class: "btn small-btn", text: t("s_open_refunds"), attrs: { href: "/guests.html#refunds" } })));
     // Requests stay closed until the party has a contact number (brainstorm idea 16).
-    else if (party && !party.support_phone) content.appendChild(el("div", { class: "notice maybe dash-warn" },
+    else if (party && !party.support_phone) app.appendChild(el("div", { class: "notice maybe dash-warn" },
       el("p", { text: t("d_contact_missing") }), el("a", { class: "btn small-btn", text: t("d_contact_add"), attrs: { href: "/party.html#contact" } })));
-
-    content.appendChild(el("section", { class: "dash-summary", attrs: { "aria-label": t("d_summary") } },
-      el("div", { class: "dash-summary-head" }, el("h2", { text: t("d_summary") }),
-        el("span", { class: "muted", text: t("d_summary_hint") })), tiles()));
+    if (me.staff.role !== "door") app.appendChild(findGuest());
+    app.appendChild(tiles());
     var C = window.SahraCharts;
     var charts = el("div", { class: "charts" + (drawn ? "" : " animate"), attrs: { id: "charts" } });
     drawn = true;
     if (C) {
-      charts.appendChild(C.requests(stats, party, true));
       var types = C.types(stats);
-      charts.appendChild(types || el("section", { class: "card chart dash-empty-chart" },
-        el("h2", { text: t("d_chart_types") }), el("p", { class: "muted", text: t("d_type_empty") })));
-      var arrivals = C.arrivals(stats, party);
-      if (arrivals) charts.appendChild(arrivals);
+      charts.appendChild(el("div", { class: "dash-main" }, C.requests(stats, party, true), C.arrivals(stats, party),
+        types ? el("div", { class: "dash-pair" }, types) : null));
+      charts.appendChild(el("div", { class: "dash-side" }, quickActions()));
     } else {
-      // The ticket table and actions remain usable if charts are unavailable.
+      charts.appendChild(quickActions());
     }
-    content.appendChild(charts);
-    content.appendChild(typeTable());
-    content.appendChild(el("div", { class: "dash-operations" }, quickActions(),
-      el("section", { class: "card dash-search-card" }, el("h2", { text: t("d_find_t") }),
-        el("p", { class: "muted", text: t("d_find_help") }), findGuest())));
-    if (updatedAt) content.appendChild(el("p", { class: "small muted center", text: t("d_updated", { time: Sahra.time(updatedAt) }) }));
+    app.appendChild(charts);
+    if (updatedAt) app.appendChild(el("p", { class: "small muted center", text: t("d_updated", { time: Sahra.time(updatedAt) }) }));
+    if (firstLayout) Sahra.reveal(app);
     if (typing) { var box = document.getElementById("d-find"); if (box) { box.focus(); try { box.setSelectionRange(caret, caret); } catch (x) { /* not a text field */ } } }
   }
 

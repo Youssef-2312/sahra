@@ -95,6 +95,29 @@ describe("ticket types", () => {
     expect((await editType(h, os, "AAAAAAAAAAAAAAAA", { price: 1 })).status).toBe(404);
   });
 
+  it("changing prices and removing a type from sale preserves paid guests' ticket prices and one-use QRs", async () => {
+    const h = await harness();
+    const { party, os } = await guestParty(h);
+    const typeId = (await newType(h, os, { name: "Early Bird", price: 100, quantity: 10 })).body.type!.id;
+    const first = await typedSignup(h, party, typeId);
+    expect(first.status).toBe(201);
+    await release(h, os, first.body.ticket_id!);
+    expect((await editType(h, os, typeId, { price: 150 })).body.status).toBe("changed");
+    expect((await editType(h, os, typeId, { archived: true })).body.status).toBe("changed");
+    const kept = await ticket(first.body.ticket_id!);
+    expect(kept!.price).toBe(100);
+    expect(kept!.status).toBe("approved");
+    expect(kept!.released_at).not.toBeNull();
+    expect((await typedSignup(h, party, typeId)).body.error).toBe("type_unavailable");
+    const page = await viewTicket(h, first.body.link!);
+    expect(page.status).toBe(200);
+    expect(page.body.ticket!.qr).toBeTruthy();
+    expect((await h.req("/api/admission", api(os, { action: "open" }))).status).toBe(200);
+    const door = await seedDoor(party, h.clock);
+    expect((await scan(h, door, page.body.ticket!.qr!)).verdict).toBe("admit");
+    expect((await scan(h, door, page.body.ticket!.qr!)).verdict).toBe("used");
+  });
+
   it("archive stops new requests (existing tickets keep their type); restore counts against the 20 active types", async () => {
     const h = await harness();
     const { party, os } = await guestParty(h);

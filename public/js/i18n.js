@@ -1124,3 +1124,78 @@ Object.assign(SahraText.ar, {
 
 Object.assign(SahraText.en, { f_switch_language: "التبديل إلى العربية" });
 Object.assign(SahraText.ar, { f_switch_language: "Switch to English" });
+
+Object.assign(SahraText.en, {nav_search: "Search parties"});
+Object.assign(SahraText.ar, {nav_search: "البحث عن الحفلات"});
+
+Object.assign(SahraText.en, {
+  "h_fact1_t": "A place with your name on it",
+  "h_fact1_p": "Your host reviews every request",
+  "h_fact2_t": "Bring your people",
+  "h_fact2_p": "Single and group options when available",
+  "h_fact3_t": "No extra app",
+  "h_fact3_p": "From choosing a party to finding your ticket",
+  "h_fact4_t": "Ready at the door",
+  "h_fact4_p": "Keep your released QR within reach",
+  "h_x_label": "Your way in",
+  "h_x_title": "One night. Your kind of ticket.",
+  "h_x_p": "Coming on your own or bringing the group? Explore how tickets work. The options available depend on the party.",
+  "h_x_choose": "Explore ticket options",
+  "h_x_action": "Find your next night",
+  "h_x_solo_label": "Just you",
+  "h_x_solo_short": "One guest. One ticket.",
+  "h_x_solo_tag": "Single ticket",
+  "h_x_solo_title": "A ticket that is yours.",
+  "h_x_solo_p": "Choose your type, send your request and follow its status. When the host releases your ticket, save the QR for arrival.",
+  "h_x_individual_label": "Together, or whenever",
+  "h_x_individual_short": "A group booking. Separate QR tickets.",
+  "h_x_individual_tag": "Individual QR tickets",
+  "h_x_individual_title": "Same plan. Your own arrival.",
+  "h_x_individual_p": "When the host offers individual group tickets, the buyer receives a separate ticket link for each person. Share the links so everyone can arrive independently.",
+  "h_x_shared_label": "The whole group",
+  "h_x_shared_short": "A shared ticket. Arrive together.",
+  "h_x_shared_tag": "Shared group ticket",
+  "h_x_shared_title": "Keep the group together.",
+  "h_x_shared_p": "A shared group ticket has one QR for everyone on it. Arrive together and have that code ready for the door team.",
+  "h_x_preview": "Illustration only",
+  "h_x_you": "Your ticket",
+  "h_x_friend": "Friend {n}",
+  "h_x_group": "Your group"
+});
+Object.assign(SahraText.ar, {
+  "h_fact1_t": "مكان باسمك",
+  "h_fact1_p": "يراجع المضيف كل طلب",
+  "h_fact2_t": "تعال مع أصحابك",
+  "h_fact2_p": "خيارات فردية وجماعية حسب المتاح",
+  "h_fact3_t": "بلا تطبيق إضافي",
+  "h_fact3_p": "من اختيار الحفلة إلى العثور على تذكرتك",
+  "h_fact4_t": "جاهز عند الباب",
+  "h_fact4_p": "احتفظ برمز تذكرتك الصادرة قريبًا منك",
+  "h_x_label": "على طريقتك",
+  "h_x_title": "سهرة واحدة. وتذكرة تناسبك.",
+  "h_x_p": "جاي لوحدك أو مع أصحابك؟ اكتشف طريقة عمل التذاكر. الخيارات المتاحة تختلف حسب الحفلة.",
+  "h_x_choose": "اكتشف خيارات التذاكر",
+  "h_x_action": "اكتشف سهرتك القادمة",
+  "h_x_solo_label": "أنت وبس",
+  "h_x_solo_short": "ضيف واحد. تذكرة واحدة.",
+  "h_x_solo_tag": "تذكرة فردية",
+  "h_x_solo_title": "تذكرة باسمك.",
+  "h_x_solo_p": "اختر النوع وأرسل طلبك وتابع حالته. بعد أن يصدر المضيف تذكرتك، احفظ رمز QR للدخول.",
+  "h_x_individual_label": "مع بعض أو كل واحد براحته",
+  "h_x_individual_short": "حجز جماعي. رموز QR منفصلة.",
+  "h_x_individual_tag": "رموز QR فردية",
+  "h_x_individual_title": "نفس الخطة. ووصول براحتك.",
+  "h_x_individual_p": "عندما يتيح المضيف تذاكر فردية للحجز الجماعي، يستلم المشتري رابط تذكرة منفصلًا لكل شخص. شارك الروابط ليصل كل واحد بشكل مستقل.",
+  "h_x_shared_label": "الشلة كلها",
+  "h_x_shared_short": "تذكرة مشتركة. والوصول معًا.",
+  "h_x_shared_tag": "تذكرة جماعية مشتركة",
+  "h_x_shared_title": "خلّي الشلة مع بعض.",
+  "h_x_shared_p": "التذكرة الجماعية المشتركة لها رمز QR واحد لكل الأشخاص المسجلين عليها. احضروا معًا وجهزوا الرمز لفريق الباب.",
+  "h_x_preview": "للتوضيح فقط",
+  "h_x_you": "تذكرتك",
+  "h_x_friend": "صديق {n}",
+  "h_x_group": "مجموعتك"
+});
+
+Object.assign(SahraText.en, {nav_account: "Account"});
+Object.assign(SahraText.ar, {nav_account: "حسابك"});

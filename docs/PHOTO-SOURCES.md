@@ -12,3 +12,14 @@ The following public Pinterest image references were selected from the signed-ou
 - `public/img/hero/hero-24.jpg`: https://i.pinimg.com/736x/81/61/16/816116556d5f2344bd2b5c41512a22e7.jpg
 
 The owner excluded preview images 4 and 6 (the sparkler portrait and candlelit dinner), so hero-21 and hero-23 were not added.
+
+## Sahra ticket concept (19 October 2026)
+
+`public/img/sahra-ticket-fan.webp` is an original AI-generated decorative
+product illustration created for Sahra, inspired by the owner's angled paper
+ticket reference. It contains a non-functional decorative square pattern and
+is explicitly labelled as a demo. It is not a ticket or an admission credential.
+The fan is an overlapping set of standalone ticket renders, without event listings.
+The original generated PNGs remain outside the repository. WebP compression
+uses sharp at quality 88. The homepage hero placement is a local browser experiment
+only; the final fan appears on About and in the homepage ticket-options guide, in English and Arabic.
