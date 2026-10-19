@@ -1238,3 +1238,66 @@ network-failure states on About and Contact, in EN/AR at 390/768/1440 px. They
 verify matching footer/header destinations, no signed-out flash for a known
 session, language changes, zero overflow and one shared authentication request.
 Required TypeScript and Vitest checks pass. No migration is needed.
+
+### Verified booking cancellation and organised mobile staff pages
+
+Requests and Guests now share one server-resolved booking view. It includes every
+member across status tabs, search results and pagination, with pending/deleted-request/active-position/cancelled-position/
+rejected/checked-in counts. A cancelled record remains history, never an active
+guest. Previously sent email is displayed separately from current entry status.
+Cancellation history shows the staff member and time. Each member has an explicit
+Delete request (pending) or Cancel position (approved) action; the whole booking has a separate confirmation
+listing every member. This applies equally to Duo, Squad and other split orders.
+
+Whole-booking cancellation binds the confirmation to member IDs and revisions.
+A materialised eligibility check makes the SQL update all-or-nothing, including
+session validity and a concurrent door scan. If anyone has already checked in,
+the action refuses the whole booking and explains how to cancel remaining unused
+tickets individually. Intents are written to the separate ledger first; changes
+and audits are flushed before success. A read-back verifies no active or used
+tickets remain. Retrying keeps the operation and confirmed revisions unchanged;
+stale confirmation is refused. Unlogged changes show an unconfirmed warning and
+a retry action, including after refreshing the page. Single cancellation also
+verifies its resulting status. No email is recalled or sent by cancellation.
+
+Requests has exactly two tabs: Pending (approval/rejection tools) and All
+requests (status filters). Guests has Active guests and All records, separating
+waiting requests and cancelled/rejected history from approved guests. Shared
+filters search the server across pages by name/email/reference/Instagram, type,
+status, QR release or confirmed email delivery, entry, booking and cash payment.
+Filter chips and reset controls make the current scope visible. Both pages use
+previous/next arrows and page numbers, 20 tickets per page, retaining filters and
+search. Controls disable at boundaries and while loading; moving page focuses
+its first result. Complete booking details remain independent of visible rows.
+Booking references can be copied and opened in either staff page. Other open
+staff tabs refresh after a change without storing guest details locally.
+
+The phone overview follows the owner's mobile dashboard reference: a large
+check-in/capacity card, a two-column metric grid, request sparkline and shortcuts.
+Overview, Activity and Ticket types are separate keyboard-operable tabs. The
+phone bottom menu is Overview / Requests / Guests / More; More contains settings,
+emails, team and sign-out. Marketing navigation/footer are hidden on phone staff
+pages. Desktop keeps its horizontal menu and existing metric/chart layout.
+Scanner/admission buttons are clearer, and the admission action disables while
+saving. No scanner verdict or admission rule was changed.
+
+The owner explicitly requested glassmorphism, replacing the earlier flat-only
+visual preference: dark translucent surfaces, subtle backdrop blur and borders,
+blue accent and no gradients. QR and scanner verdict surfaces retain their
+opaque contrast. An opaque fallback and reduced-transparency treatment are
+included. All new wording is bilingual, with RTL controls and focus management.
+
+No migration is required. No existing booking, ticket price, wave rule, real
+email or production guest record was changed during development. In particular,
+already partially cancelled bookings require the organiser to review and use the
+new whole-booking action; this release does not silently cancel remaining guests.
+
+Validation: TypeScript and all 565 Vitest tests across 44 files pass. Booking
+regressions cover Duo and Squad, sent-email receipts and saved QRs, mixed status
+and paginated orders, unchanged paid prices, active guest counts, repeat/stale
+operations, door-scan races, same-email independent bookings, role/party/CSRF
+boundaries, unauthenticated zero-write requests and ledger outages. Local browser
+checks pass 12 booking layouts, 12 filter/pagination layouts with 45 tickets over
+three pages, and six dashboard layouts in EN/AR at 390/768/1440. They report 0px
+overflow and zero unexpected JavaScript errors; 72 booking buttons measure at
+least 44px high. All browser mutations use intercepted fixtures.

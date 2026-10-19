@@ -66,6 +66,7 @@ and review time. See the end of docs/PHASE5.md.
 - Database migrations are applied by the owner, on staging first.
 
 **Writing and design**
+- Latest owner preference: glassmorphism on dark Sahra surfaces, with blue accent, subtle blur and borders, and no gradients. This overrides the older flat-only/no-gloss preference below. Keep QR and scanner verdict contrast opaque.
 - No emojis in the UI or in emails.
 - No em dashes in user-facing text.
 - Professional wording: "Time" and "Location", not "When" and "Where".

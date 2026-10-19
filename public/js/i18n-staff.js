@@ -1526,3 +1526,253 @@ Object.assign(SahraText.ar, {
 
 SahraText.en.e_invalid_wave = SahraText.en.s_wave_invalid;
 SahraText.ar.e_invalid_wave = SahraText.ar.s_wave_invalid;
+
+Object.assign(SahraText.en, {
+  "bk_details": "Booking details and entry status",
+  "bk_summary": "{total} tickets: {active} active, {cancelled} cancelled, {rejected} rejected, {used} checked in",
+  "bk_all_cancelled": "All tickets cancelled. No entry.",
+  "bk_partial": "Partially cancelled. Other tickets in this booking are still active.",
+  "bk_rule": "Requests and Guests show the same tickets. Cancelling an approved request removes entry permission and active guest counts. The cancelled record stays in history.",
+  "bk_guide": "How bookings, tickets and emails work",
+  "bk_guide_body": "A booking can contain several individual QR tickets. Cancel one person to keep the others, or cancel the entire booking to revoke every unused ticket. Sent emails and saved QR images cannot be recalled, but cancelled tickets are refused by the online scanner. Refresh booking details to verify the current result.",
+  "bk_cancel_one": "Cancel this person’s ticket",
+  "bk_cancel_all": "Cancel entire booking",
+  "bk_confirm_one": "Cancel only {name} ({ref})? Other tickets in this booking stay unchanged. Previously emailed or saved copies of this ticket will no longer grant entry.",
+  "bk_confirm_all": "Cancel entry for this entire booking?\n\n{members}\n\nEvery active ticket listed above will be cancelled. Sent emails and saved QR images will no longer grant entry.",
+  "bk_verified": "Verified: no active tickets remain in this booking.",
+  "bk_one_verified": "Verified: this ticket is cancelled. Check the booking summary for other members.",
+  "bk_changed": "The booking changed. Review the refreshed members and confirm again. No complete cancellation has been confirmed.",
+  "bk_used": "Someone has already checked in. Whole-booking cancellation is blocked. You can cancel the remaining unused tickets individually.",
+  "bk_refresh": "Refresh entry status",
+  "bk_sent_cancelled": "Email previously sent. Ticket now cancelled.",
+  "bk_email_sent": "Email sent: {when}",
+  "bk_email_pending": "Email delivery: {status}. Delivery does not determine entry permission.",
+  "bk_cancel_history": "Cancelled {when} by {name}",
+  "bk_unknown_actor": "Recorded staff member",
+  "bk_inactive": "This is history, not an active guest. The QR cannot grant entry.",
+  "bk_no_active": "No active tickets remain. Cancelled and rejected records are retained for history.",
+  "bk_copy": "Copy booking reference",
+  "bk_refresh_hint": "The list may show only one status or page. Booking details always include every member.",
+  "bk_busy": "Checking current booking…",
+  "bk_not_confirmed": "Cancellation is not confirmed. Refresh and retry with the same action. Do not assume entry has been revoked.",
+  "bk_complete": "Booking cancellation verified"
+});
+
+Object.assign(SahraText.ar, {
+  "bk_details": "تفاصيل الحجز وحالة الدخول",
+  "bk_summary": "{total} تذاكر: {active} نشطة، {cancelled} ملغاة، {rejected} مرفوضة، {used} تم دخولها",
+  "bk_all_cancelled": "كل التذاكر ملغاة. لا يُسمح بالدخول.",
+  "bk_partial": "الحجز ملغى جزئيًا. توجد تذاكر أخرى نشطة في هذا الحجز.",
+  "bk_rule": "الطلبات والضيوف يعرضان التذاكر نفسها. إلغاء طلب معتمد يلغي صلاحية الدخول ويزيله من أعداد الضيوف النشطين. يبقى السجل في تاريخ الإلغاءات.",
+  "bk_guide": "دليل الحجوزات والتذاكر والرسائل",
+  "bk_guide_body": "قد يتضمن الحجز عدة تذاكر QR فردية. ألغِ تذكرة شخص واحد للاحتفاظ بالبقية، أو ألغِ الحجز بالكامل لإلغاء جميع التذاكر غير المستخدمة. لا يمكن سحب الرسائل المرسلة أو صور QR المحفوظة، لكن الماسح المتصل يرفض التذاكر الملغاة. حدّث تفاصيل الحجز للتحقق من النتيجة الحالية.",
+  "bk_cancel_one": "إلغاء تذكرة هذا الشخص",
+  "bk_cancel_all": "إلغاء الحجز بالكامل",
+  "bk_confirm_one": "هل تريد إلغاء تذكرة {name} فقط ({ref})؟ لن تتغير التذاكر الأخرى في الحجز. النسخ المرسلة أو المحفوظة من هذه التذكرة لن تسمح بالدخول.",
+  "bk_confirm_all": "هل تريد إلغاء الدخول لهذا الحجز بالكامل؟\n\n{members}\n\nستُلغى كل التذاكر النشطة الموضحة أعلاه. الرسائل المرسلة وصور QR المحفوظة لن تسمح بالدخول.",
+  "bk_verified": "تم التحقق: لا توجد تذاكر نشطة متبقية في الحجز.",
+  "bk_one_verified": "تم التحقق: هذه التذكرة ملغاة. راجع ملخص الحجز لمعرفة حالة بقية الأعضاء.",
+  "bk_changed": "تغيّر الحجز. راجع الأعضاء بعد التحديث وأكد مجددًا. لم يتم تأكيد إلغاء الحجز بالكامل.",
+  "bk_used": "دخل أحد أعضاء الحجز بالفعل. لا يمكن إلغاء الحجز بالكامل. يمكنك إلغاء التذاكر المتبقية غير المستخدمة كلًا على حدة.",
+  "bk_refresh": "تحديث حالة الدخول",
+  "bk_sent_cancelled": "أُرسلت الرسالة سابقًا. التذكرة ملغاة الآن.",
+  "bk_email_sent": "أُرسلت الرسالة: {when}",
+  "bk_email_pending": "حالة الرسالة: {status}. إرسال الرسالة لا يحدد صلاحية الدخول.",
+  "bk_cancel_history": "أُلغيت {when} بواسطة {name}",
+  "bk_unknown_actor": "عضو الفريق المسجل",
+  "bk_inactive": "هذا سجل سابق وليس ضيفًا نشطًا. رمز QR لا يسمح بالدخول.",
+  "bk_no_active": "لا توجد تذاكر نشطة متبقية. تُحفظ السجلات الملغاة والمرفوضة ضمن التاريخ.",
+  "bk_copy": "نسخ مرجع الحجز",
+  "bk_refresh_hint": "قد تعرض القائمة حالة واحدة أو صفحة واحدة فقط. تفاصيل الحجز تشمل جميع الأعضاء دائمًا.",
+  "bk_busy": "جارٍ التحقق من الحجز…",
+  "bk_not_confirmed": "لم يتم تأكيد الإلغاء. حدّث الحالة وأعد المحاولة بالإجراء نفسه. لا تفترض أن صلاحية الدخول قد أُلغيت.",
+  "bk_complete": "تم التحقق من إلغاء الحجز"
+});
+
+Object.assign(SahraText.en, {bk_entry_guests:"Approved guests", bk_waiting_requests:"Waiting requests, not yet approved for entry", bk_history:"Cancelled and rejected history"});
+Object.assign(SahraText.ar, {bk_entry_guests:"الضيوف المعتمدون", bk_waiting_requests:"طلبات انتظار لم يُعتمد دخولها بعد", bk_history:"سجل الإلغاءات والرفض"});
+
+Object.assign(SahraText.en, {bk_retry:"Retry cancellation confirmation"});
+Object.assign(SahraText.ar, {bk_retry:"إعادة محاولة تأكيد الإلغاء"});
+
+Object.assign(SahraText.en, {
+  "bf_filters": "Filters",
+  "bf_apply": "Apply filters",
+  "bf_reset": "Clear filters",
+  "bf_all": "All",
+  "bf_status": "Ticket status",
+  "bf_type": "Ticket type",
+  "bf_delivery": "QR and email",
+  "bf_released": "QR released",
+  "bf_unreleased": "QR not released",
+  "bf_emailed": "Email delivery confirmed",
+  "bf_entry": "Entry",
+  "bf_used": "Checked in",
+  "bf_unused": "Not checked in",
+  "bf_booking": "Booking",
+  "bf_group": "Group booking",
+  "bf_single": "Single ticket",
+  "bf_partial": "Partially cancelled booking",
+  "bf_loaded": "{n} tickets loaded",
+  "bf_more": "Load next 20 tickets",
+  "bf_end": "All matching tickets loaded",
+  "bf_top": "Back to search",
+  "bf_search": "Search all tickets, not just this page",
+  "bf_browse": "Browse tickets",
+  "bf_more_nav": "More",
+  "bf_close": "Close filters",
+  "bf_payment": "Payment",
+  "bf_cash": "Cash only",
+  "bf_result_hint": "Filters apply to all pages. Booking details still include every member."
+});
+
+Object.assign(SahraText.ar, {
+  "bf_filters": "عوامل التصفية",
+  "bf_apply": "تطبيق التصفية",
+  "bf_reset": "مسح التصفية",
+  "bf_all": "الكل",
+  "bf_status": "حالة التذكرة",
+  "bf_type": "نوع التذكرة",
+  "bf_delivery": "رمز QR والرسالة",
+  "bf_released": "تم إصدار رمز QR",
+  "bf_unreleased": "لم يُصدر رمز QR",
+  "bf_emailed": "تم تأكيد إرسال الرسالة",
+  "bf_entry": "الدخول",
+  "bf_used": "تم الدخول",
+  "bf_unused": "لم يتم الدخول",
+  "bf_booking": "الحجز",
+  "bf_group": "حجز جماعي",
+  "bf_single": "تذكرة منفردة",
+  "bf_partial": "حجز ملغى جزئيًا",
+  "bf_loaded": "تم تحميل {n} تذكرة",
+  "bf_more": "تحميل 20 تذكرة أخرى",
+  "bf_end": "تم تحميل كل التذاكر المطابقة",
+  "bf_top": "العودة إلى البحث",
+  "bf_search": "البحث في كل التذاكر وليس هذه الصفحة فقط",
+  "bf_browse": "تصفح التذاكر",
+  "bf_more_nav": "المزيد",
+  "bf_close": "إغلاق التصفية",
+  "bf_payment": "الدفع",
+  "bf_cash": "نقدًا فقط",
+  "bf_result_hint": "تُطبق التصفية على جميع الصفحات. وتبقى تفاصيل الحجز شاملة لكل الأعضاء."
+});
+
+Object.assign(SahraText.en, {
+  "dm_overview": "Party overview",
+  "dm_capacity_hint": "{approved} approved guests · {left} places available",
+  "dm_review_hint": "Review requests",
+  "dm_active_hint": "View approved guests",
+  "dm_ready": "Ready for entry",
+  "dm_ready_hint": "Approved, QR released",
+  "dm_revenue_hint": "Approved ticket value",
+  "dm_week": "Requests this week"
+});
+
+Object.assign(SahraText.ar, {
+  "dm_overview": "نظرة عامة على الحفلة",
+  "dm_capacity_hint": "{approved} ضيفًا معتمدًا · {left} مكانًا متاحًا",
+  "dm_review_hint": "مراجعة الطلبات",
+  "dm_active_hint": "عرض الضيوف المعتمدين",
+  "dm_ready": "جاهزون للدخول",
+  "dm_ready_hint": "معتمدون وتم إصدار QR",
+  "dm_revenue_hint": "قيمة التذاكر المعتمدة",
+  "dm_week": "طلبات هذا الأسبوع"
+});
+
+Object.assign(SahraText.en,{dm_tab_overview:"Overview",dm_tab_activity:"Activity",dm_tab_types:"Ticket types",dm_no_types:"No ticket type data yet."});
+Object.assign(SahraText.ar,{dm_tab_overview:"نظرة عامة",dm_tab_activity:"النشاط",dm_tab_types:"أنواع التذاكر",dm_no_types:"لا توجد بيانات لأنواع التذاكر بعد."});
+
+Object.assign(SahraText.en,{bf_all_requests:"All requests",bf_active_guests:"Active guests",bf_all_records:"All records",dm_shortcuts:"Shortcuts",dm_add_guest:"Issue a ticket",dm_pending_shortcut:"Review pending",dm_email_shortcut:"Email queue"});
+Object.assign(SahraText.ar,{bf_all_requests:"كل الطلبات",bf_active_guests:"الضيوف النشطون",bf_all_records:"كل السجلات",dm_shortcuts:"اختصارات",dm_add_guest:"إصدار تذكرة",dm_pending_shortcut:"مراجعة الانتظار",dm_email_shortcut:"قائمة الرسائل"});
+
+Object.assign(SahraText.en,{bf_pages:"Ticket pages",bf_page:"Page {n}",bf_page_count:"{n} tickets on this page",bf_previous:"Previous page",bf_next:"Next page"});
+Object.assign(SahraText.ar,{bf_pages:"صفحات التذاكر",bf_page:"صفحة {n}",bf_page_count:"{n} تذكرة في هذه الصفحة",bf_previous:"الصفحة السابقة",bf_next:"الصفحة التالية"});
+
+Object.assign(SahraText.en,{bk_open_guests:"Open in Guests",bk_open_requests:"Open in Requests",dm_revenue_hint:"Approved value in EGP"});
+Object.assign(SahraText.ar,{bk_open_guests:"فتح في الضيوف",bk_open_requests:"فتح في الطلبات",dm_revenue_hint:"القيمة المعتمدة بالجنيه"});
+
+Object.assign(SahraText.en,{dm_ready:"QR released",dm_ready_hint:"Approved guests with issued QR tickets"});
+Object.assign(SahraText.ar,{dm_ready:"تم إصدار QR",dm_ready_hint:"ضيوف معتمدون صدرت رموز تذاكرهم"});
+
+Object.assign(SahraText.en, {
+  "bk_cancel_one": "Cancel position",
+  "bk_cancel_all": "Cancel all positions",
+  "bk_delete_request": "Delete request",
+  "bk_delete_all": "Delete all pending requests",
+  "bk_mixed_action": "Delete pending requests and cancel positions",
+  "bk_confirm_delete": "Delete the pending request for {name} ({ref})? It will leave the approval queue and cannot grant entry. Other members stay unchanged. The deleted request remains in history.",
+  "bk_confirm_one": "Cancel the approved position of {name} ({ref})? Their QR, including emailed or saved copies, will no longer grant entry. Other members stay unchanged.",
+  "bk_confirm_all": "Apply these actions to the whole booking?\n\n{members}\n\nPending requests will be deleted from the approval queue. Approved positions will be cancelled and their QRs invalidated. Previously deleted, cancelled or rejected records stay in history.",
+  "bk_one_verified": "Verified: this position is cancelled and its QR cannot grant entry. Other members are unchanged.",
+  "bk_deleted_verified": "Verified: this request is deleted from Pending. It does not grant entry. Other members are unchanged.",
+  "bk_all_deleted": "All pending requests deleted. No entry positions remain.",
+  "bk_all_cancelled": "All positions cancelled. No entry.",
+  "bk_deleted": "Request deleted",
+  "bk_position_cancelled": "Position cancelled",
+  "bk_partial": "Booking partially closed. Review the remaining requests and positions below.",
+  "bk_deleted_email": "Email previously sent. Request now deleted. No entry permission.",
+  "bk_delete_history": "Request deleted {when} by {name}",
+  "bk_total_records": "Booking: {n}",
+  "bk_count_pending": "{n} pending requests",
+  "bk_count_pending_one": "1 pending request",
+  "bk_count_active": "{n} active positions",
+  "bk_count_active_one": "1 active position",
+  "bk_count_cancelled": "{n} cancelled positions",
+  "bk_count_cancelled_one": "1 cancelled position",
+  "bk_count_deleted": "{n} deleted requests",
+  "bk_count_deleted_one": "1 deleted request",
+  "bk_count_rejected": "{n} rejected requests",
+  "bk_count_rejected_one": "1 rejected request",
+  "bk_count_used": "{n} checked in",
+  "bk_count_used_one": "1 checked in",
+  "bk_restore_request": "Restore request",
+  "bk_restore_request_confirm": "Return the deleted request of {name} to Pending? It will still need approval before entry can be granted.",
+  "g_cancel": "Cancel position",
+  "g_restore": "Restore position",
+  "q_cancelled_tab": "Deleted / cancelled",
+  "bk_history": "Deleted requests, cancelled positions and rejected requests",
+  "bk_rule": "Pending means a request to enter, not an approved guest. Delete request removes it from Pending. Cancel position revokes an approved guest and invalidates their QR. Both pages show the same records and retain history."
+});
+
+Object.assign(SahraText.ar, {
+  "bk_cancel_one": "إلغاء مكان الدخول",
+  "bk_cancel_all": "إلغاء كل أماكن الدخول",
+  "bk_delete_request": "حذف الطلب",
+  "bk_delete_all": "حذف كل طلبات الانتظار",
+  "bk_mixed_action": "حذف طلبات الانتظار وإلغاء أماكن الدخول",
+  "bk_confirm_delete": "هل تريد حذف طلب الانتظار الخاص بـ {name} ({ref})؟ سيخرج من قائمة الاعتماد ولن يسمح بالدخول. لن تتغير حالة بقية الأعضاء. يبقى الطلب المحذوف في السجل.",
+  "bk_confirm_one": "هل تريد إلغاء مكان الدخول المعتمد لـ {name} ({ref})؟ رمز QR الخاص به، بما في ذلك النسخ المرسلة أو المحفوظة، لن يسمح بالدخول. لن تتغير حالة بقية الأعضاء.",
+  "bk_confirm_all": "هل تريد تطبيق هذه الإجراءات على الحجز بالكامل؟\n\n{members}\n\nستُحذف طلبات الانتظار من قائمة الاعتماد. وستُلغى أماكن الدخول المعتمدة وتصبح رموز QR غير صالحة. تبقى الطلبات المحذوفة والمرفوضة والأماكن الملغاة السابقة في السجل.",
+  "bk_one_verified": "تم التحقق: أُلغي مكان الدخول ولا يسمح رمز QR بالدخول. لم تتغير حالة بقية الأعضاء.",
+  "bk_deleted_verified": "تم التحقق: حُذف هذا الطلب من الانتظار ولا يسمح بالدخول. لم تتغير حالة بقية الأعضاء.",
+  "bk_all_deleted": "حُذفت كل طلبات الانتظار. لا توجد أماكن دخول متبقية.",
+  "bk_all_cancelled": "أُلغيت كل أماكن الدخول. لا يُسمح بالدخول.",
+  "bk_deleted": "تم حذف الطلب",
+  "bk_position_cancelled": "تم إلغاء مكان الدخول",
+  "bk_partial": "الحجز مغلق جزئيًا. راجع الطلبات وأماكن الدخول المتبقية أدناه.",
+  "bk_deleted_email": "أُرسلت الرسالة سابقًا. حُذف الطلب الآن ولا يسمح بالدخول.",
+  "bk_delete_history": "حُذف الطلب {when} بواسطة {name}",
+  "bk_total_records": "الحجز: {n}",
+  "bk_count_pending": "{n} طلبات انتظار",
+  "bk_count_pending_one": "طلب انتظار واحد",
+  "bk_count_active": "{n} أماكن دخول نشطة",
+  "bk_count_active_one": "مكان دخول نشط واحد",
+  "bk_count_cancelled": "{n} أماكن دخول ملغاة",
+  "bk_count_cancelled_one": "مكان دخول ملغى واحد",
+  "bk_count_deleted": "{n} طلبات محذوفة",
+  "bk_count_deleted_one": "طلب محذوف واحد",
+  "bk_count_rejected": "{n} طلبات مرفوضة",
+  "bk_count_rejected_one": "طلب مرفوض واحد",
+  "bk_count_used": "{n} تم دخولهم",
+  "bk_count_used_one": "تم دخول شخص واحد",
+  "bk_restore_request": "استعادة الطلب",
+  "bk_restore_request_confirm": "هل تريد إعادة طلب {name} المحذوف إلى الانتظار؟ سيظل بحاجة إلى الاعتماد قبل السماح بالدخول.",
+  "g_cancel": "إلغاء مكان الدخول",
+  "g_restore": "استعادة مكان الدخول",
+  "q_cancelled_tab": "محذوفة / ملغاة",
+  "bk_history": "الطلبات المحذوفة وأماكن الدخول الملغاة والطلبات المرفوضة",
+  "bk_rule": "الانتظار يعني طلب دخول وليس ضيفًا معتمدًا. حذف الطلب يزيله من الانتظار. إلغاء مكان الدخول يلغي اعتماد الضيف ويُبطل رمز QR الخاص به. تعرض الصفحتان السجلات نفسها وتحتفظان بالتاريخ."
+});
+
+Object.assign(SahraText.en,{bk_sent_cancelled:"Email previously sent. Position now cancelled.",bk_verified:"Verified: no pending requests or active positions remain in this booking.",bk_no_active:"No pending requests or active positions remain. Deleted, cancelled and rejected records are history.",bk_guide_body:"Pending is a request to enter. Use Delete request to remove it from approval. Once approved, use Cancel position to revoke entry, including an emailed or saved QR. A booking can contain several people. Check every member or use the explicit whole-booking action.",bf_page_count:"{n} records on this page"});
+Object.assign(SahraText.ar,{bk_sent_cancelled:"أُرسلت الرسالة سابقًا. أُلغي مكان الدخول الآن.",bk_verified:"تم التحقق: لا توجد طلبات انتظار أو أماكن دخول نشطة متبقية في هذا الحجز.",bk_no_active:"لا توجد طلبات انتظار أو أماكن دخول نشطة. السجلات المحذوفة والملغاة والمرفوضة ضمن التاريخ.",bk_guide_body:"الانتظار هو طلب دخول. استخدم حذف الطلب لإزالته من الاعتماد. بعد الاعتماد استخدم إلغاء مكان الدخول لمنع الدخول، حتى برمز QR مُرسل أو محفوظ. قد يشمل الحجز عدة أشخاص. راجع كل عضو أو استخدم الإجراء الصريح للحجز بالكامل.",bf_page_count:"{n} سجلًا في هذه الصفحة"});

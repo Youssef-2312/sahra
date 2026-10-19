@@ -1,7 +1,7 @@
 // Approval queue: /queue.html (owner and admin). One card per request with the
 // main action obvious (brainstorm ideas 10 and 11): "Approve and send QR" does
 // both in one tap (approve, then release); "Approve only" and "Reject" sit
-// beside it. Tabs: Waiting / Approved / Rejected. Several requests can be
+// beside it. Tabs: Pending / All requests. Several requests can be
 // selected and handled together (up to 20 at a time, the server's limit).
 //
 // Every rule (party full, type full, request changed) is checked by the server
@@ -13,8 +13,12 @@
   var t = Sahra.t, el = Sahra.el;
   var app = document.getElementById("app");
   var MAX = 20;
-  var TABS = [["pending", "q_waiting"], ["approved", "q_approved"], ["rejected", "q_rejected"], ["cancelled", "q_cancelled_tab"]];
+  var filters = {}, filterTypes = [], loadingRows = false, loadSeq = 0, pageIndex = 0, pageCursors = [null];
+  var TABS = [["pending", "q_waiting"], ["all", "bf_all_requests"]];
   var me = null, tab = "pending", rows = null, next = null, failed = null, cashOnly = false;
+  var initialFilters = new URLSearchParams(location.search);
+  ["q","status","type","delivery","entry","booking","payment"].forEach(function(k){if(initialFilters.has(k))filters[k]=initialFilters.get(k);});
+  if(initialFilters.size)tab="all";
   var selected = {};              // id -> true
   var notes = {};                 // id -> { cls, text }: the answer shown on a card after an action
   var bulkNote = null;
@@ -67,22 +71,6 @@
       out[id] = r.ok && ok(r.body.results[id]) ? { cls: "yes", text: t("q_rejected_done"), state: "rejected" }
         : { cls: "no", text: r.ok ? t("q_refused") : r.status === 503 ? t("not_confirmed") : Sahra.errorText(r) };
     });
-    return out;
-  }
-
-  // Cancel approved tickets (the same action as on the Guests page): one op per ticket, kept until
-  // its answer is known, so a retry never cancels twice. Tickets already scanned are refused by the server.
-  var cancelOps = {};
-  async function cancelTickets(ids) {
-    var out = {};
-    for (var i = 0; i < ids.length; i++) {
-      var id = ids[i];
-      var op = cancelOps[id] || (cancelOps[id] = crypto.randomUUID());
-      var r = await post("/api/tickets/" + encodeURIComponent(id) + "/cancel", { op: op });
-      if (r.status !== 503) delete cancelOps[id];
-      out[id] = r.ok ? { cls: "yes", text: t("q_cancelled_done"), state: "cancelled" }
-        : { cls: "no", text: r.status === 409 ? t("q_refused") : r.status === 503 ? t("not_confirmed") : Sahra.errorText(r) };
-    }
     return out;
   }
 
@@ -240,14 +228,7 @@
             run(ids, restoreTickets);
           } } }));
       }
-      // Approved and not yet at the door: can be cancelled here too, on any screen.
-      if (tab === "approved" && !(row.members || [row]).some(function (m) { return m.used_at; })) {
-        actions.appendChild(el("button", { class: "btn no", text: ids.length > 1 ? t("q_cancel_n", { n: ids.length }) : t("g_cancel"), attrs: { type: "button" },
-          on: { click: async function () {
-            if (!(await Sahra.confirm(t("g_cancel_confirm", { name: row.guest_name || Sahra.ref(row.id) }), { danger: true, ok: t("g_cancel") }))) return;
-            run(ids, cancelTickets);
-          } } }));
-      }
+
     }
     // After "Approve and send" failed to send: offer Send QR on the same card.
     if (tab === "pending" && note && note.cls === "maybe" && !busy) {
@@ -259,7 +240,7 @@
       : tab === "rejected" ? el("span", { class: "pill no", text: t("q_rejected") })
       : tab === "cancelled" ? el("span", { class: "pill no", text: t("q_cancelled_tab") }) : null;
 
-    return el("article", { class: "req" + (finished ? " done" : "") },
+    return el("article", { class: "req" + (finished ? " done" : ""), attrs: {"data-ticket":row.id,"data-booking":row.booking && row.booking.id || row.id,tabindex:-1} },
       el("div", { class: "head" },
         el("label", { class: "check" }, box,
           el("span", null, el("span", { class: "who", text: row.guest_name || "-", attrs: { dir: "auto" } }), el("br"),
@@ -271,6 +252,7 @@
       row.same_email ? el("p", { class: "notice maybe small", text: t("q_same_email", { n: row.same_email }) }) : null,
       tab === "rejected" && row.reject_reason ? el("p", { class: "small muted", text: t("q_reason", { reason: row.reject_reason }), attrs: { dir: "auto" } }) : null,
       shot, details,
+      SahraBooking.card(row, function () { load(false); }),
       note ? el("p", { class: "notice " + note.cls, text: note.text }) : null,
       actions.firstChild ? actions : null);
   }
@@ -315,10 +297,8 @@
       return el("button", { text: t(x[1]), attrs: { type: "button", "aria-pressed": tab === x[0] ? "true" : "false" },
         on: { click: function () { if (tab !== x[0]) { tab = x[0]; load(false); } } } });
     })));
-    // Guests who paid the organiser in cash (brainstorm idea 9), on any tab.
-    var cashChip = el("button", { class: "chip", text: t("q_cash_only"), attrs: { type: "button", "aria-pressed": cashOnly ? "true" : "false" },
-      on: { click: function () { cashOnly = !cashOnly; load(false); } } });
-    content.appendChild(el("div", { class: "chips q-filters" }, cashChip));
+    content.appendChild(SahraBooking.guide());
+    content.appendChild(SahraBooking.filters(filters, filterTypes, function (v) { filters = v; cashOnly = v.payment === "cash"; load(false); }, tab === "all"));
     if (bulkNote) content.appendChild(el("p", { class: "notice " + bulkNote.cls, text: bulkNote.text }));
     if (failed) { content.appendChild(el("p", { class: "notice no", text: failed })); return; }
     if (!rows) { content.appendChild(el("p", { class: "muted", text: t("loading") })); return; }
@@ -326,11 +306,13 @@
     else {
       // The filter redraws only the list below it, so typing keeps its place.
       var list = el("div");
-      content.appendChild(Sahra.findBox({ value: find, placeholder: t("q_find_ph"), onChange: function (v) { find = v; fillList(list); } }));
+
       content.appendChild(list);
       fillList(list);
     }
-    if (next) content.appendChild(el("button", { class: "btn", text: t("q_more"), attrs: { type: "button", disabled: busy }, on: { click: function () { load(true); } } }));
+    content.appendChild(SahraBooking.pager(rows.length, next, loadingRows, function (direction) { load(direction); }, function () {
+      var search = content.querySelector('.bk-search input'); search.scrollIntoView({block:"center"}); search.focus({preventScroll:true});
+    }, pageIndex));
     content.appendChild(el("div", { class: "page-tools" },
       el("div", { class: "stack buttons" }, el("button", { class: "btn", text: t("q_export"), attrs: { type: "button" }, on: { click: exportCsv } })),
       tab === "pending" ? staleTool() : null));
@@ -391,13 +373,29 @@
     return d;
   }
 
-  async function load(append) {
-    if (!append) { rows = null; next = null; selected = {}; notes = {}; bulkNote = null; failed = null; render(); }
-    var r = await Sahra.api.get("/api/tickets?status=" + tab + (cashOnly ? "&payment=cash" : "") + (append && next ? "&after=" + encodeURIComponent(next) : ""));
+  async function load(direction) {
+    var move = direction === 1 || direction === -1 ? direction : 0;
+    if (move && (loadingRows || (move < 0 && !pageIndex) || (move > 0 && !next))) return;
+    var target = move ? pageIndex + move : 0;
+    if (!move) pageCursors = [null];
+    if (move > 0) pageCursors[target] = next;
+    var seq = ++loadSeq;
+    loadingRows = true;
+    if (!move) { rows = null; next = null; pageIndex = 0; selected = {}; notes = {}; bulkNote = null; failed = null; }
+    render();
+    var params = SahraBooking.params(Object.assign({}, filters, {status:tab === "pending" ? "pending" : filters.status || "all",limit:20}));
+    if (pageCursors[target]) params.set("after", pageCursors[target]);
+    var r = await Sahra.api.get("/api/tickets?" + params.toString());
+    if (seq !== loadSeq) return;
+    loadingRows = false;
     if (!r.ok) { failed = Sahra.errorText(r); render(); return; }
-    rows = (append && rows ? rows : []).concat(r.body.tickets);
+    rows = r.body.tickets; pageIndex = target; selected = {};
     next = r.body.next;
     render();
+    if (move) {
+      var first = app.querySelector('.req') || app.querySelector('.bk-pager');
+      if (first) { first.scrollIntoView({block:"start"}); first.focus({preventScroll:true}); }
+    }
   }
 
   // --- guest list download (the same CSV as the queue tools page) ----------
@@ -435,10 +433,17 @@
     a.remove();
   }
 
+  window.addEventListener("storage", function (e) { if (e.key === "sahra_ticket_change" && me && !busy) load(false); });
+  document.addEventListener("visibilitychange", function () { if (document.visibilityState === "visible" && me && !busy) load(false); });
+
   (async function () {
     me = await Sahra.api.me();
     if (me && me.staff.role === "door") { location.href = "/scan.html"; return; }
     Sahra.boot({ render: render, me: me });
-    if (me) load(false);
+    if (me) {
+      var typesResult = await Sahra.api.get("/api/tickets/types");
+      if (typesResult.ok) filterTypes = typesResult.body.types || [];
+      load(false);
+    }
   })();
 })();
