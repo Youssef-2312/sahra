@@ -23,3 +23,11 @@ The fan is an overlapping set of standalone ticket renders, without event listin
 The original generated PNGs remain outside the repository. WebP compression
 uses sharp at quality 88. The homepage hero placement is a local browser experiment
 only; the final fan appears on About and in the homepage ticket-options guide, in English and Arabic.
+
+### Single ticket on About
+
+`public/img/sahra-ticket-single.webp` uses the original Sahra paper-ticket
+concept from the same generation session (quality 88 WebP). About uses this
+single ticket with original scroll/pointer motion inspired by the owner's
+Keynote reference, not its images or Framer code. The fan stays in Home's
+separate ticket-options guide. Both are decorative demo artwork.

@@ -50,7 +50,6 @@ var NIGHT_HOUR = 3;                      // nightly backups start from 03:00 in 
 var KEEP_ALL_HOURS = 48;                 // keep every backup this long, then one nightly per day (hourly ones go)
 var KEEP_DAYS = 30;
 var MAX_FAILURES = 3;                    // runs in a row before a backup is abandoned (and reported)
-var ALERT_EVERY_MS = 6 * 3600 * 1000;    // at most one email per problem per 6 hours
 var PREFIX = { nightly: 'sahra-backup-', hourly: 'sahra-ledger-' };
 var INCOMPLETE = 'INCOMPLETE ';
 
@@ -539,14 +538,23 @@ function failed_(props, e) {
   }
 }
 
-/** Email from this account to itself (or ALERT_EMAIL). Plain text, at most one per problem per 6 hours. */
+/** Email from this account to itself (or ALERT_EMAIL), at most one per calendar day across all problems. */
 function alert_(props, kind, subject, body) {
-  var key = 'ALERT_' + kind.toUpperCase();
-  var last = Number(props.getProperty(key) || 0);
-  if (Date.now() - last < ALERT_EVERY_MS) return;
-  props.setProperty(key, String(Date.now()));
+  var mode = 'daily'; // Sahra backup email preference: off or daily
+  if (mode === 'off') { log_('Backup email alerts are off; see Executions for errors.'); return; }
+  var day = dayOf_(Date.now());
+  if (props.getProperty('SAHRA_ALERT_LAST_DAY') === day) return;
+  // One attempt per calendar day across ALL problems, in the script time zone.
+  props.setProperty('SAHRA_ALERT_LAST_DAY', day);
   var to = props.getProperty('ALERT_EMAIL') || Session.getEffectiveUser().getEmail();
-  MailApp.sendEmail(to, subject, body + '\n\nSent by the Sahra backup script in this Google account (Apps Script).');
+  try {
+    MailApp.sendEmail(to, subject, body + '\n\nSent by the Sahra backup script in this Google account (Apps Script).'
+      + '\nAt most one backup alert per day. Check Executions for later errors.'
+      + '\nتنبيه نسخ احتياطي واحد يوميًا كحد أقصى. راجع سجل التنفيذ للأخطاء التالية.');
+  } catch (e) {
+    // An email failure must not fail the backup or create another trigger-failure email.
+    log_('Backup alert could not be sent; see Executions.');
+  }
 }
 
 function overBudget_(props, now) {
