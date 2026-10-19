@@ -36,13 +36,14 @@
   }, { threshold: .05 });
   states.forEach(function (s) {
     observer.observe(s.stage);
-    s.stage.addEventListener("pointermove", function (e) {
+    var pointerTarget = s.stage.closest(".ab-hero") || s.stage;
+    pointerTarget.addEventListener("pointermove", function (e) {
       if (!fine.matches || e.pointerType !== "mouse") return;
       var r = s.stage.getBoundingClientRect();
       s.px = clamp((e.clientX - r.left) / r.width * 2 - 1);
       s.py = clamp((e.clientY - r.top) / r.height * 2 - 1); wake(s);
     });
-    s.stage.addEventListener("pointerleave", function () { s.px = s.py = 0; wake(s); });
+    pointerTarget.addEventListener("pointerleave", function () { s.px = s.py = 0; wake(s); });
   });
   window.addEventListener("scroll", function () { states.forEach(wake); }, { passive: true });
   window.addEventListener("resize", function () { states.forEach(wake); }, { passive: true });
