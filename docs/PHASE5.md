@@ -1166,3 +1166,19 @@ Six EN/AR layouts at 390/768/1440 px verify 0px overflow, artwork covering the
 copy, higher text stacking order, and usable action links. Motion checks retain
 scroll/pointer movement with static reduced motion. Required TypeScript and
 Vitest checks pass before committing. No database migration is needed.
+
+### Footer account link follows the header (19 October 2026)
+
+The footer's guest links no longer hardcode Sign in. It receives the same account
+state and destination as the header, including staff sessions supplied by the
+page, the known-session hint while validating, and the confirmed asynchronous
+response. Signed-in users see Account linked to their dashboard, scanner or
+platform panel. Signed-out/expired users see Sign in. Language switches preserve
+the correct state and destination. The footer makes no extra authentication
+request, and no account data is newly cached.
+
+Browser fixtures cover owner, door, site owner, organiser, visitor, expired and
+network-failure states on About and Contact, in EN/AR at 390/768/1440 px. They
+verify matching footer/header destinations, no signed-out flash for a known
+session, language changes, zero overflow and one shared authentication request.
+Required TypeScript and Vitest checks pass. No migration is needed.
