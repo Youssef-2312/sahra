@@ -358,7 +358,7 @@ var Sahra = (function () {
       });
     }, { threshold: .12 });
     revealPending.forEach(function (node) { if (!node.isConnected) { revealObserver.unobserve(node); revealPending.delete(node); } });
-    root.querySelectorAll(".party-card, .why-tile, .step-card, .home-story-copy, .home-photos, .home-guide-head, .home-guide-list li, .faq details, .ab-card, .ab-section").forEach(function (node) {
+    root.querySelectorAll(".party-card, .why-tile, .step-card, .home-story-copy, .home-photos, .home-guide-head, .home-guide-list li, .faq details, .ab-card, .ab-section, .tile.stat, .dash .charts .card").forEach(function (node) {
       if (revealed.has(node)) return;
       revealed.add(node); revealPending.add(node); revealObserver.observe(node);
     });
