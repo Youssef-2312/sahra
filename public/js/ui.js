@@ -307,7 +307,7 @@ var Sahra = (function () {
         if (location.pathname.replace(/\.html$/, "") === item[1].replace(/\.html$/, "")) link.setAttribute("aria-current", "page");
         publicNav.appendChild(link);
       });
-      footer(foot);
+      footer(foot, { signedIn: !!me || (checkingAccount && !!store.get(SESSION_KEY)), href: account.getAttribute("href") });
     }
     sw.addEventListener("click", function () {
       var draft = captureDrafts();
@@ -318,7 +318,7 @@ var Sahra = (function () {
       restoreDrafts(draft);
     });
     label();
-    if (!me) signedIn(function (who) { me = who; showName(who.name); account.setAttribute("href", who.href); }).finally(function () {
+    if (!me) signedIn(function (who) { me = who; showName(who.name); account.setAttribute("href", who.href); footer(foot, { signedIn: true, href: who.href }); }).finally(function () {
       if (!me) label();
       account.classList.remove("account-checking");
     });
@@ -400,7 +400,7 @@ var Sahra = (function () {
 
   // Shared footer: photo invitation and compact black reference-style footer.
   var WHATSAPP = "201119990639", EMAIL = "novadevco@icloud.com";
-  function footer(node) {
+  function footer(node, account) {
     clear(node);
     var logo = el("img", { attrs: { src: NOVA_LOGO, alt: "", width: 24, height: 24 } });
     logo.addEventListener("error", function () { logo.remove(); });
@@ -446,7 +446,7 @@ var Sahra = (function () {
             el("a", { class: "icon-link", attrs: { href: NOVA_INSTAGRAM, target: "_blank", rel: "noopener", "aria-label": t("f_nova_instagram") } }, instagramIcon()),
             el("a", { class: "icon-link", attrs: { href: "https://wa.me/" + WHATSAPP, target: "_blank", rel: "noopener", "aria-label": t("f_wa") } }, chat))),
         col(t("f_site"), [[t("tab_home"), "/"], [t("about"), "/about.html"], [t("contact"), "/contact.html"], [t("privacy"), "/privacy.html"], [t("terms"), "/terms.html"]]),
-        col(t("f_guests"), [[t("f_explore"), "/#parties"], [t("find_tickets"), "/find"], [t("sign_in"), "/signin.html"]]),
+        col(t("f_guests"), [[t("f_explore"), "/#parties"], [t("find_tickets"), "/find"], [t(account && account.signedIn ? "nav_account" : "sign_in"), account && account.signedIn ? account.href : "/signin.html"]]),
         col(t("f_touch"), [["+20 111 999 0639", "tel:+" + WHATSAPP, false, true], [EMAIL, "mailto:" + EMAIL, false, true], ["@novadev.co", NOVA_INSTAGRAM, true, true]])),
       el("div", { class: "f-bottom" }, language,
         el("span", { class: "f-copyright", text: "\u00a9 " + new Date().getFullYear() + " Sahra. " + t("f_rights") }),
