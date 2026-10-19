@@ -1152,3 +1152,17 @@ project/URL refusal. The Playwright editor fixture verifies real clipboard
 copy/paste, both modes, full source read-back, save shortcut and wrong-project
 refusal with every Google request intercepted. Real Google login/editor behavior
 and Windows batch execution were not available in this Linux cloud environment.
+
+### About ticket behind the text (19 October 2026)
+
+Moved the single-ticket figure inside the About hero as a dimmed background
+layer behind the existing heading, introduction and actions in both languages.
+It no longer appears as a separate card below the copy. Copy stays above the
+artwork, with brighter supporting text for contrast. The decorative layer does
+not intercept links; pointer tilt now listens on the surrounding hero, retaining
+scroll movement and reduced-motion behavior. The Home ticket fan is unchanged.
+
+Six EN/AR layouts at 390/768/1440 px verify 0px overflow, artwork covering the
+copy, higher text stacking order, and usable action links. Motion checks retain
+scroll/pointer movement with static reduced motion. Required TypeScript and
+Vitest checks pass before committing. No database migration is needed.
