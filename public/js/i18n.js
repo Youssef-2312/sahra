@@ -1199,3 +1199,18 @@ Object.assign(SahraText.ar, {
 
 Object.assign(SahraText.en, {nav_account: "Account"});
 Object.assign(SahraText.ar, {nav_account: "حسابك"});
+
+Object.assign(SahraText.en, {
+  ap_title: "Appearance", ap_close: "Close appearance settings", ap_intro: "Choose how Sahra looks on this device. Changes apply immediately.",
+  ap_theme: "Colour theme", ap_system: "Device default", ap_light: "Light", ap_dark: "Dark", ap_density: "Spacing",
+  ap_comfortable: "Comfortable", ap_compact: "Compact", ap_motion: "Motion", ap_device_motion: "Follow device", ap_reduced: "Reduce motion",
+  ap_surfaces: "Surfaces", ap_glass: "Subtle glass", ap_solid: "Solid", ap_reset: "Reset to device defaults",
+  ap_accessibility: "Your device's reduced-motion and reduced-transparency settings are always respected. Compact spacing keeps touch controls at least 44 px high."
+});
+Object.assign(SahraText.ar, {
+  ap_title: "المظهر", ap_close: "إغلاق إعدادات المظهر", ap_intro: "اختر مظهر سهرة على هذا الجهاز. تُطبّق التغييرات فورًا.",
+  ap_theme: "ألوان المظهر", ap_system: "إعداد الجهاز", ap_light: "فاتح", ap_dark: "داكن", ap_density: "المسافات",
+  ap_comfortable: "مريحة", ap_compact: "مضغوطة", ap_motion: "الحركة", ap_device_motion: "حسب الجهاز", ap_reduced: "تقليل الحركة",
+  ap_surfaces: "الخلفيات", ap_glass: "زجاج خفيف", ap_solid: "ثابتة", ap_reset: "استعادة إعدادات الجهاز",
+  ap_accessibility: "تُحترم دائمًا إعدادات جهازك لتقليل الحركة والشفافية. يحتفظ الوضع المضغوط بارتفاع 44 بكسل على الأقل لأزرار اللمس."
+});

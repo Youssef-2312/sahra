@@ -183,3 +183,22 @@ and review time. See the end of docs/PHASE5.md.
 **Browser tests**
 - Use Playwright with a staff session cookie `__Host-sahra_s`, created through the staging test routes or a seeded session.
 - The local Worker cannot reach Turnstile, so stub `challenges.cloudflare.com` in browser tests of the guest request form.
+
+## Current staff shell and appearance (20 October 2026)
+
+See the latest PHASE5 entry for the NovaHub-inspired workspace. The persistent
+staff bottom bar is mounted under body, outside main, to avoid transformed
+ancestors breaking fixed positioning. Keep it there when adding page animations.
+Overview/Activity/Ticket types apply at desktop as well as mobile widths.
+
+Every HTML entry point loads `/js/appearance.js` before the stylesheets and
+`/css/appearance.css` after sahra.css. Device default follows the live system
+colour preference; manual Light/Dark, density, motion and surface choices are
+local appearance preferences. Use the shared theme tokens for new surfaces.
+Centre the header brand independently of side controls. Its mark uses black on
+light and white on dark. Never apply a theme filter to QR images or change the
+opaque scanner verdict colours. Honour both device and manual reduced motion.
+
+The actual NovaHub app redirected the development browser to its Google sign-in
+page. Only the public expanded demo could be inspected; do not claim the private
+dashboard has been matched pixel-for-pixel without an accessible reference.

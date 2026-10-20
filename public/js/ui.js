@@ -239,6 +239,44 @@ var Sahra = (function () {
 
   function title(page) { document.title = page ? page + " | Sahra" : "Sahra | " + t("tab_home"); }
 
+  function appearanceSettings() {
+    if (document.getElementById("appearance-settings")) return;
+    var previous = document.activeElement, A = window.SahraAppearance;
+    if (!A) return;
+    var d = el("dialog", { class: "appearance-dialog", attrs: { id: "appearance-settings", "aria-labelledby": "appearance-title" } },
+      el("div", { class: "appearance-head" }, el("h2", { text: t("ap_title"), attrs: { id: "appearance-title" } }),
+        el("button", { class: "appearance-close", text: "×", attrs: { type: "button", "aria-label": t("ap_close") }, on: { click: function () { d.close(); } } })),
+      el("p", { class: "muted", text: t("ap_intro") }));
+    var form = el("form", { class: "appearance-fields" });
+    function drawFields() {
+      clear(form);
+      var value = A.get();
+      [["theme", "ap_theme", [["system", "ap_system"], ["light", "ap_light"], ["dark", "ap_dark"]]],
+        ["density", "ap_density", [["comfortable", "ap_comfortable"], ["compact", "ap_compact"]]],
+        ["motion", "ap_motion", [["system", "ap_device_motion"], ["reduced", "ap_reduced"]]],
+        ["transparency", "ap_surfaces", [["system", "ap_glass"], ["solid", "ap_solid"]]]].forEach(function (row) {
+        var field = el("fieldset", null, el("legend", { text: t(row[1]) }));
+        row[2].forEach(function (option) {
+          var input = el("input", { attrs: { type: "radio", name: row[0], value: option[0], checked: value[row[0]] === option[0] } });
+          input.addEventListener("change", function () { var next = {}; next[row[0]] = input.value; A.set(next); });
+          field.appendChild(el("label", { class: "appearance-option" }, input, el("span", { text: t(option[1]) })));
+        });
+        form.appendChild(field);
+      });
+    }
+    form.addEventListener("submit", function (e) { e.preventDefault(); });
+    drawFields(); d.appendChild(form);
+    function syncFields() {
+      var value = A.get();
+      form.querySelectorAll("input[type=radio]").forEach(function (input) { input.checked = value[input.name] === input.value; });
+    }
+    document.addEventListener("sahra:appearance", syncFields);
+    d.appendChild(el("p", { class: "appearance-hint muted", text: t("ap_accessibility") }));
+    d.appendChild(el("button", { class: "btn appearance-reset", text: t("ap_reset"), attrs: { type: "button" }, on: { click: function () { A.reset(); drawFields(); } } }));
+    d.addEventListener("close", function () { document.removeEventListener("sahra:appearance", syncFields); document.body.classList.remove("appearance-open"); d.remove(); if (previous && previous.isConnected) previous.focus({ preventScroll: true }); });
+    document.body.appendChild(d); document.body.classList.add("appearance-open"); d.showModal(); d.querySelector("button").focus();
+  }
+
   function applyLang() {
     document.documentElement.lang = lang();
     document.documentElement.dir = lang() === "ar" ? "rtl" : "ltr";
@@ -288,6 +326,7 @@ var Sahra = (function () {
     }
     var search = el("a", { class: "nav-search", attrs: { href: "/?search=1#parties" } });
     var sw = el("button", { class: "lang-switch", attrs: { type: "button" } });
+    var appearance = el("button", { class: "appearance-toggle", attrs: { type: "button", "aria-haspopup": "dialog" }, on: { click: appearanceSettings } }, el("span", { class: "appearance-glyph", attrs: { "aria-hidden": "true" } }));
     var foot = el("footer", { class: "site-footer" });
     var publicNav = el("nav", { class: "public-nav" });
     var navItems = [["tab_home", "/"], ["find_tickets", "/find"], ["about", "/about.html"], ["contact", "/contact.html"]];
@@ -299,6 +338,8 @@ var Sahra = (function () {
       search.setAttribute("aria-label", t("nav_search"));
       search.setAttribute("title", t("nav_search"));
       sw.textContent = t("lang_other");
+      appearance.setAttribute("aria-label", t("ap_title"));
+      appearance.setAttribute("title", t("ap_title"));
       sw.setAttribute("lang", lang() === "en" ? "ar" : "en");
       publicNav.replaceChildren();
       publicNav.setAttribute("aria-label", lang() === "ar" ? "التنقل الرئيسي" : "Main navigation");
@@ -322,7 +363,7 @@ var Sahra = (function () {
       if (!me) label();
       account.classList.remove("account-checking");
     });
-    document.body.insertBefore(el("div", { class: "topbar-shell" }, el("header", { class: "topbar" }, brand, el("span", { class: "topbar-end" }, search, sw, account))), document.body.firstChild);
+    document.body.insertBefore(el("div", { class: "topbar-shell" }, el("header", { class: "topbar" }, appearance, brand, el("span", { class: "topbar-end" }, search, sw, account))), document.body.firstChild);
     if (!opts || opts.footer !== false) document.querySelector(".topbar").appendChild(publicNav);
     motion();
     // The door scanner shows only the camera and the result (brainstorm idea 12): no footer there.
@@ -356,19 +397,20 @@ var Sahra = (function () {
   var revealPending = new Set();
   function revealSections(root) {
     if (!root || typeof IntersectionObserver === "undefined" || typeof Element.prototype.animate !== "function"
-      || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+      || (window.SahraAppearance ? SahraAppearance.reducedMotion() : window.matchMedia("(prefers-reduced-motion: reduce)").matches)) return;
     if (!revealObserver) revealObserver = new IntersectionObserver(function (entries) {
       entries.forEach(function (entry) {
         if (!entry.isIntersecting) return;
         revealObserver.unobserve(entry.target);
         revealPending.delete(entry.target);
-        if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-        entry.target.animate([{ opacity: .35, transform: "translateY(18px)" }, { opacity: 1, transform: "translateY(0)" }],
+        if (window.SahraAppearance ? SahraAppearance.reducedMotion() : window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+        var animation = entry.target.animate([{ opacity: .35, transform: "translateY(18px)" }, { opacity: 1, transform: "translateY(0)" }],
           { duration: 560, easing: "cubic-bezier(.2,.7,.2,1)" });
+        animation.id = "sahra-reveal";
       });
     }, { threshold: .12 });
     revealPending.forEach(function (node) { if (!node.isConnected) { revealObserver.unobserve(node); revealPending.delete(node); } });
-    root.querySelectorAll(".party-card, .why-tile, .step-card, .home-story-copy, .home-photos, .home-guide-head, .home-guide-list li, .faq details, .ab-card, .ab-section, .ab-ticket-render, .s-card, .msg-panel, .contact-form, .home-experience-copy, .home-ticket-stage, .tile.stat, .dash .charts .card").forEach(function (node) {
+    root.querySelectorAll(".sh-metric, .sh-card, .sh-analytics, .party-card, .why-tile, .step-card, .home-story-copy, .home-photos, .home-guide-head, .home-guide-list li, .faq details, .ab-card, .ab-section, .ab-ticket-render, .s-card, .msg-panel, .contact-form, .home-experience-copy, .home-ticket-stage, .tile.stat, .dash .charts .card").forEach(function (node) {
       if (revealed.has(node)) return;
       revealed.add(node); revealPending.add(node); revealObserver.observe(node);
     });
@@ -381,6 +423,12 @@ var Sahra = (function () {
     window.addEventListener("scroll", onScroll, { passive: true });
     onScroll();
   }
+
+  document.addEventListener("sahra:appearance", function () {
+    if (window.SahraAppearance && SahraAppearance.reducedMotion() && document.getAnimations) {
+      document.getAnimations().forEach(function (animation) { if (animation.id === "sahra-reveal") animation.cancel(); });
+    }
+  });
 
   // Instagram glyph drawn as a plain outline (rounded square, lens, dot): an icon, not an emoji.
   function instagramIcon() {
@@ -529,5 +577,5 @@ var Sahra = (function () {
   }
 
   return { t: t, el: el, clear: clear, api: api, errorText: errorText, money: money, amount: amount, when: when, date: date, time: time, rel: rel,
-    lang: lang, boot: boot, reveal: revealSections, store: store, SESSION_KEY: SESSION_KEY, token: token, title: title, problem: problem, signinView: signinView, copyButton: copyButton, fold: fold, matches: matches, findBox: findBox, confirm: confirmBox, notify: notify, ask: ask, contactCard: contactCard, ref: function (id) { return id ? "SAH-" + String(id).slice(0, 6) : ""; } };
+    lang: lang, boot: boot, reveal: revealSections, store: store, SESSION_KEY: SESSION_KEY, token: token, title: title, problem: problem, signinView: signinView, appearanceSettings: appearanceSettings, copyButton: copyButton, fold: fold, matches: matches, findBox: findBox, confirm: confirmBox, notify: notify, ask: ask, contactCard: contactCard, ref: function (id) { return id ? "SAH-" + String(id).slice(0, 6) : ""; } };
 })();

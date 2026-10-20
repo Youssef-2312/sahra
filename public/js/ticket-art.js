@@ -4,16 +4,18 @@
 (function () {
   if (!window.IntersectionObserver || !window.matchMedia) return;
   var reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
+  function reduced() { return window.SahraAppearance ? SahraAppearance.reducedMotion() : reduce.matches; }
+  var lastReduced = reduced();
   var fine = window.matchMedia("(hover: hover) and (pointer: fine)");
   var states = Array.from(document.querySelectorAll("[data-ticket-motion]")).map(function (stage) {
     return { stage: stage, img: stage.querySelector("img"), active: false, px: 0, py: 0, pose: [0, 0, 0, 0], frame: 0 };
   });
   function clamp(n) { return Math.max(-1, Math.min(1, n)); }
   function wake(s) {
-    if (s.frame || !s.active || reduce.matches) return;
+    if (s.frame || !s.active || reduced()) return;
     s.frame = requestAnimationFrame(function tick() {
       s.frame = 0;
-      if (!s.active || reduce.matches) return;
+      if (!s.active || reduced()) return;
       var r = s.stage.getBoundingClientRect();
       var progress = clamp((innerHeight / 2 - (r.top + r.height / 2)) / ((innerHeight + r.height) / 2));
       var target = [-progress * 22, -progress * 4 - s.py * 3, s.px * 5, progress * 3 + s.px];
@@ -47,7 +49,11 @@
   });
   window.addEventListener("scroll", function () { states.forEach(wake); }, { passive: true });
   window.addEventListener("resize", function () { states.forEach(wake); }, { passive: true });
-  reduce.addEventListener("change", function () {
+  function resetMotion() {
+    if (lastReduced === reduced()) return;
+    lastReduced = reduced();
     states.forEach(function (s) { cancelAnimationFrame(s.frame); s.frame = 0; s.pose = [0, 0, 0, 0]; s.img.style.transform = ""; wake(s); });
-  });
+  }
+  reduce.addEventListener("change", resetMotion);
+  document.addEventListener("sahra:appearance", resetMotion);
 })();

@@ -1776,3 +1776,29 @@ Object.assign(SahraText.ar, {
 
 Object.assign(SahraText.en,{bk_sent_cancelled:"Email previously sent. Position now cancelled.",bk_verified:"Verified: no pending requests or active positions remain in this booking.",bk_no_active:"No pending requests or active positions remain. Deleted, cancelled and rejected records are history.",bk_guide_body:"Pending is a request to enter. Use Delete request to remove it from approval. Once approved, use Cancel position to revoke entry, including an emailed or saved QR. A booking can contain several people. Check every member or use the explicit whole-booking action.",bf_page_count:"{n} records on this page"});
 Object.assign(SahraText.ar,{bk_sent_cancelled:"أُرسلت الرسالة سابقًا. أُلغي مكان الدخول الآن.",bk_verified:"تم التحقق: لا توجد طلبات انتظار أو أماكن دخول نشطة متبقية في هذا الحجز.",bk_no_active:"لا توجد طلبات انتظار أو أماكن دخول نشطة. السجلات المحذوفة والملغاة والمرفوضة ضمن التاريخ.",bk_guide_body:"الانتظار هو طلب دخول. استخدم حذف الطلب لإزالته من الاعتماد. بعد الاعتماد استخدم إلغاء مكان الدخول لمنع الدخول، حتى برمز QR مُرسل أو محفوظ. قد يشمل الحجز عدة أشخاص. راجع كل عضو أو استخدم الإجراء الصريح للحجز بالكامل.",bf_page_count:"{n} سجلًا في هذه الصفحة"});
+
+// NovaHub workspace and persistent staff navigation.
+Object.assign(SahraText.en, {
+  sh_menu: "Menu", sh_open_menu: "Open navigation menu", sh_close_menu: "Close navigation menu", sh_main_nav: "Main party navigation",
+  sh_workspace: "Your party, in one place", sh_syncing: "Syncing...", sh_sync_failed: "Refresh failed. Some information may be out of date.",
+  sh_not_synced: "Not synced yet", sh_synced_now: "Synced just now", sh_synced_seconds: "Synced {n}s ago", sh_sync_stale: "Information may be out of date. Refresh to check.",
+  sh_refresh: "Refresh dashboard", sh_admission_unknown: "Door status unavailable", sh_request_period: "Ticket request activity", sh_last_days: "Last {n} days",
+  sh_capacity_filled: "Capacity approved", sh_at_a_glance: "Party at a glance", sh_next_actions: "Next actions", sh_pending_count: "{n} pending",
+  sh_add_guest_hint: "Issue a ticket or add a guest", sh_email_hint: "Review queued and failed emails", sh_event_controls: "Event controls",
+  sh_initial_failed: "The dashboard could not load. Refresh to try again.", sh_find_hint: "Search by name, email or booking reference.",
+  sh_activity_hint: "Requests and arrivals", sh_fourteen_days: "Request history: last 14 days", sh_no_arrivals: "No guests have checked in yet.",
+  sh_types_hint: "Approved and pending places by ticket type", sh_manage_types: "Manage ticket types", sh_type_counts: "{approved} approved · {pending} pending",
+  sh_period_total: "{n} requests in {days} days"
+});
+Object.assign(SahraText.ar, {
+  sh_menu: "القائمة", sh_open_menu: "فتح قائمة التنقل", sh_close_menu: "إغلاق قائمة التنقل", sh_main_nav: "التنقل الرئيسي للحفلة",
+  sh_workspace: "حفلتك في مكان واحد", sh_syncing: "جارٍ التحديث...", sh_sync_failed: "تعذّر التحديث. قد تكون بعض المعلومات غير محدثة.",
+  sh_not_synced: "لم تُحدّث البيانات بعد", sh_synced_now: "تم التحديث الآن", sh_synced_seconds: "تم التحديث منذ {n} ثانية", sh_sync_stale: "قد تكون المعلومات غير محدثة. حدّث للتحقق.",
+  sh_refresh: "تحديث لوحة التحكم", sh_admission_unknown: "حالة الدخول غير متاحة", sh_request_period: "نشاط طلبات التذاكر", sh_last_days: "آخر {n} أيام",
+  sh_capacity_filled: "النسبة المعتمدة من السعة", sh_at_a_glance: "الحفلة في لمحة", sh_next_actions: "الإجراءات التالية", sh_pending_count: "{n} قيد الانتظار",
+  sh_add_guest_hint: "إصدار تذكرة أو إضافة ضيف", sh_email_hint: "مراجعة الرسائل المنتظرة والمتعذّر إرسالها", sh_event_controls: "إدارة الحفلة",
+  sh_initial_failed: "تعذّر تحميل لوحة التحكم. حدّث للمحاولة مجددًا.", sh_find_hint: "ابحث بالاسم أو البريد الإلكتروني أو مرجع الحجز.",
+  sh_activity_hint: "الطلبات والدخول", sh_fourteen_days: "سجل الطلبات: آخر 14 يومًا", sh_no_arrivals: "لم يدخل أي ضيوف بعد.",
+  sh_types_hint: "الأماكن المعتمدة والمنتظرة حسب نوع التذكرة", sh_manage_types: "إدارة أنواع التذاكر", sh_type_counts: "{approved} معتمد · {pending} قيد الانتظار",
+  sh_period_total: "{n} طلبات خلال {days} يومًا"
+});

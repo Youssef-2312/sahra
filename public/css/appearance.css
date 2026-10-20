@@ -1,0 +1,131 @@
+/* Shared appearance tokens. The small head script sets these attributes before
+   paint; no account or guest data is stored in appearance preferences. */
+:root[data-theme="light"] {
+  --ap-bg:#f8f7f4;--ap-paper:#fff;--ap-subtle:#f1f0ed;--ap-text:#17191d;--ap-muted:#5d626e;--ap-faint:#676d78;
+  --ap-line:#e6e3df;--ap-line-strong:#d7d3ce;--ap-accent:#193366;--ap-accent-soft:#edf0f7;--ap-primary:#17191d;--ap-on-primary:#fff;
+  --ap-glass:rgba(255,255,255,.9);--ap-shell:rgba(248,247,244,.96);--ap-shadow:0 6px 24px rgba(20,23,30,.06);
+  --ap-yes:#16735a;--ap-yes-bg:#e6f2ed;--ap-no:#a92e2a;--ap-no-bg:#fbece9;--ap-maybe:#876014;--ap-maybe-bg:#fbf1db;
+  color-scheme:light;
+}
+:root[data-theme="dark"] {
+  --ap-bg:#0c0d10;--ap-paper:#17191e;--ap-subtle:#23262e;--ap-text:#f4f3ef;--ap-muted:#b0b4bf;--ap-faint:#a2a7b2;
+  --ap-line:#32363f;--ap-line-strong:#484e5b;--ap-accent:#9ba9ff;--ap-accent-soft:#252e48;--ap-primary:#f5f4f0;--ap-on-primary:#111216;
+  --ap-glass:rgba(23,25,30,.92);--ap-shell:rgba(12,13,16,.96);--ap-shadow:0 6px 24px rgba(0,0,0,.16);
+  --ap-yes:#a2dfbd;--ap-yes-bg:#182d24;--ap-no:#ffb4aa;--ap-no-bg:#382220;--ap-maybe:#efd197;--ap-maybe-bg:#342b1b;
+  color-scheme:dark;
+}
+:root[data-theme],html[data-theme] body.staff-app {
+  --bg:var(--ap-bg);--bg-2:var(--ap-subtle);--surface:var(--ap-paper);--surface-2:var(--ap-subtle);
+  --text:var(--ap-text);--muted:var(--ap-muted);--faint:var(--ap-faint);--line:var(--ap-line);--line-strong:var(--ap-line-strong);
+  --accent:var(--ap-accent);--accent-soft:var(--ap-accent-soft);--glass:var(--ap-glass);--glass-bg:var(--ap-glass);--glass-line:var(--ap-line);--glass-shadow:var(--ap-shadow);
+  --yes:var(--ap-yes);--yes-bg:var(--ap-yes-bg);--no:var(--ap-no);--no-bg:var(--ap-no-bg);--maybe:var(--ap-maybe);--maybe-bg:var(--ap-maybe-bg);
+}
+html[data-theme] body{background:var(--ap-bg);color:var(--ap-text)}
+/* A three-column header centres the actual brand box, independent of the width
+   of the menu, language or account controls. The public links get their own row. */
+html[data-theme] body .topbar{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;column-gap:12px;row-gap:0;position:relative}
+html[data-theme] body .topbar>.appearance-toggle,html[data-theme] body .topbar>.staff-menu-toggle{grid-column:1;grid-row:1;justify-self:start}
+html[data-theme] body .topbar>.brand{grid-column:2;grid-row:1;justify-self:center;margin:0;color:var(--ap-text);white-space:nowrap}
+html[data-theme] body .topbar>.topbar-end{grid-column:3;grid-row:1;justify-self:end;margin:0;min-width:0}
+html[data-theme] body .topbar>.public-nav{grid-column:1/-1;grid-row:2;justify-content:center;margin-top:4px}
+html[data-theme] body .topbar .nav-account{max-width:140px}
+html[data-theme] body.staff-app .topbar>.appearance-toggle{display:none}
+html[data-theme] body .topbar-shell,html[data-theme] body .topbar-shell.scrolled{background:var(--ap-shell);border-color:var(--ap-line);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)}
+html[data-theme] body .topbar{background:transparent;box-shadow:none;border:0}
+html[data-theme] .brand img{background:none!important;border-radius:0!important;object-fit:contain}
+html[data-theme="light"] .brand img{filter:brightness(0)}
+html[data-theme="dark"] .brand img{filter:brightness(0) invert(1)}
+html[data-theme] :is(.nav-search,.lang-switch){color:var(--ap-text);background:transparent;border-color:var(--ap-line)}
+html[data-theme] .appearance-toggle{display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;padding:10px;border:1px solid var(--ap-line);border-radius:12px;background:var(--ap-paper);color:var(--ap-text);cursor:pointer}
+.appearance-glyph{width:20px;height:20px;border:1.6px solid currentColor;border-radius:50%;position:relative;overflow:hidden}.appearance-glyph::after{content:"";position:absolute;inset:-1px -1px -1px 50%;background:currentColor}
+body.appearance-open{overflow:hidden}
+.appearance-dialog{width:min(520px,calc(100% - 24px));max-height:calc(100dvh - 32px);padding:24px;border:1px solid var(--ap-line-strong);border-radius:22px;background:var(--ap-paper);color:var(--ap-text);box-shadow:0 24px 90px rgba(0,0,0,.25);overflow:auto}
+.appearance-dialog::backdrop{background:rgba(9,11,17,.5);backdrop-filter:blur(3px)}
+.appearance-head{display:flex;align-items:center;justify-content:space-between;gap:16px}.appearance-head h2{font-size:24px;margin:0}.appearance-dialog>p{font-size:14px;line-height:1.6;margin:12px 0 20px}
+.appearance-close{display:inline-flex;align-items:center;justify-content:center;min-width:44px;min-height:44px;border:1px solid var(--ap-line);border-radius:12px;background:var(--ap-subtle);color:var(--ap-text);font-size:26px;cursor:pointer}
+.appearance-fields{display:grid;gap:20px}.appearance-fields fieldset{display:flex;gap:8px;flex-wrap:wrap;min-width:0;border:0;padding:0;margin:0}.appearance-fields legend{font-size:14px;font-weight:600;margin-bottom:9px;padding:0}
+.appearance-option{position:relative;display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:46px;padding:10px 14px;border:1px solid var(--ap-line-strong);border-radius:13px;font-size:14px;background:var(--ap-bg);color:var(--ap-text);cursor:pointer;flex:1 1 auto}
+.appearance-option input{position:absolute;opacity:0;width:1px;height:1px;inset:50% auto auto 50%;margin:0}.appearance-option:has(input:checked){border-color:var(--ap-primary);background:var(--ap-primary);color:var(--ap-on-primary)}.appearance-option:has(input:focus-visible){outline:3px solid var(--ap-accent);outline-offset:3px}
+html[data-theme] .appearance-dialog .appearance-reset{display:flex;align-items:center;justify-content:center;width:100%;min-height:46px;border:1px solid var(--ap-line-strong);border-radius:999px;background:var(--ap-bg);color:var(--ap-text);font-size:14px;margin:0;padding:10px 14px}
+html[data-theme] :is(.appearance-toggle,.appearance-close,.appearance-reset):focus-visible{outline:3px solid var(--ap-accent);outline-offset:3px}
+/* Staff surfaces share these tokens, in either colour mode. The analytics
+   hero remains the reference's opaque black panel in both themes. */
+html[data-theme] body.staff-app :is(.staff-menu,.bk-filter-sheet,.staff-more,.dlg){background:var(--ap-bg);color:var(--ap-text);border-color:var(--ap-line)}
+html[data-theme] body.staff-app :is(.sh-icon-btn,.sh-tab,.sh-range,.sh-card,.sh-metric,.sh-event-controls,.sh-type-list,.staff-mobile,.sh-dash-panel>.chart,.bulkbar){background:var(--ap-paper);color:var(--ap-text);border-color:var(--ap-line)}
+html[data-theme] body.staff-app :is(.sh-tab[aria-selected=true],.sh-range[aria-pressed=true],.staff-menu nav a[aria-current=page],.staff-mobile a[aria-current=page],.staff-desktop-nav a[aria-current=page]){background:var(--ap-primary);border-color:var(--ap-primary);color:var(--ap-on-primary)}
+html[data-theme] body.staff-app .staff-menu nav a:not([aria-current=page]):hover{background:var(--ap-subtle)}
+html[data-theme] body.staff-app .sh-dashboard-tabs{background:var(--ap-shell)}
+html[data-theme] body.staff-app>.staff-desktop-nav{background:var(--ap-glass);border-color:var(--ap-line)}
+html[data-theme] body.staff-app .btn{background:var(--ap-paper);color:var(--ap-text);border-color:var(--ap-line-strong)}
+html[data-theme] body.staff-app .btn.primary{background:var(--ap-primary);color:var(--ap-on-primary);border-color:var(--ap-primary)}
+html[data-theme] body.staff-app .btn.no{background:var(--ap-no-bg);color:var(--ap-no);border-color:var(--ap-no)}
+html[data-theme] body.staff-app .btn.yes{background:var(--ap-yes-bg);color:var(--ap-yes);border-color:var(--ap-yes)}
+html[data-theme] body.staff-app :is(input:not([type=checkbox]):not([type=radio]),select,textarea){background-color:var(--ap-paper);color:var(--ap-text);border-color:var(--ap-line-strong);color-scheme:inherit}
+html[data-theme] body.staff-app :is(.bk-member,.s-type,.s-question,.o-body,.g-tool){background:var(--ap-bg);border-color:var(--ap-line)}
+html[data-theme] body.staff-app .pill{background:var(--ap-subtle);border-color:var(--ap-line);color:var(--ap-muted)}
+html[data-theme] body.staff-app :is(.pill.yes,.notice.yes){background:var(--ap-yes-bg);color:var(--ap-yes);border-color:var(--ap-yes)}
+html[data-theme] body.staff-app :is(.pill.no,.notice.no){background:var(--ap-no-bg);color:var(--ap-no);border-color:var(--ap-no)}
+html[data-theme] body.staff-app :is(.pill.maybe,.notice.maybe){background:var(--ap-maybe-bg);color:var(--ap-maybe);border-color:var(--ap-maybe)}
+html[data-theme] body.staff-app .tabs button{background:var(--ap-paper);color:var(--ap-muted);border-color:var(--ap-line)}
+html[data-theme] body.staff-app .tabs button:is([aria-pressed=true],[aria-selected=true]){background:var(--ap-primary);color:var(--ap-on-primary);border-color:var(--ap-primary)}
+html[data-theme] body.staff-app :is(.staff-mobile a,.staff-desktop-nav a,.staff-desktop-nav button){color:var(--ap-muted)}
+html[data-theme] body.staff-app .sh-sync-text.is-stale{color:var(--ap-maybe)}
+html[data-theme] body.staff-app .sh-sync-dot{background:var(--ap-yes)}
+html[data-theme] body.staff-app .sh-sync-text.is-stale .sh-sync-dot{background:var(--ap-maybe)}
+/* Light public pages use the same surfaces and controls. Photograph overlays,
+   ticket QR codes and scanner verdicts keep their dedicated opaque contrast. */
+html[data-theme="light"] :is(.card,.tile,.ab-card,.ab-section,.msg-panel,.contact-form,.signin-panel,.party-card,.p-card,.f-panel,.why-tile,.step-card,.home-experience-copy,.home-guide-list li,.faq details,.dlg){background-color:var(--ap-paper);color:var(--ap-text);border-color:var(--ap-line);box-shadow:var(--ap-shadow)}
+html[data-theme="light"] :is(input:not([type=checkbox]):not([type=radio]),select,textarea){background-color:var(--ap-paper);border-color:var(--ap-line-strong);color:var(--ap-text);color-scheme:light}
+html[data-theme="light"] .btn:not(.primary):not(.yes):not(.no){background:var(--ap-paper);color:var(--ap-text);border-color:var(--ap-line-strong)}
+html[data-theme="light"] :is(.public-nav a,.f-col a,.f-title,.f-bottom,.f-language,.f-brand-copy,.f-copyright,.f-credit,.f-socials a){color:var(--ap-text)}
+html[data-theme="light"] .public-nav a:is(:hover,[aria-current=page]){background:var(--ap-subtle);color:var(--ap-text);border-color:var(--ap-line-strong)}
+html[data-theme="light"] :is(.hero,.ab-hero-layered,.f-invitation,.signin-panel){color:#f3f2ef}
+html[data-theme="light"] :is(.hero,.ab-hero-layered,.f-invitation,.signin-panel) :is(h1,h2,p,.label-line,.muted,.lede){color:#f3f2ef}
+html[data-theme="light"] :is(.contact-intro h1,.contact-intro .lede,.ab-card h2,.home-guide-head h2,.home-story-copy h2){color:var(--ap-text)}
+html[data-theme="light"] .f-credit img{filter:none}
+/**** Density and accessibility overrides never shrink touch targets. ****/
+html[data-density="compact"] body.staff-app main.staff-workspace{padding-top:12px}
+html[data-density="compact"] :is(.sh-card,.sh-metric,.s-card,.req,.g-row,.bk-card,.card){padding:14px}
+html[data-density="compact"] .sh-metric{min-height:118px}
+html[data-density="compact"] .sh-metrics,html[data-density="compact"] .sh-lower-grid{gap:8px;margin-block:8px}
+html[data-density="compact"] .sh-dashboard .sh-dash-head{margin-bottom:8px}
+html[data-density="compact"] :is(.sh-shortcut,.sh-type-row){min-height:48px;padding-block:8px}
+html[data-density="compact"] .sh-metric:last-child{min-height:88px}
+html[data-transparency="solid"] :is(.topbar-shell,.topbar,.staff-nav,.staff-mobile,.card,.s-card,.tile,.req,.g-row,.bk-card,.bk-guide,.bk-pager,.sh-dashboard-tabs,.appearance-dialog,.staff-menu){backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+html[data-transparency="solid"] :is(.topbar-shell,.sh-dashboard-tabs){background:var(--ap-bg)!important}
+html[data-transparency="solid"] :is(.staff-nav,.staff-mobile,.card,.s-card,.tile,.req,.g-row,.bk-card,.bk-guide,.bk-pager){background-color:var(--ap-paper)!important}
+html[data-motion="reduced"]{scroll-behavior:auto}
+html[data-motion="reduced"] *,html[data-motion="reduced"] *::before,html[data-motion="reduced"] *::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}
+@media(max-width:760px){html[data-theme] body .topbar .nav-account{display:none}}
+@media(max-width:600px){
+ html[data-theme] body .topbar{column-gap:8px;padding-inline:16px}
+ html[data-theme] body .topbar>.brand{font-size:18px;gap:6px}
+ html[data-theme] body .topbar>.brand img{width:25px;height:25px}
+ html[data-theme] body .topbar>.topbar-end{gap:2px}
+ html[data-theme] body .topbar :is(.lang-switch,.nav-search){min-width:40px;min-height:44px}
+ .appearance-dialog{padding:20px}.appearance-option{font-size:13px;padding-inline:12px}
+}
+
+html[data-theme="light"] .home :is(.parties-section,.faq){background:var(--ap-subtle);border-color:var(--ap-line)}
+html[data-theme="light"] :is(.party-card,.why-tile,.step-card,.home-guide-list,.ab-card,.card,.contact-form) :is(.muted,.when,.status,.sub,.hint){color:var(--ap-muted)}
+html[data-theme="light"] :is(.why-tile span,.step-card p,.home-guide-list p,.ab-card p,.empty-note .muted){color:var(--ap-muted)}
+html[data-theme="light"] .home .step-card .num{color:var(--ap-accent);border-color:var(--ap-line-strong)}
+html[data-theme="light"] .site-footer .f-panel :is(.f-col a,.f-title,.f-brand p,.f-copyright,.f-credit,.f-socials a,.f-language){color:var(--ap-text);border-color:var(--ap-line-strong)}
+html[data-theme="light"] .site-footer .f-panel .f-col a:hover{color:var(--ap-accent)}
+html[data-theme="light"] .site-footer .f-panel .f-bottom{border-color:var(--ap-line-strong)}
+html[data-theme="light"] :is(.pill,.form-notice,.accept-block,.form-footnote){color:var(--ap-muted)}
+html[data-theme="light"] .pill.yes{color:var(--ap-yes);background:var(--ap-yes-bg)}
+html[data-theme="light"] .pill.no{color:var(--ap-no);background:var(--ap-no-bg)}
+html[data-theme="light"] .pill.maybe{color:var(--ap-maybe);background:var(--ap-maybe-bg)}
+html[data-theme="light"] :is(.contact-form,.buy-form) input:not([type=checkbox]):not([type=radio]),html[data-theme="light"] .contact-form :is(select,textarea){background-color:var(--ap-paper);color:var(--ap-text);border-color:var(--ap-line-strong)}
+html[data-theme="light"] .verdict .btn{background:rgba(0,0,0,.22);color:inherit;border-color:rgba(255,255,255,.6)}
+@media(forced-colors:active){.appearance-option:has(input:checked){outline:2px solid Highlight;outline-offset:2px}.appearance-option input{position:static;opacity:1;width:18px;height:18px}.appearance-glyph{forced-color-adjust:auto}}
+
+/* Keep account access beside the centred brand on small public pages. The
+   existing link text remains its accessible name; only its visual label hides. */
+@media(max-width:760px){
+ html[data-theme] body:not(.staff-app) .topbar .nav-account{display:inline-flex;position:relative;width:44px;min-width:44px;min-height:44px;padding:0;font-size:0;line-height:0;border:1px solid var(--ap-line);border-radius:12px;background:var(--ap-paper);color:var(--ap-text)}
+ html[data-theme] body:not(.staff-app) .topbar .nav-account::before{content:"";position:absolute;width:8px;height:8px;top:9px;left:calc(50% - 4px);border:1.5px solid currentColor;border-radius:50%}
+ html[data-theme] body:not(.staff-app) .topbar .nav-account::after{content:"";position:absolute;width:16px;height:9px;bottom:9px;left:calc(50% - 8px);border:1.5px solid currentColor;border-radius:10px 10px 3px 3px}
+}
+@media(max-width:360px){html[data-theme] body:not(.staff-app) .topbar .nav-search{display:none}}

@@ -69,33 +69,72 @@ var SahraStaff = (function () {
       }), el("button", { class: "staff-out", text: t("s_sign_out"), attrs: { type: "button" }, on: { click: signOut } }));
   }
 
-  // The original horizontal staff menu, shared by every organiser page.
-  // Keep the helper API so pages retain their current controls and loading behavior.
+  // The shell lives outside main: a transformed/animated ancestor would make
+  // fixed navigation scroll with the page. Keep the shell stable on refresh.
+  var shellState = null, shellKey = "";
+  function icon(name) {
+    var paths = {
+      dashboard: "M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z",
+      queue: "M8 4h12v16H8z M4 8H2m2 4H2m2 4H2 M11 8h6m-6 4h6m-6 4h4",
+      guests: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8 M22 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75",
+      scan: "M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5 M7 7h3v3H7z M14 7h3v3h-3z M7 14h3v3H7z M14 14h3v3h-3z",
+      settings: "M4 6h16M4 12h16M4 18h16 M8 3v6m8 0v6m-8 0v6",
+      outbox: "M3 5h18v14H3z M3 5l9 7 9-7",
+      team: "M12 3l9 5v8l-9 5-9-5V8z M3 8l9 5 9-5 M12 13v8",
+      close: "M6 6l12 12M6 18L18 6",
+      refresh: "M20 7v5h-5 M4 17v-5h5 M6 6a8 8 0 0 1 14 6 M18 18A8 8 0 0 1 4 12",
+      arrow: "M5 12h14m-5-5 5 5-5 5"
+    };
+    var n = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    [ ["viewBox","0 0 24 24"], ["fill","none"], ["stroke","currentColor"], ["stroke-width","1.7"], ["stroke-linecap","round"], ["stroke-linejoin","round"], ["aria-hidden","true"], ["focusable","false"] ].forEach(function(a){n.setAttribute(a[0],a[1]);});
+    var p = document.createElementNS(n.namespaceURI,"path"); p.setAttribute("d",paths[name] || paths.dashboard); n.appendChild(p); return n;
+  }
+
+  function openMenu() {
+    if (document.getElementById("staff-menu")) return;
+    var state = shellState, trigger = document.querySelector(".staff-menu-toggle");
+    var d = el("dialog", {class:"staff-menu",attrs:{id:"staff-menu","aria-labelledby":"staff-menu-title"}},
+      el("div",{class:"staff-menu-head"},el("h2",{attrs:{id:"staff-menu-title"},text:t("sh_menu")}),
+        el("button",{class:"sh-icon-btn",attrs:{type:"button","aria-label":t("sh_close_menu")},on:{click:function(){d.close();}}},icon("close"))),
+      el("p",{class:"staff-menu-caption",text:t("s_nav_label")}));
+    var links = el("nav",{attrs:{"aria-label":t("s_nav_label")}},
+      PAGES.filter(function(p){return !p[3] || p[3]===state.role;}).map(function(p){return el("a",{attrs:{href:p[1],"aria-current":p[0]===state.page?"page":null}},icon(p[0]),el("span",{text:t(p[2])}));}),
+      el("a",{attrs:{href:"/scan.html"}},icon("scan"),el("span",{text:t("d_scanner")})));
+    d.appendChild(links);
+    var account = el("div",{class:"staff-menu-account"});
+    if(platform)account.appendChild(myParties());
+    account.appendChild(el("button",{class:"btn",text:t("ap_title"),attrs:{type:"button"},on:{click:function(){d.addEventListener("close",function(){Sahra.appearanceSettings();},{once:true});d.close();}}}));
+    account.appendChild(el("button",{class:"btn",text:t("s_sign_out"),attrs:{type:"button"},on:{click:signOut}}));
+    d.appendChild(account);
+    d.addEventListener("click",function(e){if(e.target===d){var r=d.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)d.close();}});
+    d.addEventListener("close",function(){document.body.classList.remove("staff-menu-open");d.remove();if(trigger&&trigger.isConnected){trigger.setAttribute("aria-expanded","false");trigger.focus({preventScroll:true});}});
+    document.body.appendChild(d);document.body.classList.add("staff-menu-open");trigger.setAttribute("aria-expanded","true");d.showModal();
+    d.querySelector("button").focus();
+  }
+
   function workspace(root, page, role) {
-    var menu = nav(page, role);
+    document.body.classList.add("staff-app");
+    root.classList.add("staff-workspace");
+    shellState={page:page,role:role};
+    if(platform===undefined && role!=="door")askPlatform();
+    var topbar=document.querySelector(".topbar");
+    var toggle=document.querySelector(".staff-menu-toggle");
+    if(topbar&&!toggle){
+      toggle=el("button",{class:"staff-menu-toggle sh-icon-btn",attrs:{type:"button","aria-haspopup":"dialog","aria-expanded":"false","aria-controls":"staff-menu"},on:{click:openMenu}},
+        el("span",{class:"staff-menu-lines",attrs:{"aria-hidden":"true"}},el("span"),el("span"),el("span")));
+      topbar.insertBefore(toggle,topbar.firstChild);
+    }
+    if(toggle)toggle.setAttribute("aria-label",t("sh_open_menu"));
     var quickSearch = document.querySelector(".nav-search");
     if (quickSearch) { quickSearch.href="/guests.html#find"; quickSearch.setAttribute("aria-label",t("d_find_t")); }
-    root.appendChild(menu);
-    var more = el("button", {class:"staff-mobile-more",text:t("bf_more_nav"),attrs:{type:"button"},on:{click:function(){
-      var previous=document.activeElement;
-      var d=el("dialog",{class:"staff-more",attrs:{"aria-label":t("bf_more_nav")}},
-        el("h2",{text:t("bf_more_nav")}),
-        PAGES.filter(function(p){return ["dashboard","queue","guests"].indexOf(p[0])<0 && (!p[3] || p[3]===role);}).map(function(p){
-          return el("a",{class:"btn",text:t(p[2]),attrs:{href:p[1],"aria-current":p[0]===page?"page":null}});
-        }),platform?myParties():null,
-        el("button",{class:"btn",text:t("s_sign_out"),attrs:{type:"button"},on:{click:signOut}}));
-      function close(){d.close();d.remove();if(previous&&previous.isConnected)previous.focus();}
-      d.appendChild(el("button",{class:"btn",text:t("dlg_cancel"),attrs:{type:"button"},on:{click:close}}));
-      d.addEventListener("cancel",function(e){e.preventDefault();close();});document.body.appendChild(d);d.showModal();d.querySelector("a,button").focus();
-    }}});
-    if(["dashboard","queue","guests"].indexOf(page)<0)more.setAttribute("aria-current","page");
-    root.appendChild(el("nav",{class:"staff-mobile",attrs:{"aria-label":t("s_nav_label")}},
-      PAGES.slice(0,3).map(function(p){return el("a",{text:t(p[2]),attrs:{href:p[1],"aria-current":p[0]===page?"page":null}});}),more));
-    var selected = menu.querySelector("[aria-current]");
-    if (selected && menu.scrollWidth > menu.clientWidth) {
-      menu.scrollLeft = document.documentElement.dir === "rtl"
-        ? -(menu.clientWidth - selected.offsetLeft - selected.offsetWidth)
-        : Math.max(0, selected.offsetLeft - 16);
+    var key=[page,role,Sahra.lang()].join(":");
+    if(key!==shellKey){
+      document.querySelectorAll("body>.staff-mobile,body>.staff-desktop-nav").forEach(function(n){n.remove();});
+      var menu=nav(page,role);menu.classList.add("staff-desktop-nav");
+      document.body.insertBefore(menu,root);
+      document.body.appendChild(el("nav",{class:"staff-mobile",attrs:{"aria-label":t("sh_main_nav")}},
+        PAGES.slice(0,3).concat([["scan","/scan.html","d_scanner"]]).map(function(p){return el("a",{attrs:{href:p[1],"aria-current":p[0]===page?"page":null}},icon(p[0]),el("span",{text:t(p[2])}));})));
+      shellKey=key;
     }
     return root;
   }
@@ -231,5 +270,5 @@ var SahraStaff = (function () {
   function copyButton(text, label) { return Sahra.copyButton(text, label || t("s_copy")); }
 
   return { start: start, act: act, field: field, input: input, select: select, check: check, section: section,
-    say: say, sayMs: sayMs, sayBox: sayBox, why: why, local: local, copyButton: copyButton, sleep: sleep, nav: nav, workspace: workspace, redraw: redraw, tn: tn };
+    say: say, sayMs: sayMs, sayBox: sayBox, why: why, local: local, copyButton: copyButton, sleep: sleep, nav: nav, workspace: workspace, redraw: redraw, tn: tn, icon: icon };
 })();

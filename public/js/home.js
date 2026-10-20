@@ -225,8 +225,9 @@
       panel.replaceChildren(el("div", { class: "home-stage-label" }, el("span", { class: "label-line", text: t("h_x_preview") }),
         el("span", { class: "pill", text: t("h_x_" + mode + "_tag") })), tickets,
         el("div", { class: "home-stage-note" }, el("h3", { text: t("h_x_" + mode + "_title") }), el("p", { text: t("h_x_" + mode + "_p") })));
-      if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches && panel.animate) {
-        panel.animate([{ opacity: .65, transform: "translateY(6px)" }, { opacity: 1, transform: "none" }], { duration: 280, easing: "ease-out" });
+      if (!(window.SahraAppearance ? SahraAppearance.reducedMotion() : window.matchMedia("(prefers-reduced-motion: reduce)").matches) && panel.animate) {
+        var animation = panel.animate([{ opacity: .65, transform: "translateY(6px)" }, { opacity: 1, transform: "none" }], { duration: 280, easing: "ease-out" });
+        animation.id = "sahra-reveal";
       }
     }
     var tabs = el("div", { class: "home-ticket-tabs", attrs: { role: "tablist", "aria-label": t("h_x_choose"), "aria-orientation": "vertical" } });
