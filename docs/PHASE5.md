@@ -1487,3 +1487,8 @@ Save/rebuild, hash navigation, exclusive expansion and platform draft retention
 passed with intercepted requests. Thirty-six scanner/ticket safety cases pass.
 TypeScript and all 567 Vitest tests pass. Production deployment is authorised
 by the owner after the shared marketing previews and these final checks.
+
+A focused platform check caught fragment navigation positioning a selected panel
+under the sticky tabs. View switches now return to the workspace top. Six dark
+EN/AR phone/tablet/desktop cases confirm content clears the tabs, with profile
+account actions still available. TypeScript and all 567 tests pass after the fix.

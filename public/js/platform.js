@@ -363,8 +363,8 @@
   }
   window.addEventListener("hashchange", function () {
     showPlatformView();
-    var tabs = app.querySelector(".platform-tabs");
-    if (tabs) tabs.scrollIntoView({ block: "start" });
+    // A view switch starts at the workspace top, clear of the sticky controls.
+    window.scrollTo({ top: 0, behavior: "instant" });
   });
 
   var r = await Sahra.api.get("/api/platform/me");
