@@ -184,3 +184,8 @@ body.staff-app .bk-date-hint{grid-column:1/-1;margin:0;font-size:13px;line-heigh
  body.staff-app .o-row .g-actions{gap:6px;margin-top:6px}
  body.staff-app .o-row .g-actions .btn{min-height:44px;padding:8px 12px;font-size:12px}
 }
+/* Guest tools participates in the header layout, including translated long titles. */
+body.staff-app .guest-workspace .staff-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 12px;padding-inline-end:0!important}
+body.staff-app .guest-workspace .staff-head>.g-view-toolbar{position:static;inset:auto;flex:none;margin-inline-start:auto;max-width:100%}
+body.staff-app .guest-workspace .staff-head>.g-view-toolbar .btn{min-height:44px;white-space:normal}
+body.staff-app .guest-workspace .staff-head>div:not(.g-view-toolbar){min-width:0;flex:1 1 140px}
