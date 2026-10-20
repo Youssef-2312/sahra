@@ -1492,3 +1492,19 @@ A focused platform check caught fragment navigation positioning a selected panel
 under the sticky tabs. View switches now return to the workspace top. Six dark
 EN/AR phone/tablet/desktop cases confirm content clears the tabs, with profile
 account actions still available. TypeScript and all 567 tests pass after the fix.
+
+### Mobile profile menu touch fix (20 October 2026)
+
+A touch focusout event can have a null relatedTarget. Both dropdowns previously
+interpreted that as focus leaving the menu and removed it before click activation.
+Only a known outside focus target now closes a menu through focusout; outside
+pointer clicks, Escape, scrolling and resizing still close it. Account navigation,
+appearance Settings and session-aware Sign out retain their existing handlers.
+The focused regression simulates null-target focusout before real touch taps,
+with staff/platform/combined sessions and separate logout CSRF fixtures in EN/AR.
+No account API, session safety or backend logic changes.
+
+Validation: 18 mobile EN/AR cases pass for Settings, Account and Sign out with
+staff, platform and combined sessions. Each simulates a null-target focusout
+before a real touch tap. Logout calls and CSRF tokens are intercepted and checked;
+no real account is signed out. TypeScript and all 567 Vitest tests pass.
