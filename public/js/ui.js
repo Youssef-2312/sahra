@@ -342,6 +342,8 @@ var Sahra = (function () {
     var sw = el("button", { class: "lang-switch", attrs: { type: "button" } });
     var foot = el("footer", { class: "site-footer" });
     var publicNav = el("nav", { class: "public-nav" });
+    // Narrow screens: the page links sit behind this button (the bar keeps Sahra in the centre).
+    var navToggle = el("button", { class: "nav-toggle", attrs: { type: "button", "aria-haspopup": "menu", "aria-expanded": "false" } }, el("span", { attrs: { "aria-hidden": "true" } }));
     var navItems = [["tab_home", "/"], ["find_tickets", "/find"], ["about", "/about.html"], ["contact", "/contact.html"]];
     function label() {
       if (me) showName(me.staff ? me.staff.name : me.name);
@@ -364,8 +366,38 @@ var Sahra = (function () {
         if (location.pathname.replace(/\.html$/, "") === item[1].replace(/\.html$/, "")) link.setAttribute("aria-current", "page");
         publicNav.appendChild(link);
       });
+      navToggle.setAttribute("aria-label", t("nav_menu"));
       footer(foot, { signedIn: !!me || (checkingAccount && !!store.get(SESSION_KEY)), href: account.getAttribute("href") });
     }
+    var linksMenu = null;
+    function closeLinks(focus) {
+      if (!linksMenu) return;
+      var closing = linksMenu; linksMenu = null;
+      closing.remove(); navToggle.setAttribute("aria-expanded", "false");
+      if (focus) navToggle.focus({ preventScroll: true });
+    }
+    function openLinks() {
+      if (linksMenu) { closeLinks(true); return; }
+      linksMenu = el("div", { class: "account-menu links-menu", attrs: { role: "menu", "aria-label": t("nav_menu") } },
+        [].map.call(publicNav.querySelectorAll("a"), function (a) {
+          var item = el("a", { text: a.textContent, attrs: { href: a.getAttribute("href"), role: "menuitem" } });
+          if (a.getAttribute("aria-current")) item.setAttribute("aria-current", "page");
+          return item;
+        }));
+      linksMenu.addEventListener("keydown", function (e) {
+        if (e.key === "Escape") { e.preventDefault(); closeLinks(true); return; }
+        var items = Array.from(linksMenu.querySelectorAll("[role=menuitem]")), index = items.indexOf(document.activeElement);
+        if (["ArrowDown", "ArrowUp", "Home", "End"].includes(e.key)) { e.preventDefault(); var next = e.key === "Home" ? 0 : e.key === "End" ? items.length - 1 : (index + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length; items[next].focus(); }
+      });
+      linksMenu.addEventListener("focusout", function (e) { if (linksMenu && !linksMenu.contains(e.relatedTarget) && e.relatedTarget !== navToggle) closeLinks(false); });
+      document.body.appendChild(linksMenu);
+      var r = navToggle.getBoundingClientRect();
+      linksMenu.style.top = (r.bottom + 10) + "px";
+      linksMenu.style.left = Math.max(12, Math.min(innerWidth - 252, document.documentElement.dir === "rtl" ? r.right - 240 : r.left)) + "px";
+      navToggle.setAttribute("aria-expanded", "true");
+      linksMenu.querySelector("[role=menuitem]").focus();
+    }
+    navToggle.addEventListener("click", function (e) { e.preventDefault(); openLinks(); });
     var profileMenu = null;
     function closeProfile(focus) {
       if (!profileMenu) return;
@@ -404,11 +436,11 @@ var Sahra = (function () {
     }
     account.addEventListener("click",function(e){e.preventDefault();openProfile();});
     account.addEventListener("keydown",function(e){if(e.key==="ArrowDown"||e.key===" "){e.preventDefault();openProfile();}});
-    document.addEventListener("pointerdown",function(e){if(profileMenu&&!profileMenu.contains(e.target)&&!account.contains(e.target))closeProfile(false);});
-    window.addEventListener("resize",function(){closeProfile(false);});
-    window.addEventListener("scroll",function(){closeProfile(false);},{passive:true});
+    document.addEventListener("pointerdown",function(e){if(profileMenu&&!profileMenu.contains(e.target)&&!account.contains(e.target))closeProfile(false);if(linksMenu&&!linksMenu.contains(e.target)&&!navToggle.contains(e.target))closeLinks(false);});
+    window.addEventListener("resize",function(){closeProfile(false);closeLinks(false);});
+    window.addEventListener("scroll",function(){closeProfile(false);closeLinks(false);},{passive:true});
     sw.addEventListener("click", function () {
-      closeProfile(false);
+      closeProfile(false); closeLinks(false);
       var draft = captureDrafts();
       store.set(KEY, lang() === "en" ? "ar" : "en");
       applyLang();
@@ -422,7 +454,7 @@ var Sahra = (function () {
       account.classList.remove("account-checking");
     });
     document.body.insertBefore(el("div", { class: "topbar-shell" }, el("header", { class: "topbar" }, brand, el("span", { class: "topbar-end" }, search, sw, account))), document.body.firstChild);
-    if (!opts || opts.footer !== false) document.querySelector(".topbar").appendChild(publicNav);
+    if (!opts || opts.footer !== false) { document.querySelector(".topbar").appendChild(publicNav); document.querySelector(".topbar").insertBefore(navToggle, document.querySelector(".topbar").firstChild); }
     motion();
     // The door scanner shows only the camera and the result (brainstorm idea 12): no footer there.
     if (!opts || opts.footer !== false) document.body.appendChild(foot);
