@@ -369,7 +369,7 @@ var SahraText = {
 
     // Home page (piece 4)
     h_title: "Parties worth staying up for",
-    h_sub: "Find a party, purchase your ticket, and show your QR code at the door.",
+    h_sub: "Find your next party. Request a ticket, follow its status and bring your QR when it is released.",
     h_upcoming: "Upcoming parties",
     h_filter_all: "All",
     h_filter_week: "This week",
@@ -905,7 +905,7 @@ var SahraText = {
     d_sign_in: "سجّل الدخول لعرض حفلتك.",
 
     h_title: "حفلات تستحق السهر",
-    h_sub: "اختر حفلة، اشترِ تذكرتك، واعرض رمز QR عند الباب.",
+    h_sub: "اكتشف حفلتك القادمة. اطلب تذكرة وتابع حالتها وجهّز رمز QR بعد إصدارها.",
     h_upcoming: "الحفلات القادمة",
     h_filter_all: "الكل",
     h_filter_week: "هذا الأسبوع",
@@ -1224,4 +1224,21 @@ Object.assign(SahraText.ar, {
   nav_profile:"قائمة الحساب", nav_menu:"القائمة", nav_settings:"الإعدادات", nav_sign_out:"تسجيل الخروج", nav_arabic:"التبديل إلى العربية", nav_english:"التبديل إلى الإنجليزية",
   qc_review:"مراجعة التفاصيل", qc_guest_details:"التفاصيل والإجراءات", qc_tools:"أدوات الضيوف", qc_back_guests:"العودة إلى قائمة الضيوف",
   qc_door_scanner:"ماسح الدخول", qc_camera_title:"جاهز للمسح", qc_camera_on:"الكاميرا تعمل. وجّهها إلى رمز QR الخاص بالضيف."
+});
+
+Object.assign(SahraText.en, {
+  mk_step1_t: "Request a ticket", mk_step1_p: "Choose a party and ticket type. Send your details and any required payment proof.",
+  mk_step2_t: "Wait for approval", mk_step2_p: "The organiser reviews your request. A request alone does not grant entry.",
+  mk_step3_t: "Get your QR", mk_step3_p: "When the organiser releases your ticket, open your ticket link and save the QR.",
+  mk_step4_t: "One scan at the door", mk_step4_p: "Show your valid QR to the door team. Each ticket can be redeemed once.",
+  mk_host_badge: "For your next party", mk_host_title: "Less admin. More of the night.",
+  mk_host_p: "Tickets, request reviews and your door team, in one place. Sahra is available by invitation.", mk_host_action: "Host with Sahra"
+});
+Object.assign(SahraText.ar, {
+  mk_step1_t: "اطلب تذكرة", mk_step1_p: "اختر حفلة ونوع التذكرة. أرسل بياناتك وإثبات الدفع إذا كان مطلوبًا.",
+  mk_step2_t: "انتظر الموافقة", mk_step2_p: "يراجع المنظّم طلبك. إرسال الطلب وحده لا يمنحك الدخول.",
+  mk_step3_t: "احصل على رمزك", mk_step3_p: "عندما يصدر المنظّم تذكرتك، افتح رابطها واحفظ رمز QR.",
+  mk_step4_t: "مسحة واحدة عند الباب", mk_step4_p: "اعرض رمزك الصالح على فريق الباب. يمكن استخدام كل تذكرة مرة واحدة.",
+  mk_host_badge: "لحفلتك القادمة", mk_host_title: "تنظيم أقل. سهرة أكثر.",
+  mk_host_p: "التذاكر ومراجعة الطلبات وفريق الباب في مكان واحد. سهرة متاحة بالدعوة.", mk_host_action: "نظّم حفلتك مع سهرة"
 });

@@ -217,8 +217,11 @@ html[data-theme] body.staff-app .guest-workspace .s-card .g-list>.g-guest-card{d
 /* Public links participate in layout; legacy absolute positioning clipped the shell. */
 html[data-theme] body .topbar>.public-nav{position:static;inset:auto;transform:none;margin:0;min-width:0;flex-basis:auto;align-self:center;backdrop-filter:none;-webkit-backdrop-filter:none;box-shadow:none}
 @media(min-width:900px){
- html[data-theme] body .topbar>.public-nav{grid-column:1;grid-row:1;justify-content:flex-start;width:auto;justify-self:start;gap:2px}
- html[data-theme] body .topbar>.public-nav a{min-height:44px;padding:8px 10px;white-space:nowrap;font-size:13px}
+ html[data-theme] body .topbar{padding-block:14px 10px;row-gap:10px}
+ html[data-theme] body .topbar>.public-nav{grid-column:1/-1;grid-row:2;justify-content:center;width:100%;justify-self:center;gap:12px}
+ html[data-theme] body .topbar>.brand{font-size:25px}
+ html[data-theme] body .topbar>.brand img{width:36px;height:36px}
+ html[data-theme] body .topbar>.public-nav a{min-height:46px;padding:10px 20px;white-space:nowrap;font-size:14px}
 }
 /* Labels above headings (owner: the spaced mono capitals looked odd): the site font, sentence case. */
 html[data-theme] .label-line,html[data-theme] .sh-heading .label-line,html[data-theme] .kicker{font-family:var(--font-body);font-size:14px;font-weight:600;letter-spacing:0;text-transform:none;line-height:1.4;color:var(--ap-muted)}
@@ -256,3 +259,13 @@ html[data-theme] body:not(.staff-app) .topbar>.nav-toggle{grid-column:1;grid-row
  html[data-theme] body:not(.staff-app) .topbar .nav-account{grid-column:5;grid-row:1}
 }
 @media(max-width:600px){html[data-theme] body:not(.staff-app) .topbar-shell,html[data-theme] body:not(.staff-app) .topbar-shell.scrolled{top:8px;margin-top:8px;width:calc(100% - 16px)}}
+/* Latest owner layout: larger public desktop header, with links below Sahra. */
+@media(min-width:900px){
+ html[data-theme] body:not(.staff-app) .topbar-shell,html[data-theme] body:not(.staff-app) .topbar-shell.scrolled{width:min(76rem,calc(100% - 40px))}
+ html[data-theme] body:not(.staff-app) .topbar{grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);padding:14px 20px 10px;row-gap:10px}
+ html[data-theme] body:not(.staff-app) .topbar>.brand{grid-column:2;grid-row:1;font-size:25px}
+ html[data-theme] body:not(.staff-app) .topbar>.topbar-end{display:flex;grid-column:3;grid-row:1}
+ html[data-theme] body:not(.staff-app) .topbar>.nav-toggle{display:none}
+ html[data-theme] body:not(.staff-app) .topbar>.public-nav{display:flex;grid-column:1/-1;grid-row:2;width:100%;justify-content:center;justify-self:center;gap:12px}
+ html[data-theme] body:not(.staff-app) .topbar>.public-nav a{min-height:46px;padding:10px 20px;font-size:14px}
+}

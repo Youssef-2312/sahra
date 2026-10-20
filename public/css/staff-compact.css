@@ -1,0 +1,135 @@
+/* Shared compact staff surfaces. No header, footer or admission-verdict overrides. */
+body.staff-app main.staff-workspace{padding-top:16px}
+body.staff-app :is(.s-card,.card,.sh-card){padding:16px;border-radius:16px;margin-block:10px}
+body.staff-app :is(.s-card-head,.sh-card-head){margin-bottom:10px}
+body.staff-app :is(.s-card h2,.sh-card h2){font-size:17px;margin-block:0 10px}
+body.staff-app :is(.s-card-head>p,.sh-card>p){font-size:13px;line-height:1.6;margin-block:6px 12px}
+body.staff-app :is(.field,.s-field){margin-block:10px}
+body.staff-app .sh-analytics{min-height:220px;padding:20px;gap:20px;border-radius:18px}
+body.staff-app .sh-hero-chart>svg{max-height:160px}
+body.staff-app .sh-gauge-art{max-width:180px}
+body.staff-app .sh-gauge-art strong{font-size:28px}
+body.staff-app .sh-hero-numbers{gap:18px}
+body.staff-app .sh-hero-numbers strong{font-size:32px;margin-bottom:6px}
+body.staff-app .sh-metrics{gap:8px;margin-block:8px}
+body.staff-app .sh-metric{min-height:104px;padding:12px 14px;gap:5px;border-radius:14px}
+body.staff-app .sh-metric strong{font-size:25px}
+body.staff-app .sh-metric-hint{font-size:12px;line-height:1.45}
+body.staff-app .sh-lower-grid{gap:8px;margin-block:8px}
+body.staff-app .sh-shortcut{min-height:48px;padding-block:7px;gap:10px}
+body.staff-app .sh-shortcut>span{gap:2px}
+body.staff-app .sh-find{margin-top:12px}
+body.staff-app .sh-event-controls{margin-top:8px;padding-inline:14px;border-radius:14px}
+body.staff-app .sh-type-row{padding:10px 14px;min-height:52px}
+body.staff-app .sh-dash-panel>.chart{padding:16px;margin-block:8px}
+body.staff-app .q-request{padding:10px 12px;border-radius:14px}
+body.staff-app .q-request .head{margin-bottom:4px;gap:6px}
+body.staff-app .q-request .q-card-meta{margin-block:4px;font-size:12px}
+body.staff-app .q-request>.q-primary{margin-top:6px}
+html[data-theme] body.staff-app .guest-workspace .s-card .g-list>.g-guest-card{padding:10px 12px;border-radius:14px}
+body.staff-app .guest-workspace .g-list,body.staff-app .queue-workspace .reqs{gap:8px}
+body.staff-app .guest-workspace #guest-list-view>.g-tiles .tile.stat{padding:8px 10px;min-height:66px;border-radius:12px}
+body.staff-app .guest-workspace #guest-list-view>.g-tiles .tile.stat .big{font-size:21px}
+body.staff-app .g-tool-panel>summary{min-height:48px;padding:10px 14px}
+body.staff-app .bk-pager{padding:10px 12px;gap:8px;margin-block:10px;border-radius:14px}
+body.staff-app :is(.btn,.small-btn,summary){min-height:44px}
+/* Settings: one open section, searchable content, existing forms retained in the DOM. */
+body.staff-app .settings-compact .s-main{max-width:none;min-width:0}
+body.staff-app .s-setting-panel{border:1px solid var(--ap-line);border-radius:14px;background:var(--ap-paper);margin:8px 0;scroll-margin-top:90px}
+body.staff-app .s-setting-panel>summary{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:52px;padding:12px 16px;font-size:14px;font-weight:600;cursor:pointer;list-style:none}
+body.staff-app .s-setting-panel>summary::-webkit-details-marker{display:none}
+body.staff-app .s-setting-panel>summary::after{content:"+";font-size:20px;color:var(--ap-muted)}
+body.staff-app .s-setting-panel[open]>summary::after{content:"−"}
+body.staff-app .s-setting-panel[open]>summary{border-bottom:1px solid var(--ap-line)}
+body.staff-app .s-setting-panel>.s-card{margin:0;padding:14px 16px;border:0;border-radius:0 0 14px 14px;background:transparent;box-shadow:none;backdrop-filter:none}
+body.staff-app .s-setting-panel>.s-card>.s-card-head h2{display:none}
+body.staff-app .settings-compact .s-toc a{min-height:44px;font-size:13px}
+/* Scanner uses the dashboard's paper, border, pill and primary-action tokens. */
+body.scanner-app main.scanner-workspace{max-width:560px;padding:12px 20px 24px;animation:none;transform:none}
+.scanner-app .scan-heading{margin-bottom:12px;align-items:flex-start}
+.scanner-app .scan-heading h1{font-size:24px;line-height:1.25;margin:4px 0 0}
+.scanner-app .scan-heading p{font-size:12px;letter-spacing:0;text-transform:none}
+.scanner-app .scan-rule{background:var(--ap-subtle);border-color:var(--ap-line);color:var(--ap-muted);font-size:11px;border-radius:999px;padding:7px 10px}
+.scanner-app .scan-stage{background:var(--ap-paper);border:1px solid var(--ap-line);border-radius:18px;padding:16px;box-shadow:var(--ap-shadow)}
+.scanner-app .scan-idle{padding:16px 12px 20px}
+.scanner-app .scan-idle-icon{width:52px;height:52px;border-color:var(--ap-accent);border-radius:14px;margin-bottom:16px}
+.scanner-app .scan-idle-icon::before{top:9px;left:9px;width:12px;height:12px}.scanner-app .scan-idle-icon::after{top:27px;left:27px;width:12px;height:12px}
+.scanner-app .scan-idle h2{font-size:20px;margin-bottom:8px}
+.scanner-app .scan-idle p{font-size:14px;line-height:1.6;max-width:300px}
+.scanner-app .scan-wrap>:is(.btn,.scan-stage .btn),.scanner-app .scan-stage>.btn,.scanner-app .sc-find .btn{min-height:46px;padding:10px 16px;border-radius:999px;font:inherit;font-size:14px;line-height:1.4;background:var(--ap-paper);border:1px solid var(--ap-line-strong);color:var(--ap-text)}
+html[data-theme] .scanner-app .scan-stage>.btn.primary{background:var(--ap-primary);border-color:var(--ap-primary);color:var(--ap-on-primary);width:100%;margin:0}
+.scanner-app .scan-wrap>.btn.link{padding-inline:0;border:0;background:transparent;font-size:13px;margin-bottom:8px;min-height:44px}
+.scanner-app .viewfinder{border-radius:14px;margin:0 0 12px;border-color:var(--ap-line-strong)}
+.scanner-app .sc-find{background:var(--ap-paper);border:1px solid var(--ap-line);border-radius:18px;padding:16px;margin:0;box-shadow:var(--ap-shadow)}
+.scanner-app .sc-find .row strong{font-size:16px}
+.scanner-app .sc-find-form input{min-height:46px;font-size:16px;padding:10px 12px;border-radius:12px;background:var(--ap-bg);color:var(--ap-text);border-color:var(--ap-line-strong)}
+.scanner-app .sc-contact{font-size:12px;line-height:1.6;margin:14px 0}
+@media(max-width:600px){
+ body.staff-app main.staff-workspace{padding:12px 14px 110px}
+ body.staff-app :is(.s-card,.card,.sh-card){padding:14px;border-radius:14px}
+ body.staff-app .sh-dashboard .sh-heading h1{font-size:23px;margin-bottom:6px}
+ body.staff-app .sh-dashboard-tabs{padding-block:6px;gap:4px}
+ body.staff-app .sh-analytics{padding:14px;gap:10px;border-radius:16px;min-height:0}
+ body.staff-app .sh-hero-chart>svg{height:84px;max-height:84px}
+ body.staff-app .sh-gauge-art{max-width:120px}.staff-app .sh-gauge-art strong{font-size:23px}
+ body.staff-app .sh-hero-numbers{padding-top:10px;gap:10px}
+ body.staff-app .sh-hero-numbers strong{font-size:25px;margin-bottom:4px}
+ body.staff-app .sh-metric{min-height:104px;padding:10px 12px;gap:4px}
+ body.staff-app .sh-metric strong{font-size:24px}
+ body.staff-app .sh-metric.sh-money strong{font-size:18px}
+ body.staff-app .sh-metric:last-child{min-height:76px}
+ body.staff-app .sh-metric-hint{font-size:11px}
+ body.staff-app .sh-lower-grid>.sh-card{margin:0}
+ body.staff-app .sh-shortcut{min-height:48px}
+ body.staff-app .sh-event-controls summary{flex-wrap:wrap;gap:4px 8px;padding-block:6px}
+ body.staff-app .settings-compact .s-toc{display:none}
+ body.staff-app .s-setting-panel>summary{min-height:48px;padding:10px 14px}
+ body.staff-app .s-setting-panel>.s-card{padding:12px 14px}
+ body.scanner-app main.scanner-workspace{padding-inline:16px}
+ .scanner-app .scan-heading h1{font-size:21px}
+ .scanner-app .scan-rule{max-width:42%;font-size:10px;padding:6px 9px}
+}
+/* Platform authentication remains separate; these styles do not create a party session. */
+html[data-theme] body.platform-app main.platform-workspace{max-width:1184px;padding:18px 20px 48px;animation:none;transform:none}
+.platform-app .platform-tabs{position:sticky;top:150px;z-index:12;display:flex;flex-wrap:wrap;gap:4px;padding:6px;margin:0 0 18px;background:var(--ap-shell);border:1px solid var(--ap-line);border-radius:16px;backdrop-filter:blur(12px)}
+.platform-app .platform-tabs a,.platform-app .platform-tabs .btn{min-height:44px;font-size:13px;padding:10px 14px;border-radius:999px;color:var(--ap-muted);border:0;white-space:normal}
+.platform-app .platform-tabs a[aria-current=page]{background:var(--ap-primary);color:var(--ap-on-primary)}
+.platform-app .platform-tabs .staff-out{margin-inline-start:auto;background:transparent}
+.platform-app .staff-head{padding:0 0 14px;margin:0 0 14px}.platform-app .staff-head h1{font-size:28px;margin:0 0 8px}.platform-app .staff-head .label-line{font-size:12px;margin-bottom:6px}.platform-app .staff-head .lede{font-size:14px;max-width:700px;line-height:1.6;margin:0}
+.platform-app .g-cols{display:block;margin:0}
+.platform-app .g-cols:not(:has(.s-card:not([hidden]))){display:none}
+.platform-app .s-card{padding:18px;margin:0;background:var(--ap-paper);border:1px solid var(--ap-line);border-radius:16px;box-shadow:var(--ap-shadow)}
+.platform-app .s-card h2{font-size:18px;margin:0 0 8px}.platform-app .s-card-head{margin-bottom:14px}.platform-app .s-card-head>p{font-size:13px;line-height:1.6;margin:0;color:var(--ap-muted)}
+.platform-app .g-list{display:grid;gap:8px;margin-block:12px;padding:0}
+.platform-app .g-row{padding:12px 14px;border:1px solid var(--ap-line);border-radius:14px;background:var(--ap-bg);margin:0;min-width:0}
+.platform-app .g-row p{font-size:13px;line-height:1.5;margin-block:5px}.platform-app .g-name-line{font-size:14px;gap:8px;align-items:center;flex-wrap:wrap}
+.platform-app .g-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}.platform-app .g-actions .btn{width:auto;min-height:44px;padding:9px 14px;font-size:13px;border-radius:999px;flex:0 1 auto}
+.platform-app :is(input,select){min-height:44px;font-size:16px;border-radius:12px}.platform-app summary{min-height:44px;align-content:center;font-size:13px;cursor:pointer}.platform-app .s-platform-details{margin-top:8px}
+.platform-app .s-platform-facts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-block:10px}.platform-app .s-platform-facts dt{font-size:11px}.platform-app .s-platform-facts dd{font-size:14px}
+.platform-app .s-health-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.platform-app .s-health-grid>.g-row{padding:12px 14px!important;border:1px solid var(--ap-line)!important;border-radius:14px!important}
+.platform-app .s-card h3{font-size:16px;margin-block:20px 8px}
+@media(max-width:899px){.platform-app .platform-tabs{top:78px}}
+@media(max-width:600px){
+ html[data-theme] body.platform-app main.platform-workspace{padding:14px 14px 36px}
+ .platform-app .platform-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;padding:5px;margin-bottom:14px}
+ .platform-app .platform-tabs a,.platform-app .platform-tabs .btn{display:flex;align-items:center;justify-content:center;padding:8px 6px;font-size:12px;min-width:0;text-align:center}
+ .platform-app .platform-tabs .staff-out{margin:0}
+ .platform-app .staff-head h1{font-size:24px}.platform-app .staff-head .lede{font-size:13px}
+ .platform-app .s-card{padding:14px}.platform-app .g-row{padding:10px 12px}.platform-app .s-health-grid{grid-template-columns:1fr}
+ .platform-app .g-actions .btn{flex:1 1 120px}.platform-app .s-platform-facts{gap:8px}.platform-app .s-platform-facts dd{font-size:13px}
+}
+@media(min-width:901px){.platform-app :is(#parties,#organisers)>.g-list,.platform-app :is(#parties,#organisers)>div>.g-list{grid-template-columns:repeat(2,minmax(0,1fr));align-items:start}}
+.platform-app .g-row:has(>.platform-party-more){display:flex;flex-direction:column}
+.platform-app .g-row>.platform-party-more{order:2}
+.platform-app .g-row>.g-actions{order:1}
+.platform-app .g-row>.notice{order:3}
+body.staff-app .queue-workspace .bk-filterbar>.g-actions{align-items:center;gap:8px}
+body.staff-app .queue-workspace .bk-filterbar>.g-actions .q-select-all{margin-inline-start:auto}
+body.staff-app :is(.q-request,.g-guest-card) .bk-card{margin-top:6px}
+/* Override the old editorial rows so compact platform cards keep their own padding. */
+.platform-app .s-card .g-list:not(.s-health-grid)>.g-row{padding:10px 12px;margin:0;border:1px solid var(--ap-line);border-radius:14px;background:var(--ap-bg)}
+.platform-app .g-row:has(>.platform-party-more){display:grid;grid-template-columns:minmax(0,1fr);gap:2px}
+.platform-app .g-row>.g-actions{flex-basis:auto;margin-block:4px}
+.platform-app .g-row>.platform-party-more{margin-top:2px}
+.platform-app .platform-tabs{scroll-margin-top:150px}
+@media(max-width:899px){.platform-app .platform-tabs{scroll-margin-top:78px}}

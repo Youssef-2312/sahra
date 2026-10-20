@@ -16,9 +16,9 @@
   var heroBox = document.getElementById("hero");
   var filter = "all";
   var experienceChoice = 0;
+  // Render after boot so its legacy section observer does not animate this page.
+  var ready = false;
   var partyFind = "";     // the party search (shown once there are several parties)     // the chips above the parties (this page only, not remembered)
-  // Twenty-two distinct photos, with similar scenes spaced apart.
-  var HERO = [1, 17, 8, 18, 14, 19, 3, 20, 10, 16, 22, 6, 5, 24, 13, 2, 15, 9, 4, 11, 12, 7];
 
   function remembered() {
     try {
@@ -53,26 +53,10 @@
 
   function heading(a, em, b) { return [a, el("span", { class: "serif", text: em }), b]; }
 
-  // The moving collage (owner): every photo the same size, edge to edge, in rows
-  // tilted on a diagonal; the whole sheet slides along the diagonal as one, so
-  // the arrangement never changes and a photo never touches a copy of itself.
-  // Row r starts step() photos further along,
-  // and every other row is shifted half a photo. Larger tiles and the expanded
-  // photo pool keep the visible sections distinct.
-  var LANES = 7;    // enough tilted rows to cover the corners of a wide screen
-  // Stagger rows so nearby tiles draw from different parts of the photo pool.
-  function step() { return 9; }
+  // Existing owner-supplied photographs, static and decorative.
   function collage() {
-    var lanes = [];
-    for (var r = 0; r < LANES; r++) {
-      var k = (r * step()) % HERO.length;
-      var order = HERO.slice(k).concat(HERO.slice(0, k));
-      // Three copies: the row moves by exactly one copy, so the screen is always covered and the loop has no seam.
-      var tiles = order.concat(order, order).map(function (n, i) { return el("div", { class: "ph" }, photo(n, i < HERO.length * 2)); });
-      lanes.push(el("div", { class: "lane" }, tiles));
-    }
-    // Decoration only: always laid out left to right, so Arabic gets the same no-repeat arrangement.
-    return el("div", { class: "hero-bg", attrs: { "aria-hidden": "true", dir: "ltr" } }, el("div", { class: "tilt" }, lanes));
+    return el("div", { class: "hero-bg", attrs: { "aria-hidden": "true" } },
+      [18, 19, 24].map(function (n) { return photo(n, true); }));
   }
 
   function hero() {
@@ -180,7 +164,6 @@
         else grid.appendChild(el("p", { class: "muted none", text: t("h_filter_none") }));
         count.textContent = shown.length === 1 ? t("h_count_one") : t("h_count", { n: shown.length });
         chips.querySelectorAll("button").forEach(function (b) { b.setAttribute("aria-pressed", b.dataset.f === filter ? "true" : "false"); });
-        Sahra.reveal(grid);
       };
       if (keys.length > 1) keys.forEach(function (k) {
         var b = el("button", { class: "chip", text: t("h_filter_" + k), attrs: { type: "button" } });
@@ -225,15 +208,11 @@
       panel.replaceChildren(el("div", { class: "home-stage-label" }, el("span", { class: "label-line", text: t("h_x_preview") }),
         el("span", { class: "pill", text: t("h_x_" + mode + "_tag") })), tickets,
         el("div", { class: "home-stage-note" }, el("h3", { text: t("h_x_" + mode + "_title") }), el("p", { text: t("h_x_" + mode + "_p") })));
-      if (!(window.SahraAppearance ? SahraAppearance.reducedMotion() : window.matchMedia("(prefers-reduced-motion: reduce)").matches) && panel.animate) {
-        var animation = panel.animate([{ opacity: .65, transform: "translateY(6px)" }, { opacity: 1, transform: "none" }], { duration: 280, easing: "ease-out" });
-        animation.id = "sahra-reveal";
-      }
+
     }
     var tabs = el("div", { class: "home-ticket-tabs", attrs: { role: "tablist", "aria-label": t("h_x_choose"), "aria-orientation": "vertical" } });
     modes.forEach(function (mode, i) {
       var button = el("button", { class: "home-ticket-tab", attrs: { type: "button", role: "tab", id: "ticket-choice-" + mode, "aria-controls": "ticket-experience-panel" } },
-        el("span", { class: "home-guide-number", text: "0" + (i + 1), attrs: { "aria-hidden": "true" } }),
         el("span", null, el("strong", { text: t("h_x_" + mode + "_label") }), el("span", { text: t("h_x_" + mode + "_short") })));
       button.addEventListener("click", function () { experienceChoice = i; draw(); });
       button.addEventListener("keydown", function (e) {
@@ -271,7 +250,6 @@
         host ? el("a", { class: "why-more", text: t("h_hosts_link"), attrs: { href: "/about" } }) : null),
       el("ol", { class: "home-guide-list" }, [1, 2, 3].map(function (n) {
         return el("li", null,
-          el("span", { class: "home-guide-number", text: "0" + n, attrs: { "aria-hidden": "true" } }),
           el("div", null, el("h3", { text: t("h_" + kind + n + "_t") }),
             el("p", { text: t("h_" + kind + n + "_p") })));
       })));
@@ -303,17 +281,23 @@
   function how() {
     return el("section", { class: "how", attrs: { id: "how" } },
       el("div", { class: "section-head" }, el("h2", { text: t("h_how_title") })),
-      el("div", { class: "steps" }, [1, 2, 3].map(function (n) {
-        return el("div", { class: "step step-card" },
-          el("span", { class: "num", text: "0" + n }),
-          el("h3", { text: t("h_step" + n + "_t") }),
-          el("p", { text: t("h_step" + n + "_p") }));
+      el("ol", { class: "mk-ticket-steps" }, [1, 2, 3, 4].map(function (n) {
+        return el("li", null, el("span", { class: "mk-step-mark", text: String(n), attrs: { "aria-hidden": "true" } }),
+          el("h3", { text: t("mk_step" + n + "_t") }), el("p", { text: t("mk_step" + n + "_p") }));
       })),
       guide("ready"),
       faq());
   }
 
+  function hostInvitation() {
+    return el("section", { class: "mk-host-band" },
+      el("div", null, el("p", { class: "mk-badge", text: t("mk_host_badge") }),
+        el("h2", { text: t("mk_host_title") }), el("p", { text: t("mk_host_p") })),
+      el("a", { class: "btn primary", text: t("mk_host_action"), attrs: { href: "/contact.html" } }));
+  }
+
   function render() {
+    if (!ready) return;
     Sahra.clear(app);
     Sahra.title(null);
     Sahra.clear(heroBox).appendChild(hero());
@@ -324,7 +308,7 @@
     app.appendChild(ticketExperience());
     app.appendChild(story());
     app.appendChild(how());
-    Sahra.reveal(app);
+    app.appendChild(hostInvitation());
   }
 
   async function load() {
@@ -343,5 +327,7 @@
   }
 
   Sahra.boot({ render: render });
+  ready = true;
+  render();
   load();
 })();

@@ -1413,3 +1413,82 @@ only horizontal overflow and brand centring.
 Validation: 32 EN/AR light/dark layouts at 320, 390, 768, 899, 900, 1024,
 1286 and 1440 px passed shell containment, sibling separation, content clearance,
 profile interaction and sticky top-zero checks, with zero overflow/page errors.
+
+## Marketing page preview (20 October 2026)
+
+About now uses a framed Nova-inspired hero, corner crosshairs, a small badge,
+64 px desktop/36 px phone heading, concise bilingual copy and pill/text actions.
+Per the owner's clarification, the visual stays a single existing rendered
+Sahra ticket, styled with perspective and edge fades, rather than a dashboard.
+Arabic mirrors the perspective and alignment. The existing explanatory sections
+remain, with quieter cards and accurate one-use QR wording. The statement below
+the hero separates product simplicity from strict door validation.
+
+Homepage keeps the existing party data, search/filter logic, remembered ticket
+links, ticket-kind guide, preparation tips and FAQs. Adds a real four-step ticket
+sequence and invitation-only host contact band. Existing hero photos are used
+without a continuous collage animation; images below the fold lazy-load.
+Marketing styles live in marketing.css after appearance.css. Header/footer JS
+and all server, guest-flow and database code are unchanged. The owner's separate
+navbar clarification increases desktop spacing and puts links beneath the centred
+brand, using the existing appearance stylesheet. Mobile controls retain their
+44 px or larger touch targets.
+
+The pages use at most one content entrance, honour reduced motion and no longer
+invoke per-section reveal effects. Public wording has 604 matching EN/AR keys after preserving the remote mobile-menu label.
+Local Playwright fixtures passed 24 theme/language/390-768-1440 layouts with zero
+horizontal overflow/page errors, including search/filter chips, remembered links,
+ticket tabs, FAQs, navbar bounds and profile Settings. Touch checks cover language,
+profile Sign in and Contact navigation. Eight requested preview screenshots are
+provided for review before deployment. Fixture API traffic is intercepted.
+
+Final checks: TypeScript and all 567 Vitest tests in 44 files pass. Dedicated
+motion checks confirm no animations with reduced motion, at most one content
+entrance otherwise, and no section animations triggered by scrolling. Mobile
+button failures were not reproduced in the tested public controls; the owner has
+been asked to identify the specific failing control. This preview is not deployed.
+
+The owner approved deployment after the previews, requested a centred homepage
+headline/actions, and removed only the ticket illustration caption. The remote
+floating navbar/mobile menu changes were integrated without replacing their
+logic. Desktop public navigation now has a larger centred brand row and a full
+links row below it. Mobile menu links, profile controls and language switching
+are included in the final touch checks. No server or database changes.
+
+### Compact staff and site-owner workspaces in the same release
+
+The owner expanded this batch to reduce scrolling across staff pages and the
+site-owner panel. staff-compact.css shares tighter cards, spacing and chart
+sizes while retaining 44 px touch targets. Phone dashboard metric fixtures
+measure 104-108 px instead of 138 px. Request selection shares the filter tools
+row. Booking reviews and guest actions still use the existing scoped controls.
+
+Party settings now presents eleven searchable, collapsed section summaries,
+with one section open at a time. Existing forms remain mounted when closed, so
+unsaved inputs are retained. Save/rebuild keeps the active section open; hash
+links and the desktop contents list open their target. The phone contents strip
+is omitted because the section summaries provide the same navigation.
+
+The platform panel keeps its separate authentication and CSRF flow. Parties,
+My parties, Health, Organisers, Site owners and account-name settings are separate
+views, so only the selected panel is visible. Organisers see only their allowed
+views. Search stays available, advanced party counts/payment controls are folded,
+and existing confirmation and typed-name safeguards remain. Drafts survive view
+changes. Scanner idle, lookup and buttons use the dashboard theme tokens; lookup
+hides the camera card to avoid scrolling. Full-screen verdicts, QR validation,
+server decisions and retry bodies are unchanged. No migrations or backend edits.
+
+Final compact validation: 48 request/guest/scanner/ticket layouts, 48 dashboard/
+settings/email/team layouts and 24 owner/organiser platform layouts pass in both
+themes and languages at 390/768/1440 px, with zero overflow or page errors.
+Phone guest cards measure 124-125 px; request cards 155-157 px. Settings' eleven
+closed sections occupy 724 px in English and 759 px in Arabic, including search.
+Save/rebuild, hash navigation, exclusive expansion and platform draft retention
+passed with intercepted requests. Thirty-six scanner/ticket safety cases pass.
+TypeScript and all 567 Vitest tests pass. Production deployment is authorised
+by the owner after the shared marketing previews and these final checks.
+
+A focused platform check caught fragment navigation positioning a selected panel
+under the sticky tabs. View switches now return to the workspace top. Six dark
+EN/AR phone/tablet/desktop cases confirm content clears the tabs, with profile
+account actions still available. TypeScript and all 567 tests pass after the fix.
