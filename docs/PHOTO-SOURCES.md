@@ -31,3 +31,11 @@ concept from the same generation session (quality 88 WebP). About uses this
 single ticket with original scroll/pointer motion inspired by the owner's
 Keynote reference, not its images or Framer code. The fan stays in Home's
 separate ticket-options guide. Both are decorative demo artwork.
+
+### Homepage photo allocation (20 October 2026)
+
+The moving hero uses originals 1–16 once each. Story photos use 17, 19 and 24;
+the shared footer uses 18, 20 and 22. All 22 photo URLs are unique within the
+homepage. Existing nodes move around the loop rather than cloning photos.
+The tracked files have 22 distinct SHA-256 hashes and were visually reviewed
+as a contact sheet. No extra downloads or new image sources were needed.

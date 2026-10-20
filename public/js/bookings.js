@@ -165,16 +165,16 @@
     })));
     return bar;
   }
-  function pager(count, next, loading, move, top, page) {
+  function pager(count, next, loading, move, top, page, position) {
     page = page || 0;
     var rtl = document.documentElement.dir === "rtl";
-    return el("nav", { class: "bk-pager", attrs: { "aria-label": t("bf_pages"), "aria-busy": loading ? "true" : "false" } },
-      el("p", { class: "small muted bk-page-count", text: t("bf_page_count", {n:count}), attrs: { role:"status" } }),
+    return el("nav", { class: "bk-pager" + (position ? " bk-pager-" + position : ""), attrs: { "aria-label": t(position === "top" ? "bf_pages_top" : position === "bottom" ? "bf_pages_bottom" : "bf_pages"), "aria-busy": loading ? "true" : "false", tabindex:-1 } },
+      el("p", { class: "small muted bk-page-count", text: t("bf_page_count", {n:count}), attrs: { role:position === "bottom" ? "note" : "status" } }),
       el("div",{class:"bk-page-arrows"},
         el("button", {class:"btn bk-page-prev",text:rtl?"›":"‹",attrs:{type:"button",disabled:loading||page===0,"aria-label":t("bf_previous")},on:{click:function(){move(-1);}}}),
-        el("span",{class:"bk-page-number",text:t("bf_page",{n:page+1}),attrs:{"aria-live":"polite","aria-current":"page"}}),
+        el("span",{class:"bk-page-number",text:t("bf_page",{n:page+1}),attrs:{"aria-live":position === "bottom" ? "off" : "polite","aria-current":"page"}}),
         el("button", {class:"btn bk-page-next",text:rtl?"‹":"›",attrs:{type:"button",disabled:loading||!next,"aria-label":t("bf_next")},on:{click:function(){move(1);}}})),
-      el("button", {class:"btn bk-page-top",text:t("bf_top"),attrs:{type:"button"},on:{click:top}}));
+      el("button", {class:"btn bk-page-top",attrs:{type:"button","aria-label":t("bf_top"),title:t("bf_top")},on:{click:top}},S.icon("search")));
   }
 
   window.SahraBooking = { card: card, guide: guide, filters: filters, params: params, pager: pager };

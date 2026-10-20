@@ -1508,3 +1508,23 @@ Validation: 18 mobile EN/AR cases pass for Settings, Account and Sign out with
 staff, platform and combined sessions. Each simulates a null-target focusout
 before a real touch tap. Logout calls and CSRF tokens are intercepted and checked;
 no real account is signed out. TypeScript and all 567 Vitest tests pass.
+
+### Compact page arrows and moving photo collage (20 October 2026)
+
+Requests and Guests now have matching single-row pagination above and below
+results. Each bar is 54px high at 390, 768 and 1440px in EN/AR; arrow and search
+buttons retain 44px touch targets. Page changes focus the top bar; cursor-based
+queries, filters and boundary guards are unchanged. Browser fixtures covered
+45 records across three pages, search and retained filters, with zero overflow
+or page errors in all 12 layouts.
+
+The owner explicitly restored continuous motion for the homepage collage.
+Sixteen hero photos move in two lanes by recycling existing offscreen nodes,
+without cloned images. Story photos 17/19/24 and footer photos 18/20/22 are
+reserved, giving 22 distinct photo sources across the homepage. No new images
+were required: all 22 repository photos have distinct hashes and were visually
+reviewed together. Motion pauses offscreen, in hidden tabs, and for system or
+manual reduced motion. Event listeners are cleaned up on rerender/page exit.
+EN/AR, light/dark, 390/768/1440 browser checks confirmed 22 unique photo URLs,
+motion/reduced motion, zero horizontal overflow and no page errors. No backend,
+API, database, admission or email behavior changed.

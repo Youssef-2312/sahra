@@ -16,6 +16,7 @@
   var heroBox = document.getElementById("hero");
   var filter = "all";
   var experienceChoice = 0;
+  var stopCollage = function () {};
   // Render after boot so its legacy section observer does not animate this page.
   var ready = false;
   var partyFind = "";     // the party search (shown once there are several parties)     // the chips above the parties (this page only, not remembered)
@@ -53,10 +54,30 @@
 
   function heading(a, em, b) { return [a, el("span", { class: "serif", text: em }), b]; }
 
-  // Existing owner-supplied photographs, static and decorative.
+  // Each photo exists once. Offscreen tiles move to the end instead of being cloned.
+  // Story photos (17, 19, 24) and footer photos (18, 20, 22) are reserved.
+  var HERO = [1, 8, 14, 3, 10, 16, 6, 5, 13, 2, 15, 9, 4, 11, 12, 7];
   function collage() {
-    return el("div", { class: "hero-bg", attrs: { "aria-hidden": "true" } },
-      [18, 19, 24].map(function (n) { return photo(n, true); }));
+    var lanes = [HERO.slice(0,8), HERO.slice(8)];
+    return el("div", { class:"hero-bg", attrs:{"aria-hidden":"true",dir:"ltr"} },
+      el("div", { class:"tilt" }, lanes.map(function (items) {
+        return el("div", { class:"lane" }, items.map(function(n){var img=photo(n,true);img.setAttribute("fetchpriority","low");return el("div",{class:"ph"},img);}));
+      })));
+  }
+  function animateCollage(background) {
+    var lanes=Array.from(background.querySelectorAll(".lane")), offsets=[0,120,240], steps=[], frame=0, last=0, visible=false, disposed=false;
+    function reduced(){return window.SahraAppearance?SahraAppearance.reducedMotion():matchMedia("(prefers-reduced-motion: reduce)").matches;}
+    function measure(){steps=lanes.map(function(lane){return lane.firstElementChild.offsetWidth+8;});}
+    function tick(time){
+      frame=0;if(disposed||!visible||document.hidden||reduced())return;
+      var dt=last?Math.min(time-last,64)/1000:0;last=time;
+      lanes.forEach(function(lane,i){var step=steps[i];if(!step)return;offsets[i]+=[15,12,17][i]*dt;while(offsets[i]>=step){lane.appendChild(lane.firstElementChild);offsets[i]-=step;}lane.style.transform="translateX("+(-offsets[i])+"px)";});
+      frame=requestAnimationFrame(tick);
+    }
+    function sync(){if(frame)cancelAnimationFrame(frame);frame=0;last=0;if(!disposed&&visible&&!document.hidden&&!reduced()){measure();frame=requestAnimationFrame(tick);}}
+    var observer=new IntersectionObserver(function(entries){visible=entries[0].isIntersecting;sync();},{rootMargin:"100px"});observer.observe(background);
+    document.addEventListener("visibilitychange",sync);document.addEventListener("sahra:appearance",sync);window.addEventListener("resize",sync);
+    return function(){disposed=true;if(frame)cancelAnimationFrame(frame);observer.disconnect();document.removeEventListener("visibilitychange",sync);document.removeEventListener("sahra:appearance",sync);window.removeEventListener("resize",sync);};
   }
 
   function hero() {
@@ -237,7 +258,7 @@
         el("p", { class: "lede", text: t("h_story_p") }),
         el("a", { class: "btn", text: t("h_story_link"), attrs: { href: "#parties" } })),
       el("div", { class: "home-photos", attrs: { "aria-hidden": "true" } },
-        [18, 19, 24].map(function (n) { return el("div", null, photo(n, false)); })));
+        [17, 19, 24].map(function (n) { return el("div", null, photo(n, false)); })));
   }
 
   function guide(kind) {
@@ -300,7 +321,9 @@
     if (!ready) return;
     Sahra.clear(app);
     Sahra.title(null);
+    stopCollage();
     Sahra.clear(heroBox).appendChild(hero());
+    stopCollage=animateCollage(heroBox.querySelector(".hero-bg"));
     var m = mineSection();
     if (m) m.forEach(function (n) { app.appendChild(n); });
     app.appendChild(el("div", { class: "parties-section" }, partiesSection()));
@@ -327,6 +350,8 @@
   }
 
   Sahra.boot({ render: render });
+  window.addEventListener("pagehide",function(){stopCollage();});
+  window.addEventListener("pageshow",function(e){if(e.persisted){stopCollage=animateCollage(heroBox.querySelector(".hero-bg"));}});
   ready = true;
   render();
   load();

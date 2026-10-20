@@ -83,6 +83,7 @@ var SahraStaff = (function () {
       team: "M12 3l9 5v8l-9 5-9-5V8z M3 8l9 5 9-5 M12 13v8",
       close: "M6 6l12 12M6 18L18 6",
       refresh: "M20 7v5h-5 M4 17v-5h5 M6 6a8 8 0 0 1 14 6 M18 18A8 8 0 0 1 4 12",
+      search: "M21 21l-5-5 M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0",
       arrow: "M5 12h14m-5-5 5 5-5 5"
     };
     var n = document.createElementNS("http://www.w3.org/2000/svg", "svg");

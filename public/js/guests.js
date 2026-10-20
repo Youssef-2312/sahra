@@ -64,7 +64,7 @@
     nextFound = r.ok ? r.body.next : null;
     redrawFind();
     if (move && r.ok) {
-      var first = findNode.querySelector('.g-row') || findNode.querySelector('.bk-pager');
+      var first = findNode.querySelector('.bk-pager-top') || findNode.querySelector('.g-row');
       if (first) { first.scrollIntoView({block:"start"}); first.focus({preventScroll:true}); }
     }
   }
@@ -191,12 +191,15 @@
         if (list.length) body.appendChild(el("section", null, el("h3", { class: "s-sub", text: t(section[0]) }), el("ul", { class: "g-list" }, list.map(guestRow))));
       });
     }
-    if (Array.isArray(found)) body.appendChild(SahraBooking.pager(found.length, nextFound, loadingMore, function (direction) { search(query, direction); }, function () {
-      var input = findNode.querySelector('input[name=q]'); input.scrollIntoView({block:"center"}); input.focus({preventScroll:true});
-    }, pageIndex));
+    function pageControls(position) {
+      return SahraBooking.pager(found.length, nextFound, loadingMore, function (direction) { search(query, direction); }, function () {
+        var input = findNode.querySelector('input[name=q]'); input.scrollIntoView({block:"center"}); input.focus({preventScroll:true});
+      }, pageIndex, position);
+    }
+    if (Array.isArray(found)) body.appendChild(pageControls("bottom"));
     body.setAttribute("role", "status");
     body.setAttribute("aria-live", "polite");
-    findNode = S.section("find", t("g_find"), null, tabs, f, body, SahraBooking.guide());
+    findNode = S.section("find", t("g_find"), null, tabs, f, Array.isArray(found) ? pageControls("top") : null, body, SahraBooking.guide());
     findNode.dataset.guestView=guestView;
     return findNode;
   }

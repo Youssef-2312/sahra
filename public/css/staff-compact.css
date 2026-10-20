@@ -133,3 +133,12 @@ body.staff-app :is(.q-request,.g-guest-card) .bk-card{margin-top:6px}
 .platform-app .g-row>.platform-party-more{margin-top:2px}
 .platform-app .platform-tabs{scroll-margin-top:150px}
 @media(max-width:899px){.platform-app .platform-tabs{scroll-margin-top:78px}}
+/* Matching slim pagination above and below results. Touch targets stay 44 px. */
+body.staff-app .bk-pager{display:flex;flex-direction:row;flex-wrap:nowrap;align-items:center;gap:8px;min-height:54px;padding:4px 8px;margin-block:8px;border-radius:14px;scroll-margin-block-start:84px}
+body.staff-app .bk-pager .bk-page-count{flex:1;min-width:0;margin:0;font-size:12px;line-height:1.4;text-align:start;overflow-wrap:anywhere}
+body.staff-app .bk-pager .bk-page-arrows{flex:none;display:flex;justify-content:center;align-items:center;gap:4px;min-height:44px;margin-inline-start:auto}
+body.staff-app .bk-pager .bk-page-number{min-width:56px;font-size:12px;line-height:1.4;white-space:nowrap;text-align:center}
+body.staff-app .bk-pager .bk-page-arrows .btn{width:44px;min-width:44px;height:44px;min-height:44px;padding:0;font-size:24px;line-height:1;border-radius:999px}
+body.staff-app .bk-pager .bk-page-top{flex:none;display:grid;place-items:center;width:44px;min-width:44px;height:44px;min-height:44px;padding:0;border-radius:999px}
+body.staff-app .bk-pager .bk-page-top svg{width:16px;height:16px}
+body.staff-app .bk-pager-top .bk-page-top{display:none}
