@@ -214,6 +214,12 @@ html[data-theme] body.staff-app .guest-workspace .s-card .g-list>.g-guest-card{d
 .ticket-identity .facts li:has(strong[dir=ltr]){display:flex;grid-column:1/-1;justify-content:space-between;align-items:baseline;gap:10px;padding-top:8px;border-top:1px solid var(--ap-line)}
 .ticket-identity .facts li:has(strong[dir=ltr]) br{display:none}
 
+/* Public links participate in layout; legacy absolute positioning clipped the shell. */
+html[data-theme] body .topbar>.public-nav{position:static;inset:auto;transform:none;margin:0;min-width:0;flex-basis:auto;align-self:center;backdrop-filter:none;-webkit-backdrop-filter:none;box-shadow:none}
+@media(min-width:900px){
+ html[data-theme] body .topbar>.public-nav{grid-column:1;grid-row:1;justify-content:flex-start;width:auto;justify-self:start;gap:2px}
+ html[data-theme] body .topbar>.public-nav a{min-height:44px;padding:8px 10px;white-space:nowrap;font-size:13px}
+}
 /* Labels above headings (owner: the spaced mono capitals looked odd): the site font, sentence case. */
 html[data-theme] .label-line,html[data-theme] .sh-heading .label-line,html[data-theme] .kicker{font-family:var(--font-body);font-size:14px;font-weight:600;letter-spacing:0;text-transform:none;line-height:1.4;color:var(--ap-muted)}
 html[data-theme] .label-line{display:block;margin:0 0 6px}
