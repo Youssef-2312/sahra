@@ -389,7 +389,7 @@ var Sahra = (function () {
         var items = Array.from(linksMenu.querySelectorAll("[role=menuitem]")), index = items.indexOf(document.activeElement);
         if (["ArrowDown", "ArrowUp", "Home", "End"].includes(e.key)) { e.preventDefault(); var next = e.key === "Home" ? 0 : e.key === "End" ? items.length - 1 : (index + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length; items[next].focus(); }
       });
-      linksMenu.addEventListener("focusout", function (e) { if (linksMenu && !linksMenu.contains(e.relatedTarget) && e.relatedTarget !== navToggle) closeLinks(false); });
+      linksMenu.addEventListener("focusout", function (e) { if (linksMenu && e.relatedTarget && !linksMenu.contains(e.relatedTarget) && e.relatedTarget !== navToggle) closeLinks(false); });
       document.body.appendChild(linksMenu);
       var r = navToggle.getBoundingClientRect();
       linksMenu.style.top = (r.bottom + 10) + "px";
@@ -429,7 +429,7 @@ var Sahra = (function () {
         var items=Array.from(profileMenu.querySelectorAll('[role=menuitem]')),index=items.indexOf(document.activeElement);
         if(["ArrowDown","ArrowUp","Home","End"].includes(e.key)){e.preventDefault();var next=e.key==="Home"?0:e.key==="End"?items.length-1:(index+(e.key==="ArrowDown"?1:-1)+items.length)%items.length;items[next].focus();}
       });
-      profileMenu.addEventListener("focusout",function(e){if(profileMenu&&!profileMenu.contains(e.relatedTarget)&&e.relatedTarget!==account)closeProfile(false);});
+      profileMenu.addEventListener("focusout",function(e){if(profileMenu&&e.relatedTarget&&!profileMenu.contains(e.relatedTarget)&&e.relatedTarget!==account)closeProfile(false);});
       document.body.appendChild(profileMenu);var r=account.getBoundingClientRect();
       profileMenu.style.top=(r.bottom+8)+"px";profileMenu.style.left=Math.max(12,Math.min(innerWidth-252,document.documentElement.dir==="rtl"?r.left:r.right-240))+"px";
       account.setAttribute("aria-expanded","true");profileMenu.querySelector('[role=menuitem]').focus();
