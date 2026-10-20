@@ -129,3 +129,87 @@ html[data-theme="light"] .verdict .btn{background:rgba(0,0,0,.22);color:inherit;
  html[data-theme] body:not(.staff-app) .topbar .nav-account::after{content:"";position:absolute;width:16px;height:9px;bottom:9px;left:calc(50% - 8px);border:1.5px solid currentColor;border-radius:10px 10px 3px 3px}
 }
 @media(max-width:360px){html[data-theme] body:not(.staff-app) .topbar .nav-search{display:none}}
+
+/* Profile owns Settings; no separate theme toggle competes with navigation. */
+html[data-theme] body .topbar .nav-account{display:inline-flex!important;position:relative;width:44px;min-width:44px;max-width:44px;height:44px;min-height:44px;margin:0;padding:0;font-size:0!important;line-height:0;border:1px solid var(--ap-line);border-radius:12px;background:var(--ap-paper);color:var(--ap-text);overflow:hidden}
+html[data-theme] body .topbar .nav-account::before{content:"";position:absolute;width:8px;height:8px;top:9px;left:calc(50% - 4px);border:1.5px solid currentColor;border-radius:50%}
+html[data-theme] body .topbar .nav-account::after{content:"";position:absolute;width:16px;height:9px;bottom:9px;left:calc(50% - 8px);border:1.5px solid currentColor;border-radius:10px 10px 3px 3px}
+html[data-theme] body .topbar .lang-switch{font-size:12px;font-weight:500;width:36px;min-width:36px;min-height:44px;padding-inline:5px;border:0;background:transparent}
+html[data-theme] .brand img{filter:none!important}
+.account-menu{position:fixed;z-index:80;width:240px;max-width:calc(100vw - 24px);padding:6px;border:1px solid var(--ap-line-strong);border-radius:16px;background:var(--ap-paper);color:var(--ap-text);box-shadow:var(--ap-shadow)}
+.account-menu :is(a,button){display:flex;align-items:center;width:100%;min-height:46px;padding:10px 14px;border:0;border-radius:10px;background:transparent;color:var(--ap-text);font:inherit;font-size:14px;text-decoration:none;text-align:start;cursor:pointer}
+.account-menu :is(a,button):hover,.account-menu :is(a,button):focus-visible{background:var(--ap-subtle);outline:2px solid var(--ap-accent);outline-offset:-2px}
+/* Compact motion cards retain real controls and server-resolved booking views. */
+body.staff-app :is(.queue-workspace,.guest-workspace) .staff-head{padding-block:2px 14px;margin-bottom:8px}
+body.staff-app :is(.queue-workspace,.guest-workspace) .staff-head .lede{display:none}
+body.staff-app :is(.queue-workspace,.guest-workspace) .tabs{background:transparent;border:0;box-shadow:none;padding:0;margin-block:10px;gap:6px;backdrop-filter:none}
+body.staff-app :is(.queue-workspace,.guest-workspace) .bk-filterbar{margin-block:10px 16px}
+body.staff-app :is(.queue-workspace,.guest-workspace) .bk-search{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;margin-bottom:8px}
+body.staff-app :is(.queue-workspace,.guest-workspace) .bk-search .btn{width:auto;min-width:74px;padding-inline:14px}
+body.staff-app :is(.queue-workspace,.guest-workspace) .bk-search input{width:100%;min-width:0;min-height:46px}
+body.staff-app :is(.queue-workspace,.guest-workspace) .bk-filterbar>.g-actions{justify-content:flex-start;gap:6px}
+body.staff-app :is(.queue-workspace,.guest-workspace) .bk-filterbar>.g-actions .btn{flex:none;min-height:44px;padding:8px 14px;font-size:12px}
+body.staff-app :is(.q-request,.g-guest-card){padding:14px;margin-block:0;border-radius:18px;min-width:0;align-content:start;box-shadow:none}
+body.staff-app .queue-workspace .reqs{gap:12px}
+.q-request .head{align-items:center;gap:10px}.q-request .head .check{margin:0;gap:10px;align-items:center;min-width:0;flex:1}.q-person{display:grid;gap:3px;min-width:0}.q-request .who{font-size:15px;font-weight:600;line-height:1.4}.q-person-meta{font-size:12px;color:var(--ap-muted);line-height:1.4;overflow-wrap:anywhere}
+.q-request .head .check input{width:18px;height:18px;margin:0}.q-request .head .check:has(input){min-height:44px}.q-request .head .pill{flex:none;max-width:42%;font-size:10px;line-height:1.4;padding:4px 7px;white-space:normal}
+.q-card-meta{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:8px;font-size:11px;color:var(--ap-muted)}.q-card-meta strong{margin-inline-start:auto;font-size:14px;color:var(--ap-text);font-weight:600}.q-card-meta .pill{font-size:10px}
+body.staff-app .q-request .bk-card,body.staff-app .g-guest-card .bk-card{margin:10px 0 0;padding:0;border:0;border-top:1px solid var(--ap-line);border-radius:0;background:transparent;box-shadow:none;backdrop-filter:none}
+:is(.q-request,.g-guest-card) .bk-card>summary{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:44px;padding:10px 0;color:var(--ap-muted);font-size:12px;font-weight:500;list-style:none}
+:is(.q-request,.g-guest-card) .bk-card>summary strong{font-weight:500}.q-request .bk-card>summary::after,.g-guest-card .bk-card>summary::after{content:"+";font-size:20px;line-height:1;color:var(--ap-muted)}:is(.q-request,.g-guest-card) .bk-card[open]>summary::after{content:"−"}
+:is(.q-request,.g-guest-card) .bk-summary{display:none}
+:is(.q-request,.g-guest-card) .bk-card[open] .bk-body{border-top:1px solid var(--ap-line);margin-top:12px;padding-top:12px}
+.q-review-extra,.g-review-extra{padding:4px 0 8px}.q-review-extra .facts{margin:0 0 10px;padding:0}.q-review-extra .facts li{font-size:13px}.q-review-extra .shot:empty{display:none}.q-review-extra .shot .btn{font-size:12px}
+body.staff-app .q-request .actions{display:flex;flex-wrap:wrap;gap:8px;padding-top:8px}.q-request .actions .btn{flex:1;min-height:44px;font-size:12px}.q-request .q-primary{margin-top:0}.q-request .q-primary .btn{width:100%;min-height:44px;font-size:13px;padding:10px 14px}
+body.staff-app .q-request>.notice{padding:10px;margin:8px 0 0;font-size:12px}.queue-workspace .page-tools{margin-top:20px;padding-top:16px}.queue-workspace .page-tools>.bk-guide{margin-top:12px}
+.guest-workspace{position:relative}.guest-workspace .staff-head{padding-inline-end:130px!important}.g-view-toolbar{position:absolute;inset-inline-end:28px;top:32px}.g-view-toolbar .btn{font-size:12px!important}
+.guest-workspace #guest-list-view>.tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:8px 0 12px}.guest-workspace .g-tiles .tile{padding:10px;border-radius:14px;min-width:0}.guest-workspace .g-tiles .label{font-size:10px;letter-spacing:0;line-height:1.4;text-transform:none}.guest-workspace .g-tiles .big{font-size:23px;line-height:1.2;margin-block:5px 0}.guest-workspace .g-tiles .sub{display:none}
+body.staff-app .guest-workspace #find{padding:0;border:0;background:transparent;box-shadow:none;backdrop-filter:none}.guest-workspace #find>.s-card-head{display:none}.guest-workspace .g-list{display:grid;gap:10px}.g-guest-card .g-who{min-width:0;width:100%}.g-guest-card .g-name-line{gap:10px}.g-guest-card .g-name-line strong{font-size:15px;font-weight:600}.g-guest-card .g-name-line .pill{font-size:10px;padding:4px 7px}.g-guest-card .g-who>.small{font-size:12px;line-height:1.5}.g-guest-card .g-who>.mono{display:none}.g-guest-card .g-actions{gap:6px}.g-guest-card .g-actions .btn{flex:1 1 130px;min-height:44px;font-size:12px}
+.g-tool-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;align-items:start}.g-tool-panel{border:1px solid var(--ap-line);border-radius:18px;background:var(--ap-paper);min-width:0}.g-tool-panel>summary{min-height:58px;padding:18px;font-size:15px;color:var(--ap-text);font-weight:500}.g-tool-panel>.s-card{margin:0;border:0!important;padding:0 18px 18px!important;box-shadow:none!important;background:transparent!important}.g-tool-panel>.s-card>.s-card-head h2{display:none}
+/* Scanner framing is quiet. The full verdict has no animated ancestor. */
+body.scanner-app main.scanner-workspace{animation:none;transform:none;max-width:560px;padding-top:16px}.scanner-app .public-nav{display:none}.scan-wrap>.btn.link{width:auto;min-width:0;min-height:44px;padding:8px 0;margin:0 0 8px;font-size:13px}.scan-heading{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:14px}.scan-heading p{font-size:11px;margin:0 0 3px}.scan-heading h1{font-size:23px;line-height:1.2;margin:0;overflow-wrap:anywhere}.scan-rule{font-size:10px;max-width:40%;line-height:1.4;white-space:normal}
+.scan-stage{padding:20px;border:1px solid var(--ap-line);border-radius:22px;background:var(--ap-paper);box-shadow:var(--ap-shadow)}.scan-idle{display:flex;flex-direction:column;align-items:center;text-align:center;padding:26px 12px 20px}.scan-idle-icon{width:66px;height:66px;border:2px solid var(--ap-accent);border-radius:18px;position:relative;margin-bottom:20px}.scan-idle-icon::before,.scan-idle-icon::after{content:"";position:absolute;width:14px;height:14px;border:2px solid var(--ap-accent);border-radius:3px;top:13px;left:13px}.scan-idle-icon::after{top:35px;left:35px}.scan-idle h2{font-size:22px;margin:0 0 8px}.scan-idle p{font-size:14px;line-height:1.6;margin:0;max-width:280px}.scanner-app .scan-stage>.btn{width:100%;min-height:48px;margin:0;border-radius:14px}.scan-stage .viewfinder{margin:0;aspect-ratio:1;border-radius:16px}.scan-camera-status{font-size:12px;text-align:center;margin:12px 0 0}.scan-wrap>.btn:not(.link){width:100%;min-height:46px;border-radius:14px;margin-top:10px}.scanner-app .sc-contact{font-size:12px;margin-top:16px}.scanner-app .sc-find{padding:18px;border-radius:18px}.scanner-app .sc-find .row{gap:8px;flex-wrap:wrap}.scanner-app .verdict{animation:none!important;transition:none!important;backdrop-filter:none!important}
+/* The guest's QR is a stable paper pass. Only surrounding information moves. */
+main.ticket-workspace{max-width:1080px;padding-top:20px}.ticket-heading{margin-bottom:16px}.ticket-heading p{font-size:11px;margin:0 0 4px}.ticket-heading h1{font-size:27px;margin:0;line-height:1.2;overflow-wrap:anywhere}.ticket-workspace .cols{gap:18px;align-items:start}.ticket-pass{padding:18px;border:1px solid var(--ap-line);border-radius:22px;background:var(--ap-paper);box-shadow:var(--ap-shadow)}.ticket-identity .facts{display:grid;grid-template-columns:1fr auto;gap:8px 16px;margin:0;padding:0}.ticket-identity .facts li{margin:0;min-width:0}.ticket-identity .facts li:first-child{grid-column:1/-1}.ticket-identity .facts strong{font-size:15px;line-height:1.4;overflow-wrap:anywhere}.ticket-identity .facts .small{font-size:11px}.ticket-pass .qr-box{padding:12px;margin:14px auto 10px;max-width:320px;background:#fff;filter:none;animation:none;transition:none}.ticket-pass .qr-box img{display:block;width:100%;height:auto;max-width:100%;filter:none;animation:none;transition:none}.ticket-pass>.center{font-size:12px;margin:8px 0 14px}.ticket-actions{display:flex;gap:8px;flex-wrap:wrap}.ticket-workspace .ticket-actions .btn{width:auto;min-width:0;min-height:46px;flex:1 1 130px;font-size:12px;padding:10px;border-radius:12px;margin:0}.ticket-workspace .ticket-details>.card{margin:0 0 10px;padding:18px;border-radius:18px}.ticket-workspace .ticket-details h2{font-size:20px;margin:4px 0 8px}.ticket-details .card>p{font-size:14px}.ticket-details .card>.small{font-size:11px}.ticket-details>.btn{min-height:44px;font-size:13px}.ticket-disclosure>summary{min-height:44px;padding:8px 0;color:var(--ap-text);font-size:14px}.ticket-disclosure .pre{font-size:14px}.ticket-identity .facts li.small{grid-column:1/-1;font-size:12px;color:var(--ap-muted)}
+@media(max-width:640px){
+ body.staff-app .queue-workspace .reqs{display:grid;grid-template-columns:1fr;gap:10px}.g-tool-grid{grid-template-columns:1fr}.g-view-toolbar{inset-inline-end:16px;top:26px}.guest-workspace .staff-head{padding-inline-end:120px!important}.q-request .head .pill{font-size:10px;max-width:40%}.guest-workspace #find>.bk-guide{padding:10px 12px;margin-top:16px}.guest-workspace .g-results .s-sub{font-size:13px;margin-block:10px}.scanner-app main.scanner-workspace{padding:14px 16px 32px}.scan-idle{padding-block:22px 18px}.scan-stage{padding:16px}.scan-heading h1{font-size:21px}.ticket-workspace .cols{display:grid;grid-template-columns:1fr}.ticket-workspace .side{position:static}.ticket-identity .facts li:nth-child(2){grid-column:1/-1}.ticket-workspace .ticket-details{margin-top:0}
+}
+@media(prefers-reduced-motion:no-preference){
+ .account-menu{animation:sh-panel-in .15s ease-out}
+ :is(.q-request,.g-guest-card,.g-tool-panel,.ticket-disclosure) details[open]>.bk-body,:is(.q-request,.g-guest-card) details[open]>:is(.q-review-extra,.g-review-extra){animation:sh-panel-in .18s ease-out}
+ .g-tool-panel[open]>.s-card,.ticket-disclosure[open]>.pre{animation:sh-panel-in .18s ease-out}
+ @supports(interpolate-size:allow-keywords){
+  :is(.q-review,.g-review,.g-tool-panel,.ticket-disclosure){interpolate-size:allow-keywords}
+  :is(.q-review,.g-review,.g-tool-panel,.ticket-disclosure)::details-content{block-size:0;overflow:clip;transition:block-size .2s ease,content-visibility .2s allow-discrete}
+  :is(.q-review,.g-review,.g-tool-panel,.ticket-disclosure)[open]::details-content{block-size:auto}
+ }
+}
+
+/* One reliable sticky navbar on public, staff, ticket and scanner screens. */
+html[data-theme] body .topbar-shell,html[data-theme] body .topbar-shell.scrolled{position:sticky;top:0;max-width:none;width:100%;margin:0;border:0;border-bottom:1px solid var(--ap-line);border-radius:0;box-shadow:none;animation:none}
+html[data-theme] body .topbar{max-width:1240px;margin:0 auto;padding:8px 24px;gap:8px 12px}
+html[data-theme] body .topbar>.public-nav{width:100%;padding:0;background:transparent;border:0;gap:4px}
+@media(max-width:600px){html[data-theme] body .topbar{padding:8px 16px;column-gap:8px}html[data-theme] body .topbar>.public-nav a{font-size:12px;padding:8px 10px}}
+@media(max-width:360px){html[data-theme] body .topbar .nav-search{display:none}}
+main.ticket-workspace{animation:none;transform:none}
+body.staff-app :is(.queue-workspace,.guest-workspace) .bk-filterbar>.g-actions{display:flex;flex-wrap:wrap}
+body.staff-app :is(.queue-workspace,.guest-workspace) .bk-filterbar>.g-actions .btn{width:auto}
+body.staff-app :is(.queue-workspace,.guest-workspace) .bk-filterbar>.g-actions .btn:disabled{display:none}
+body.staff-app .q-request{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.6fr);column-gap:10px}
+.q-request>.head,.q-request>.q-card-meta,.q-request>.notice,.q-request>p{grid-column:1/-1}
+body.staff-app .q-request>.q-review{grid-column:1;min-width:0}
+.q-request>.q-primary{grid-column:2;align-self:end;margin-top:10px}
+.q-request>.q-primary .btn{font-size:12px;padding:10px 12px}
+body.staff-app .q-request>.q-review[open],body.staff-app .q-request:not(:has(.q-primary))>.q-review{grid-column:1/-1}
+.q-request:has(.q-review[open])>.q-primary{grid-column:1/-1}
+@media(max-width:640px){body.staff-app :is(.queue-workspace,.guest-workspace) .staff-head{padding-block:0 8px;margin-bottom:4px}body.staff-app :is(.queue-workspace,.guest-workspace) .staff-head .label-line{font-size:10px;letter-spacing:.08em;line-height:1.4;margin:0 0 4px}body.staff-app :is(.queue-workspace,.guest-workspace) .staff-head h1{font-size:25px;margin:0}}
+body.staff-app .guest-workspace #guest-list-view>.g-tiles .tile.stat{padding:10px;border-radius:14px;box-shadow:none;min-height:76px}
+body.staff-app .guest-workspace #guest-list-view>.g-tiles .tile.stat .big{font-size:22px;line-height:1.2;white-space:nowrap;letter-spacing:-.02em}
+body.staff-app .guest-workspace #guest-list-view>.g-tiles .tile.stat .label{font-size:10px;line-height:1.4;min-height:28px}
+html[data-theme] body.staff-app .guest-workspace .s-card .g-list>.g-guest-card{display:block;border:1px solid var(--ap-line);border-radius:18px;padding:14px;margin:0;background:var(--ap-paper);box-shadow:none}
+.guest-workspace #find[data-guest-view=approved] .g-results>section>.s-sub{display:none}
+.ticket-identity .facts{grid-template-columns:minmax(0,1fr) minmax(0,1fr);border:0;background:transparent;border-radius:0;gap:10px 14px}
+.ticket-identity .facts li,.ticket-identity .facts li:first-child,.ticket-identity .facts li:nth-child(2){display:block;grid-column:auto;padding:0;border:0}
+.ticket-identity .facts li.small{grid-column:1/-1}
+.ticket-identity .facts li:has(strong[dir=ltr]){display:flex;grid-column:1/-1;justify-content:space-between;align-items:baseline;gap:10px;padding-top:8px;border-top:1px solid var(--ap-line)}
+.ticket-identity .facts li:has(strong[dir=ltr]) br{display:none}

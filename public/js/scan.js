@@ -253,27 +253,31 @@
       app.appendChild(el("p", { class: "notice maybe", text: t("sc_signed_out") }));
       return;
     }
-    // Everything inside one centred column (bigger on a desktop); Back leaves the scanner.
+    document.body.classList.add("scanner-app");
+    app.classList.add("scanner-workspace");
+    // Keep fixed verdicts outside any transformed layout ancestors.
     var wrap = el("div", { class: "scan-wrap" });
     app.appendChild(wrap);
     var app0 = app;
     app = wrap;
     app.appendChild(el("a", { class: "btn link", text: (Sahra.lang() === "ar" ? "\u2192 " : "\u2190 ") + t("back"), attrs: { href: me.staff.role === "door" ? "/" : "/dashboard.html" } }));
-    app.appendChild(el("div", { class: "row" },
-      el("strong", { text: party ? party.name : me.party.name, attrs: { dir: "auto" } }),
-      el("span", { class: "pill", text: t("sc_rule") })));
+    app.appendChild(el("header", { class: "scan-heading" },
+      el("div",null,el("p",{class:"small muted",text:t("qc_door_scanner")}),el("h1",{text:party?party.name:me.party.name,attrs:{dir:"auto"}})),
+      el("span", { class: "pill scan-rule", text: t("sc_rule") })));
+    var stage=el("section",{class:"scan-stage"});
     var finder = el("div", { class: "viewfinder" }, video, el("div", { class: "frame" }));
-    finder.hidden = !stream;
-    app.appendChild(finder);
+    finder.hidden = !stream; stage.appendChild(finder);
     if (stream) video.play().catch(function () {});
     if (!stream) {
-      app.appendChild(el("p", { class: "muted", text: t("sc_point") }));
-      if (cameraError) app.appendChild(el("p", { class: "notice no", text: cameraError }));
-      app.appendChild(el("button", { class: "btn primary", text: t("sc_start"), attrs: { type: "button" }, on: { click: startCamera } }));
+      stage.appendChild(el("div",{class:"scan-idle"},el("span",{class:"scan-idle-icon",attrs:{"aria-hidden":"true"}}),
+        el("h2",{text:t("qc_camera_title")}),el("p",{class:"muted",text:t("sc_point")})));
+      if (cameraError) stage.appendChild(el("p", { class: "notice no",attrs:{role:"alert"}, text: cameraError }));
+      stage.appendChild(el("button", { class: "btn primary", text: t("sc_start"), attrs: { type: "button" }, on: { click: startCamera } }));
     } else {
-      app.appendChild(el("p", { class: "center muted", text: t("sc_point") }));
-      if (hasTorch()) app.appendChild(el("button", { class: "btn" + (torchOn ? " primary" : ""), text: t("sc_light"), attrs: { type: "button", "aria-pressed": String(torchOn) }, on: { click: toggleLight } }));
+      stage.appendChild(el("p", { class: "scan-camera-status muted", text: t("qc_camera_on") }));
+      if (hasTorch()) stage.appendChild(el("button", { class: "btn", text: t("sc_light"), attrs: { type: "button", "aria-pressed": String(torchOn) }, on: { click: toggleLight } }));
     }
+    app.appendChild(stage);
     if (lookup) app.appendChild(lookupPanel());
     else if (!shown) app.appendChild(el("button", { class: "btn", text: t("sc_find_open"), attrs: { type: "button" },
       on: { click: function () { lookup = { q: "", results: null, busy: false, error: null }; state = "finding"; render(); var b = document.getElementById("find-q"); if (b) b.focus(); } } }));
@@ -289,6 +293,7 @@
       app.appendChild(screen);
     }
     app = app0;
+    if(!stream && !shown)Sahra.motionCards(app0,".scan-stage","scanner-idle");
   }
 
   (async function () {

@@ -1366,3 +1366,35 @@ Required final checks: TypeScript passes; all 567 Vitest tests in 44 files pass,
 including both theme contrast regressions. The earlier 565-test count grew by
 two. The work is prepared on claude/p5-frontend for review; production deployment
 is a separate step.
+
+## Compact staff cards and repaired shared navigation (20 October 2026)
+
+Requests and Guests now use compact booking cards with review information and
+secondary actions inside disclosures. Request approval remains directly visible;
+expansion survives redraws. Guests load on entry, with issue/import/refund and
+other administration in a separate Guest tools view. Filters and page arrows
+remain available. The scanner has a compact idle workspace and guest lookup;
+released tickets have a compact identity section and adjacent save/copy actions.
+QR eligibility and server admission decisions are unchanged.
+
+The shared navbar is sticky, centred and theme aware. Its profile dropdown owns
+Settings and Sign in, or Account and Sign out for authenticated users. Separate
+appearance buttons were removed. The language control displays a small ع in
+English and EN in Arabic with a full accessible label. Theme-specific logo assets
+restore the navy dot while keeping the wordmark readable. Dropdown focus,
+keyboard dismissal, outside clicks and session-aware logout are handled.
+
+Short staggered card entrances run only for changed result sets and respect
+reduced motion. QR pixels and full-screen scanner verdicts never animate.
+
+Local Wrangler and intercepted Playwright fixtures passed 48 layout cases plus
+12 final Guest and 24 final Scanner/Ticket layouts, both themes, English/Arabic,
+at 390/768/1440 px. All reported zero horizontal overflow and console errors.
+Phone request cards measured 159-161 px and guest cards 132-133 px. Twenty-four
+navbar states covered signed-out/staff/platform accounts at 320/1440 px, with no
+control overlap and a maximum brand centre error of 0.008 px. Thirty-six safety
+cases covered scanner verdicts and invalid ticket states; unknown verdicts never
+show green. Twelve booking regressions and twelve pagination/filter layouts
+also passed. All network writes were intercepted; no real email was sent.
+TypeScript and all 567 Vitest tests in 44 files pass. No migration is required.
+This batch is prepared for review; production deployment is a separate action.
