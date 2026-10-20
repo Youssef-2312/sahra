@@ -202,3 +202,15 @@ opaque scanner verdict colours. Honour both device and manual reduced motion.
 The actual NovaHub app redirected the development browser to its Google sign-in
 page. Only the public expanded demo could be inspected; do not claim the private
 dashboard has been matched pixel-for-pixel without an accessible reference.
+
+### Latest UI continuation: compact cards and profile navigation (20 October 2026)
+
+The latest PHASE5 entry supersedes the appearance-button/monochrome-logo notes:
+Settings now lives in the profile dropdown, and adaptive logo assets retain a
+navy dot. Requests/Guests use compact expandable booking cards; Guest tools has
+its own view. Scanner and released-ticket layouts match the shared surfaces.
+Motion respects reduced motion and never affects QR pixels or scanner verdicts.
+No backend changes or migrations. Local fixtures cover both themes, EN/AR and
+phone/tablet/desktop, plus booking/pagination and fail-closed scanner checks.
+Current required suite: 567 tests in 44 files, plus TypeScript. Production remains
+a separate owner-authorized deployment step.

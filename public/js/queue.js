@@ -19,6 +19,7 @@
   var initialFilters = new URLSearchParams(location.search);
   ["q","status","type","delivery","entry","booking","payment"].forEach(function(k){if(initialFilters.has(k))filters[k]=initialFilters.get(k);});
   if(initialFilters.size)tab="all";
+  var expanded = {};
   var selected = {};              // id -> true
   var notes = {};                 // id -> { cls, text }: the answer shown on a card after an action
   var bulkNote = null;
@@ -236,25 +237,36 @@
         on: { click: function () { run(ids, release); } } }));
     }
 
-    var status = tab === "approved" ? el("span", { class: "pill " + (row.released_at ? "yes" : "maybe"), text: row.released_at ? t("q_sent") : t("q_approved") })
-      : tab === "rejected" ? el("span", { class: "pill no", text: t("q_rejected") })
-      : tab === "cancelled" ? el("span", { class: "pill no", text: t("q_cancelled_tab") }) : null;
+    var rowState = note && ["sent","approved"].includes(note.state) ? "approved" : note && note.state === "rejected" ? "rejected" : row.status;
+    var status = rowState === "approved" ? el("span", { class: "pill " + ((row.released_at || note && note.state === "sent") ? "yes" : "maybe"), text: (row.released_at || note && note.state === "sent") ? t("q_sent") : t("q_approved") })
+      : rowState === "rejected" ? el("span", { class: "pill no", text: t("q_rejected") })
+      : rowState === "cancelled" ? el("span", { class: "pill no", text: t(row.approved_at == null ? "bk_deleted" : "bk_position_cancelled") }) : el("span", { class: "pill", text: t("q_waiting") });
 
-    return el("article", { class: "req" + (finished ? " done" : ""), attrs: {"data-ticket":row.id,"data-booking":row.booking && row.booking.id || row.id,tabindex:-1} },
+    var booking = SahraBooking.card(row, function () { load(false); });
+    booking.classList.add("q-review");
+    booking.querySelector("summary strong").textContent = t("qc_review");
+    var primary = actions.querySelector(".main");
+    if (primary) primary.remove();
+    var extra = el("div", { class: "q-review-extra" }, details.querySelector("ul"), shot,
+      actions.firstChild ? actions : null);
+    booking.insertBefore(extra, booking.querySelector(".bk-body"));
+    booking.open = !!expanded[row.id];
+    booking.addEventListener("toggle", function () { if (booking.isConnected) expanded[row.id] = booking.open; });
+    var total = (row.total != null ? row.total : row.price * row.people) * ids.length;
+    return el("article", { class: "req q-request" + (finished ? " done" : ""), attrs: {"data-ticket":row.id,"data-booking":row.booking && row.booking.id || row.id,tabindex:-1} },
       el("div", { class: "head" },
         el("label", { class: "check" }, box,
-          el("span", null, el("span", { class: "who", text: row.guest_name || "-", attrs: { dir: "auto" } }), el("br"),
-            el("span", { class: "small muted", text: [ids.length > 1 ? t("q_n_tickets", { n: ids.length }) : null, row.type_name, people(row.people)].filter(Boolean).join(" · "), attrs: { dir: "auto" } }), el("br"),
-            el("span", { class: "small faint mono", text: Sahra.ref(row.id), attrs: { dir: "ltr" } }))),
-        status),
-      row.price ? el("p", { class: "price", text: t("q_expected", { amount: Sahra.amount((row.total != null ? row.total : row.price * row.people) * ids.length) }) }) : null,
-      row.payment === "cash" ? el("p", null, el("span", { class: "pill", text: t("q_paid_cash") })) : null,
+          el("span", { class: "q-person" }, el("span", { class: "who", text: row.guest_name || "-", attrs: { dir: "auto" } }),
+            el("span", { class: "q-person-meta", text: [row.type_name, row.booking && row.booking.total > 1 ? t("q_n_tickets", {n:row.booking.total}) : people(row.people)].filter(Boolean).join(" · "), attrs: { dir: "auto" } }))), status),
+      el("div", { class: "q-card-meta" }, el("span", {class:"mono",text:Sahra.ref(row.id),attrs:{dir:"ltr"}}),
+        el("strong", {text:row.price ? Sahra.amount(total) : t("free")}),
+        row.payment === "cash" ? el("span",{class:"pill",text:t("q_paid_cash")}):null),
       row.same_email ? el("p", { class: "notice maybe small", text: t("q_same_email", { n: row.same_email }) }) : null,
-      tab === "rejected" && row.reject_reason ? el("p", { class: "small muted", text: t("q_reason", { reason: row.reject_reason }), attrs: { dir: "auto" } }) : null,
-      shot, details,
-      SahraBooking.card(row, function () { load(false); }),
+      row.status === "rejected" && row.reject_reason ? el("p", { class: "small muted", text: t("q_reason", { reason: row.reject_reason }), attrs: { dir: "auto" } }) : null,
       note ? el("p", { class: "notice " + note.cls, text: note.text }) : null,
-      actions.firstChild ? actions : null);
+      booking,
+      primary ? el("div",{class:"q-primary"},primary) : null);
+
   }
 
   // --- page ----------------------------------------------------------------
@@ -289,7 +301,7 @@
     Sahra.title(t("q_title"));
     if (!me) { app.appendChild(Sahra.problem({ kicker: t("nt_kicker_signin"), title: t("nt_staff_t"), text: t("d_sign_in"),
       actions: [[t("sign_in"), "/signin", true], [t("nt_home"), "/"]], hint: t("nt_guest_hint") })); return; }
-    app.classList.add("staff");
+    app.classList.add("staff", "queue-workspace");
     var content = SahraStaff.workspace(app, "queue", me.staff.role);
     content.appendChild(el("header", { class: "staff-head" }, el("div", null,
       el("p", { class: "label-line", text: me.party.name }), el("h1", { text: t("q_title") }))));
@@ -297,7 +309,6 @@
       return el("button", { text: t(x[1]), attrs: { type: "button", "aria-pressed": tab === x[0] ? "true" : "false" },
         on: { click: function () { if (tab !== x[0]) { tab = x[0]; load(false); } } } });
     })));
-    content.appendChild(SahraBooking.guide());
     content.appendChild(SahraBooking.filters(filters, filterTypes, function (v) { filters = v; cashOnly = v.payment === "cash"; load(false); }, tab === "all"));
     if (bulkNote) content.appendChild(el("p", { class: "notice " + bulkNote.cls, text: bulkNote.text }));
     if (failed) { content.appendChild(el("p", { class: "notice no", text: failed })); return; }
@@ -315,7 +326,7 @@
     }, pageIndex));
     content.appendChild(el("div", { class: "page-tools" },
       el("div", { class: "stack buttons" }, el("button", { class: "btn", text: t("q_export"), attrs: { type: "button" }, on: { click: exportCsv } })),
-      tab === "pending" ? staleTool() : null));
+      tab === "pending" ? staleTool() : null, SahraBooking.guide()));
     var bar = bulkbar();
     if (bar) content.appendChild(bar);
   }
@@ -336,6 +347,7 @@
         on: { click: function () { selectable.slice(0, MAX).forEach(function (r) { selected[r.id] = true; }); render(); } } }));
     }
     list.appendChild(el("div", { class: "reqs" }, shown.map(card)));
+    Sahra.motionCards(list,".q-request", "requests:" + tab + ":" + pageIndex + ":" + shown.map(function(x){return x.id;}).join(","));
   }
 
   // "Reject every waiting request older than N hours" (requests are only cleaned up by hand):

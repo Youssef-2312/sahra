@@ -87,7 +87,9 @@
     Sahra.title(p.name);
     var usable = !!k.qr && !k.used && !k.on_hold && k.status === "released" && !p.cancelled;
 
-    var side = el("div", { class: "side" }), body = el("div");
+    app.classList.add("ticket-workspace");
+    app.appendChild(el("header",{class:"ticket-heading"},el("p",{class:"small muted",text:t("ticket_label")}),el("h1",{text:p.name,attrs:{dir:"auto"}})));
+    var side = el("div", { class: "side ticket-pass" }), body = el("div",{class:"ticket-details"});
     app.appendChild(el("div", { class: "cols" }, side, body));
     if (usable) {
       var src = qrImage(k.qr);
@@ -103,13 +105,14 @@
       if (k.status === "rejected" && k.reject_reason) side.appendChild(el("p", { class: "pre", text: t("reason", { text: k.reject_reason }), attrs: { dir: "auto" } }));
     }
 
-    body.appendChild(el("section", { class: "card" },
+    var identity = el("section", { class: "ticket-identity" },
       el("ul", { class: "facts" },
         el("li", null, el("span", { class: "small muted", text: t("name_label") }), el("br"), el("strong", { text: k.guest_name || "", attrs: { dir: "auto" } })),
         el("li", null, el("span", { class: "small muted", text: t("ticket_label") }), el("br"),
           el("strong", { text: [k.type, k.people > 1 ? t("group_of", { n: k.people }) : t("one_person")].filter(Boolean).join(" · "), attrs: { dir: "auto" } })),
         k.people > 1 ? el("li", { class: "small", text: t("group_note", { n: k.people }) }) : null,
-        k.reference ? el("li", null, el("span", { class: "small muted", text: t("ref_label") }), el("br"), el("strong", { text: k.reference, attrs: { dir: "ltr" } })) : null)));
+        k.reference ? el("li", null, el("span", { class: "small muted", text: t("ref_label") }), el("br"), el("strong", { text: k.reference, attrs: { dir: "ltr" } })) : null));
+    side.insertBefore(identity,side.firstChild);
 
     var timeLine = p.starts_at ? Sahra.when(p.starts_at, p.time_zone) + (p.ends_at ? " - " + Sahra.time(p.ends_at, p.time_zone) : "") : null;
     body.appendChild(el("section", { class: "card" },
@@ -118,18 +121,20 @@
       timeLine ? el("p", { text: timeLine }) : null,
       k.entry_from ? el("p", { class: "pill maybe", text: t("entry_from", { when: Sahra.when(k.entry_from, p.time_zone) }) }) : null));
 
-    body.appendChild(el("div", { class: "g-actions" }, Sahra.copyButton(location.origin + "/ticket#t=" + link, t("copy_ticket_link"))));
+    var ticketActions=el("div",{class:"ticket-actions"},Sahra.copyButton(location.origin + "/ticket#t=" + link,t("copy_ticket_link")));
+    side.appendChild(ticketActions);
     body.appendChild(addressCard(p));
-    if (p.rules) body.appendChild(el("section", { class: "card" }, el("p", { class: "small muted", text: t("rules") }), el("p", { class: "pre", text: p.rules, attrs: { dir: "auto" } })));
-    if (p.cancellation_policy) body.appendChild(el("section", { class: "card" }, el("p", { class: "small muted", text: t("cancel_title") }), el("p", { class: "pre", text: p.cancellation_policy, attrs: { dir: "auto" } })));
+    if (p.rules) body.appendChild(el("details", { class: "card ticket-disclosure" }, el("summary", { text: t("rules") }), el("p", { class: "pre", text: p.rules, attrs: { dir: "auto" } })));
+    if (p.cancellation_policy) body.appendChild(el("details", { class: "card ticket-disclosure" }, el("summary", { text: t("cancel_title") }), el("p", { class: "pre", text: p.cancellation_policy, attrs: { dir: "auto" } })));
     // A refund the organiser recorded (Sahra records refunds; it never sends money).
     if (k.refund) side.appendChild(el("p", { class: "notice " + (k.refund.state === "done" ? "yes" : "maybe"),
       text: t(k.refund.state === "done" ? "tk_refund_done" : "tk_refund_due", { amount: Sahra.amount(k.refund.amount) }) }));
     var contact = Sahra.contactCard(p.support);
     if (contact) body.appendChild(contact);
 
-    if (usable) side.appendChild(el("a", { class: "btn wide-btn", text: t("save_qr"), attrs: { href: side.querySelector(".qr-box img").src, download: "sahra-ticket.png" } }));
+    if (usable) ticketActions.insertBefore(el("a", { class: "btn wide-btn", text: t("save_qr"), attrs: { href: side.querySelector(".qr-box img").src, download: "sahra-ticket.png" } }),ticketActions.firstChild);
     body.appendChild(el("button", { class: "btn", text: t("refresh"), attrs: { type: "button" }, on: { click: load } }));
+    Sahra.motionCards(body,".card","ticket-details:"+k.status);
   }
 
   async function load() {

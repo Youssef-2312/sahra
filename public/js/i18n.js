@@ -179,7 +179,7 @@ var SahraText = {
     ct_email: "Email",
     ct_hint: "Questions about this party, payment or refunds go to the host. Sahra does not run parties.",
     closed_contact: "Requests are not open yet: the host has not added a contact number.",
-    sc_organiser: "Host:",
+    sc_organiser: "Contact organiser:",
     sc_find_open: "Find guest (QR will not scan)",
     sc_find_title: "Find guest",
     sc_find_close: "Back to the camera",
@@ -721,7 +721,7 @@ var SahraText = {
     ct_email: "البريد",
     ct_hint: "الأسئلة عن هذه الحفلة أو الدفع أو الاسترداد توجه إلى المضيف. سهرة لا تنظم الحفلات.",
     closed_contact: "الطلبات غير مفتوحة بعد: لم يضف المضيف رقم تواصل.",
-    sc_organiser: "المضيف:",
+    sc_organiser: "تواصل مع المنظّم:",
     sc_find_open: "ابحث عن ضيف (الرمز لا يُمسح)",
     sc_find_title: "البحث عن ضيف",
     sc_find_close: "العودة إلى الكاميرا",
@@ -1213,4 +1213,15 @@ Object.assign(SahraText.ar, {
   ap_comfortable: "مريحة", ap_compact: "مضغوطة", ap_motion: "الحركة", ap_device_motion: "حسب الجهاز", ap_reduced: "تقليل الحركة",
   ap_surfaces: "الخلفيات", ap_glass: "زجاج خفيف", ap_solid: "ثابتة", ap_reset: "استعادة إعدادات الجهاز",
   ap_accessibility: "تُحترم دائمًا إعدادات جهازك لتقليل الحركة والشفافية. يحتفظ الوضع المضغوط بارتفاع 44 بكسل على الأقل لأزرار اللمس."
+});
+
+Object.assign(SahraText.en, {
+  nav_profile:"Profile menu", nav_settings:"Settings", nav_sign_out:"Sign out", nav_arabic:"Switch to Arabic", nav_english:"Switch to English",
+  qc_review:"Review details", qc_guest_details:"Details and actions", qc_tools:"Guest tools", qc_back_guests:"Back to guest list",
+  qc_door_scanner:"Door scanner", qc_camera_title:"Ready to scan", qc_camera_on:"Camera on. Point it at a guest's QR code."
+});
+Object.assign(SahraText.ar, {
+  nav_profile:"قائمة الحساب", nav_settings:"الإعدادات", nav_sign_out:"تسجيل الخروج", nav_arabic:"التبديل إلى العربية", nav_english:"التبديل إلى الإنجليزية",
+  qc_review:"مراجعة التفاصيل", qc_guest_details:"التفاصيل والإجراءات", qc_tools:"أدوات الضيوف", qc_back_guests:"العودة إلى قائمة الضيوف",
+  qc_door_scanner:"ماسح الدخول", qc_camera_title:"جاهز للمسح", qc_camera_on:"الكاميرا تعمل. وجّهها إلى رمز QR الخاص بالضيف."
 });

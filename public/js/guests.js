@@ -14,6 +14,7 @@
   ["status","type","delivery","entry","booking","payment"].forEach(function(k){if(initialFilters.has(k))filters[k]=initialFilters.get(k);});
   var guestView = initialFilters.has("q") || filters.status !== "approved" ? "all" : "approved";
   if (guestView === "all" && !initialFilters.has("status")) filters.status = "all";
+  var expandedGuests = {};
   var open = {};       // ticket id -> which tool is open ("transfer")
   var drafts = { issue: null, announce: null };
 
@@ -94,32 +95,38 @@
 
   function guestRow(x) {
     var st = statusOf(x);
-    var meta = [x.guest_email, x.type_name, x.people === 1 ? t("s_type_one") : t("s_type_exactly", { n: x.people })].filter(Boolean).join(" · ");
+    var meta = [x.type_name, x.people === 1 ? t("s_type_one") : t("s_type_exactly", { n: x.people })].filter(Boolean).join(" · ");
     var live = x.status === "pending" || x.status === "approved";
     var actions = el("div", { class: "g-actions" },
       live ? el("button", { class: "btn small-btn", text: t("g_resend"), attrs: { type: "button" }, on: { click: function () { run(x, "resend"); } } }) : null,
       x.status === "approved" && !x.used_at ? el("button", { class: "btn small-btn", text: t("g_reissue"), attrs: { type: "button" }, on: { click: function () { run(x, "reissue", null, t("g_reissue_confirm")); } } }) : null,
       live && !x.used_at ? el("button", { class: "btn small-btn", text: t("g_change_email"), attrs: { type: "button", "aria-expanded": open[x.id] === "email" ? "true" : "false" }, on: { click: function () { open[x.id] = open[x.id] === "email" ? null : "email"; redrawFind(); } } }) : null,
       live && !x.used_at ? el("button", { class: "btn small-btn", text: t("g_transfer"), attrs: { type: "button", "aria-expanded": open[x.id] === "transfer" ? "true" : "false" }, on: { click: function () { open[x.id] = open[x.id] === "transfer" ? null : "transfer"; redrawFind(); } } }) : null,
-      live && !x.used_at ? el("button", { class: "btn no small-btn", text: t(x.status === "pending" ? "bk_delete_request" : "bk_cancel_one"), attrs: { type: "button" }, on: { click: function () { li.querySelector(".bk-card").cancelOne(); } } }) : null,
       // A cancelled ticket can be brought back (owner request), with a new QR code.
       x.status === "cancelled" && !x.used_at ? el("button", { class: "btn small-btn", text: t(x.approved_at == null ? "bk_restore_request" : "g_restore"), attrs: { type: "button" }, on: { click: function () { run(x, "restore", null, t(x.approved_at == null ? "bk_restore_request_confirm" : "g_restore_confirm", { name: x.guest_name || Sahra.ref(x.id) }), true); } } }) : null);
     var note = notes[x.id];
-    var li = el("li", { class: "g-row", attrs:{"data-ticket":x.id,tabindex:-1} },
+    var li = el("li", { class: "g-row g-guest-card", attrs:{"data-ticket":x.id,tabindex:-1} },
       el("div", { class: "g-who" },
         el("div", { class: "g-name-line" }, el("strong", { text: x.guest_name || t("g_no_name"), attrs: { dir: "auto" } }), el("span", { class: "pill " + st[0], text: st[1] })),
         el("span", { class: "muted small", text: meta, attrs: { dir: "auto" } }),
         el("span", { class: "faint small mono", text: Sahra.ref(x.id), attrs: { dir: "ltr" } })),
-      actions);
+      null);
+    var booking = SahraBooking.card(x, function () { if (query || Array.isArray(found)) search(query); loadStats(); });
+    booking.classList.add("g-review");
+    booking.querySelector("summary strong").textContent = t("qc_guest_details");
+    var extra=el("div",{class:"g-review-extra"},x.guest_email?el("p",{class:"small muted",text:x.guest_email,attrs:{dir:"ltr"}}):null,actions);
+    booking.insertBefore(extra,booking.querySelector(".bk-body"));
+    booking.open=!!expandedGuests[x.id] || !!open[x.id];
+    booking.addEventListener("toggle",function(){if(booking.isConnected)expandedGuests[x.id]=booking.open;});
     if (!live) li.appendChild(el("p", { class: "small muted", text: t("bk_inactive") }));
-    li.appendChild(SahraBooking.card(x, function () { if (query || Array.isArray(found)) search(query); loadStats(); }));
+    li.appendChild(booking);
     var photos = Object.keys(x.answers || {}).filter(function (id) { return typeof x.answers[id] === "string" && /^photo:f[1-4]:[1-9][0-9]*$/.test(x.answers[id]); });
-    if (photos.length) li.appendChild(el("ul", { class: "facts" }, photos.map(function (id) {
+    if (photos.length) extra.appendChild(el("ul", { class: "facts" }, photos.map(function (id) {
       return el("li", null, el("span", { text: id + ": ", attrs: { dir: "auto" } }),
         el("a", { class: "btn small-btn", text: t("view_answer_photo"), attrs: { href: "/api/tickets/" + encodeURIComponent(x.id) + "/answers/" + encodeURIComponent(id) + "/photo", target: "_blank", rel: "noopener" } }));
     })));
-    if (open[x.id] === "transfer") li.appendChild(transferForm(x));
-    if (open[x.id] === "email") li.appendChild(emailForm(x));
+    if (open[x.id] === "transfer") extra.appendChild(transferForm(x));
+    if (open[x.id] === "email") extra.appendChild(emailForm(x));
     if (note) {
       var box = S.sayBox();
       S.say(box, note[0], note[1]);
@@ -189,7 +196,8 @@
     }, pageIndex));
     body.setAttribute("role", "status");
     body.setAttribute("aria-live", "polite");
-    findNode = S.section("find", t("g_find"), null, tabs, SahraBooking.guide(), f, body);
+    findNode = S.section("find", t("g_find"), null, tabs, f, body, SahraBooking.guide());
+    findNode.dataset.guestView=guestView;
     return findNode;
   }
   function redrawFind() {
@@ -197,6 +205,7 @@
     var hadFocus = document.activeElement && findNode.contains(document.activeElement) && document.activeElement.name === "q";
     var old = findNode;
     old.parentNode.replaceChild(findCard(), old);
+    if(Array.isArray(found)) Sahra.motionCards(findNode,".g-guest-card","guests:"+pageIndex+":"+found.map(function(x){return x.id;}).join(","));
     if (hadFocus) findNode.querySelector("input[name=q]").focus();
   }
 
@@ -542,13 +551,33 @@
 
   // ------------------------------------------------------------- page
 
-  var tilesNode = null, scannersNode = null;
+  var tilesNode = null, scannersNode = null, toolsOpen = {};
+  function isToolsView() { return ["guest-tools","issue","import","announce","refunds","manual","scanners","holds"].includes(location.hash.slice(1)); }
+  function toolPanel(card) {
+    if(!card)return null;
+    var id=card.id, title=card.querySelector("h2").textContent;
+    var d=el("details",{class:"g-tool-panel"},el("summary",{text:title}),card);
+    d.open=!!toolsOpen[id] || location.hash==="#"+id;
+    d.addEventListener("toggle",function(){if(d.isConnected)toolsOpen[id]=d.open;});
+    return d;
+  }
+  function showGuestView() {
+    var tools=isToolsView(),list=document.getElementById("guest-list-view"),panel=document.getElementById("guest-tools-view"),link=document.getElementById("guest-view-switch");
+    if(!list||!panel)return;
+    list.hidden=tools;panel.hidden=!tools;
+    link.textContent=t(tools?"qc_back_guests":"qc_tools");link.href=tools?"#find":"#guest-tools";
+    var target=panel.querySelector(location.hash && location.hash!=="#guest-tools" && location.hash!=="#find" ? '[id="'+location.hash.slice(1).replace(/[^a-z-]/g,"")+'"]':".g-tool-panel");
+    if(tools&&target){var disclosure=target.closest("details");if(disclosure)disclosure.open=true;}
+  }
+  window.addEventListener("hashchange",showGuestView);
   function render(me, app) {
+    app.classList.add("guest-workspace");
+    app.appendChild(el("div",{class:"g-view-toolbar"},el("a",{class:"btn small-btn",attrs:{id:"guest-view-switch",href:"#guest-tools"},text:t("qc_tools")})));
     tilesNode = tiles();
-    if (tilesNode) app.appendChild(tilesNode);
-    app.appendChild(el("div", { class: "g-cols" },
-      el("div", { class: "g-main" }, holdsNode = holdsCard(), refundsNode = refundsCard(), findCard(), scannersNode = scanners(), manualCard()),
-      el("div", { class: "g-side" }, issueCard(), importCard(), announceCard())));
+    var list=el("section",{attrs:{id:"guest-list-view"}},tilesNode,findCard());
+    var tools=el("section",{class:"g-tool-grid",attrs:{id:"guest-tools-view"}},
+      toolPanel(holdsNode=holdsCard()),toolPanel(refundsNode=refundsCard()),toolPanel(issueCard()),toolPanel(importCard()),toolPanel(announceCard()),toolPanel(scannersNode=scanners()),toolPanel(manualCard()));
+    app.appendChild(list);app.appendChild(tools);showGuestView();
   }
 
   async function loadStats() {
@@ -584,7 +613,7 @@
           var finder = document.getElementById("find");
           if (finder && finder.scrollIntoView) finder.scrollIntoView({ block: "start" });
         }
-        if (q0.length < 2 && initialFilters.size) search("");
+        if (q0.length < 2) search("");
         setInterval(function () { if (document.visibilityState === "visible") loadStats(); }, 60000);
         if (me.staff.role === "owner") loadHolds();
       });

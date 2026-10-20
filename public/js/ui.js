@@ -237,7 +237,21 @@ var Sahra = (function () {
     return el("div", { class: "signin-wrap notice-wrap" }, panel, side);
   }
 
+  function markSource() { return "/img/sahra-mark-" + (document.documentElement.dataset.theme === "light" ? "light" : "dark") + ".svg"; }
+
   function title(page) { document.title = page ? page + " | Sahra" : "Sahra | " + t("tab_home"); }
+
+  var motionViews = [];
+  function motionCards(root, selector, key) {
+    if (!root || motionViews.includes(key) || !Element.prototype.animate || (window.SahraAppearance ? SahraAppearance.reducedMotion() : matchMedia("(prefers-reduced-motion: reduce)").matches)) return;
+    motionViews.push(key); if (motionViews.length > 30) motionViews.shift();
+    root.querySelectorAll(selector).forEach(function (node, index) {
+      if (index > 7) return;
+      var animation = node.animate([{opacity:.55,transform:"translateY(7px)"},{opacity:1,transform:"none"}],
+        {duration:230,delay:index*22,easing:"cubic-bezier(.2,.7,.2,1)"});
+      animation.id = "sahra-reveal";
+    });
+  }
 
   function appearanceSettings() {
     if (document.getElementById("appearance-settings")) return;
@@ -315,7 +329,7 @@ var Sahra = (function () {
     renderFn = (opts && opts.render) || null;
     var me = (opts && opts.me) || null;
     applyLang();
-    var brand = el("a", { class: "brand", attrs: { href: "/" } }, el("img", { attrs: { src: "/img/sahra-mark.svg", alt: "", width: 28, height: 28 } }), "Sahra");
+    var brand = el("a", { class: "brand", attrs: { href: "/" } }, el("img", { attrs: { src: markSource(), alt: "", width: 28, height: 28 } }), "Sahra");
     var checkingAccount = !me && ["party", "platform"].includes(store.get(SESSION_KEY));
     var account = el("a", { class: "btn small-btn nav-account" + (checkingAccount ? " account-checking" : ""), attrs: { href: me ? (me.staff.role === "door" ? "/scan.html" : "/dashboard.html") : "/signin.html" } });
     // The signed-in person's name on the button; never a whole email address (owner), and the full name on hover.
@@ -326,7 +340,6 @@ var Sahra = (function () {
     }
     var search = el("a", { class: "nav-search", attrs: { href: "/?search=1#parties" } });
     var sw = el("button", { class: "lang-switch", attrs: { type: "button" } });
-    var appearance = el("button", { class: "appearance-toggle", attrs: { type: "button", "aria-haspopup": "dialog" }, on: { click: appearanceSettings } }, el("span", { class: "appearance-glyph", attrs: { "aria-hidden": "true" } }));
     var foot = el("footer", { class: "site-footer" });
     var publicNav = el("nav", { class: "public-nav" });
     var navItems = [["tab_home", "/"], ["find_tickets", "/find"], ["about", "/about.html"], ["contact", "/contact.html"]];
@@ -337,9 +350,12 @@ var Sahra = (function () {
       } else { account.textContent = t("sign_in"); account.setAttribute("href", "/signin.html"); }
       search.setAttribute("aria-label", t("nav_search"));
       search.setAttribute("title", t("nav_search"));
-      sw.textContent = t("lang_other");
-      appearance.setAttribute("aria-label", t("ap_title"));
-      appearance.setAttribute("title", t("ap_title"));
+      sw.textContent = lang() === "en" ? "ع" : "EN";
+      sw.setAttribute("aria-label",t(lang() === "en" ? "nav_arabic" : "nav_english"));
+      account.setAttribute("aria-label",t("nav_profile"));
+      account.setAttribute("role","button");
+      account.setAttribute("aria-haspopup","menu");
+      account.setAttribute("aria-expanded","false");
       sw.setAttribute("lang", lang() === "en" ? "ar" : "en");
       publicNav.replaceChildren();
       publicNav.setAttribute("aria-label", lang() === "ar" ? "التنقل الرئيسي" : "Main navigation");
@@ -350,7 +366,49 @@ var Sahra = (function () {
       });
       footer(foot, { signedIn: !!me || (checkingAccount && !!store.get(SESSION_KEY)), href: account.getAttribute("href") });
     }
+    var profileMenu = null;
+    function closeProfile(focus) {
+      if (!profileMenu) return;
+      var closing = profileMenu; profileMenu = null;
+      closing.remove(); account.setAttribute("aria-expanded","false");
+      if (focus) account.focus({preventScroll:true});
+    }
+    function openProfile() {
+      if (profileMenu) { closeProfile(true); return; }
+      var known = !!me || (checkingAccount && !!store.get(SESSION_KEY));
+      profileMenu = el("div",{class:"account-menu",attrs:{role:"menu","aria-label":t("nav_profile")}},
+        el("button",{text:t("nav_settings"),attrs:{type:"button",role:"menuitem"},on:{click:function(){closeProfile(true);appearanceSettings();}}}),
+        el("a",{text:t(known?"nav_account":"sign_in"),attrs:{href:account.getAttribute("href"),role:"menuitem"}}));
+      if (known) profileMenu.appendChild(el("button",{text:t("nav_sign_out"),attrs:{type:"button",role:"menuitem"},on:{click:async function(){
+        closeProfile(true);
+        var platform = await call("GET","/api/platform/me");
+        if (!platform.ok && platform.status !== 401 && platform.status !== 403) { await notify(t("error_generic")); return; }
+        var staffSession = await call("GET","/api/me");
+        if (staffSession.ok) {
+          csrf = staffSession.body.csrf;
+          var staff = await call("POST","/api/auth/logout",{});
+          if (!staff.ok && staff.status !== 401) { await notify(t("error_generic")); return; }
+        } else if(staffSession.status !== 401) { await notify(t("error_generic")); return; }
+        if (platform.ok) { var result=await call("POST","/api/platform/logout",{}, {"x-sahra-csrf":platform.body.csrf}); if(!result.ok && result.status!==401){await notify(t("error_generic"));return;} }
+        store.del(SESSION_KEY);location.href="/";
+      }}}));
+      profileMenu.addEventListener("keydown",function(e){
+        if(e.key==="Escape"){e.preventDefault();closeProfile(true);return;}
+        var items=Array.from(profileMenu.querySelectorAll('[role=menuitem]')),index=items.indexOf(document.activeElement);
+        if(["ArrowDown","ArrowUp","Home","End"].includes(e.key)){e.preventDefault();var next=e.key==="Home"?0:e.key==="End"?items.length-1:(index+(e.key==="ArrowDown"?1:-1)+items.length)%items.length;items[next].focus();}
+      });
+      profileMenu.addEventListener("focusout",function(e){if(profileMenu&&!profileMenu.contains(e.relatedTarget)&&e.relatedTarget!==account)closeProfile(false);});
+      document.body.appendChild(profileMenu);var r=account.getBoundingClientRect();
+      profileMenu.style.top=(r.bottom+8)+"px";profileMenu.style.left=Math.max(12,Math.min(innerWidth-252,document.documentElement.dir==="rtl"?r.left:r.right-240))+"px";
+      account.setAttribute("aria-expanded","true");profileMenu.querySelector('[role=menuitem]').focus();
+    }
+    account.addEventListener("click",function(e){e.preventDefault();openProfile();});
+    account.addEventListener("keydown",function(e){if(e.key==="ArrowDown"||e.key===" "){e.preventDefault();openProfile();}});
+    document.addEventListener("pointerdown",function(e){if(profileMenu&&!profileMenu.contains(e.target)&&!account.contains(e.target))closeProfile(false);});
+    window.addEventListener("resize",function(){closeProfile(false);});
+    window.addEventListener("scroll",function(){closeProfile(false);},{passive:true});
     sw.addEventListener("click", function () {
+      closeProfile(false);
       var draft = captureDrafts();
       store.set(KEY, lang() === "en" ? "ar" : "en");
       applyLang();
@@ -363,7 +421,7 @@ var Sahra = (function () {
       if (!me) label();
       account.classList.remove("account-checking");
     });
-    document.body.insertBefore(el("div", { class: "topbar-shell" }, el("header", { class: "topbar" }, appearance, brand, el("span", { class: "topbar-end" }, search, sw, account))), document.body.firstChild);
+    document.body.insertBefore(el("div", { class: "topbar-shell" }, el("header", { class: "topbar" }, brand, el("span", { class: "topbar-end" }, search, sw, account))), document.body.firstChild);
     if (!opts || opts.footer !== false) document.querySelector(".topbar").appendChild(publicNav);
     motion();
     // The door scanner shows only the camera and the result (brainstorm idea 12): no footer there.
@@ -425,6 +483,7 @@ var Sahra = (function () {
   }
 
   document.addEventListener("sahra:appearance", function () {
+    document.querySelectorAll(".brand img").forEach(function(img){img.src=markSource();});
     if (window.SahraAppearance && SahraAppearance.reducedMotion() && document.getAnimations) {
       document.getAnimations().forEach(function (animation) { if (animation.id === "sahra-reveal") animation.cancel(); });
     }
@@ -488,7 +547,7 @@ var Sahra = (function () {
     var panel = el("div", { class: "f-panel" },
       el("div", { class: "f-top" },
         el("div", { class: "f-brand" },
-          el("a", { class: "brand", attrs: { href: "/" } }, el("img", { attrs: { src: "/img/sahra-mark.svg", alt: "", width: 28, height: 28 } }), "Sahra"),
+          el("a", { class: "brand", attrs: { href: "/" } }, el("img", { attrs: { src: markSource(), alt: "", width: 28, height: 28 } }), "Sahra"),
           el("p", { text: t("f_desc") }),
           el("div", { class: "f-socials" },
             el("a", { class: "icon-link", attrs: { href: NOVA_INSTAGRAM, target: "_blank", rel: "noopener", "aria-label": t("f_nova_instagram") } }, instagramIcon()),
@@ -577,5 +636,5 @@ var Sahra = (function () {
   }
 
   return { t: t, el: el, clear: clear, api: api, errorText: errorText, money: money, amount: amount, when: when, date: date, time: time, rel: rel,
-    lang: lang, boot: boot, reveal: revealSections, store: store, SESSION_KEY: SESSION_KEY, token: token, title: title, problem: problem, signinView: signinView, appearanceSettings: appearanceSettings, copyButton: copyButton, fold: fold, matches: matches, findBox: findBox, confirm: confirmBox, notify: notify, ask: ask, contactCard: contactCard, ref: function (id) { return id ? "SAH-" + String(id).slice(0, 6) : ""; } };
+    lang: lang, boot: boot, reveal: revealSections, store: store, SESSION_KEY: SESSION_KEY, token: token, title: title, problem: problem, signinView: signinView, motionCards: motionCards, appearanceSettings: appearanceSettings, copyButton: copyButton, fold: fold, matches: matches, findBox: findBox, confirm: confirmBox, notify: notify, ask: ask, contactCard: contactCard, ref: function (id) { return id ? "SAH-" + String(id).slice(0, 6) : ""; } };
 })();

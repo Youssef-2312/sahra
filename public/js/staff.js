@@ -103,7 +103,6 @@ var SahraStaff = (function () {
     d.appendChild(links);
     var account = el("div",{class:"staff-menu-account"});
     if(platform)account.appendChild(myParties());
-    account.appendChild(el("button",{class:"btn",text:t("ap_title"),attrs:{type:"button"},on:{click:function(){d.addEventListener("close",function(){Sahra.appearanceSettings();},{once:true});d.close();}}}));
     account.appendChild(el("button",{class:"btn",text:t("s_sign_out"),attrs:{type:"button"},on:{click:signOut}}));
     d.appendChild(account);
     d.addEventListener("click",function(e){if(e.target===d){var r=d.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)d.close();}});
