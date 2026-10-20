@@ -1,3 +1,4 @@
+import { parseDateRange } from "../lib/date-range";
 // Party owner/admin ticket management: the approval queue (with screenshots),
 // approve / reject / release in bulk, cancel, reissue, name transfer, the
 // sign-up form, and the guest list export. Every change is checked inside its SQL
@@ -68,7 +69,9 @@ ticketRoutes.get("/", requireAuth(MANAGERS), async (c) => {
   const after = c.req.query("after");
   const m = after === undefined ? null : /^([0-9]{1,15})\.([0-9A-Z]{16})$/.exec(after);
   const payment = c.req.query("payment");
-  const filters = { q: (c.req.query("q") || "").trim(), typeId: c.req.query("type"), delivery: c.req.query("delivery"), entry: c.req.query("entry"), booking: c.req.query("booking") };
+  const range = parseDateRange(c.req.query("created_from"), c.req.query("created_before"));
+  if (range === false) return json(c, 400, { error: "invalid_request" });
+  const filters = { ...range, q: (c.req.query("q") || "").trim(), typeId: c.req.query("type"), delivery: c.req.query("delivery"), entry: c.req.query("entry"), booking: c.req.query("booking") };
   if ((!STATUSES.has(status) && status !== "all") || !limit || (after !== undefined && !m) || (payment !== undefined && payment !== "cash")
     || filters.q.length > 80 || (filters.typeId !== undefined && !isTypeId(filters.typeId))
     || (filters.delivery !== undefined && !["released","unreleased","emailed"].includes(filters.delivery))

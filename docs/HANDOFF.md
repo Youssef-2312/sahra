@@ -230,3 +230,13 @@ the browser global. Platform uses its own compact views and separate auth, not
 SahraStaff.start or party sessions. Keep all owner-only permissions, confirmation
 steps and retry bodies. Scanner lookup hides its camera card but does not change
 server verification, verdicts or QR handling. No backend edits or migrations.
+
+### Date filters and mobile card density (20 October 2026)
+
+Requests, Guests and Emails have a Dates control above results. Filter by creation
+time, with device-local inclusive calendar days converted to validated server
+bounds before pagination. Do not filter only the loaded page. No migration.
+Outbox cursors accept validated UUID/announce/notice IDs. “Approve all” and
+“Cancel all” still cover all awaiting emails, with explicit warnings when dates
+are set. Mobile identity/status rows remain visible; details expand to full width
+and controls retain 44px targets. Required suite is now 570 tests in 45 files.

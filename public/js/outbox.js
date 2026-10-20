@@ -9,6 +9,9 @@
   // Rows the server can approve or cancel one by one (src/routes/outbox.ts isOutboxId): ticket
   // emails sent on their own (other ids) are only shown.
   var PICK = /^(?:(?:announce|notice):)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?::[0-9A-HJKMNP-TV-Z]{16})?$/;
+  var dates = {}, loadSeq = 0, loading = false;
+  var initialDates = new URLSearchParams(location.search);
+  ["date_from","date_to"].forEach(function(k){if(initialDates.has(k))dates[k]=initialDates.get(k);});
   var tab = null, rows = null, next = null, failed = null, awaiting = null, note = null, busy = false;
 
   function pill(status) {
@@ -17,10 +20,15 @@
   }
 
   async function load(more) {
-    var q = new URLSearchParams();
+    var seq = ++loadSeq;
+    loading = true;
+    var q = SahraBooking.params(dates);
     if (tab) q.set("status", tab);
     if (more && next) q.set("before", next);
+    S.redraw();
     var r = await Sahra.api.get("/api/outbox?" + q.toString());
+    if (seq !== loadSeq) return;
+    loading = false;
     if (!r.ok) { failed = r; S.redraw(); return; }
     failed = null;
     rows = more && rows ? rows.concat(r.body.rows) : r.body.rows;
@@ -81,10 +89,10 @@
     if (awaiting && awaiting.n > 0) {
       var label = awaiting.more ? t("o_waiting_more", { n: awaiting.n }) : S.tn("o_waiting_n", awaiting.n);
       app.appendChild(el("div", { class: "notice maybe o-banner" },
-        el("div", null, el("strong", { text: label }), el("p", { class: "small", text: t("o_waiting_p") })),
+        el("div", null, el("strong", { text: label }), el("p", { class: "small", text: t("o_waiting_p") + (dates.date_from || dates.date_to ? " " + t("bf_bulk_all_dates") : "") })),
         el("div", { class: "g-actions" },
-          el("button", { class: "btn primary small-btn", text: t("o_approve_all"), attrs: { type: "button", disabled: busy }, on: { click: function () { change("approve", { all_awaiting: true }, t("o_approve_all_confirm")); } } }),
-          el("button", { class: "btn no small-btn", text: t("o_cancel_all"), attrs: { type: "button", disabled: busy }, on: { click: function () { change("cancel", { all_awaiting: true }, t("o_cancel_all_confirm")); } } }))));
+          el("button", { class: "btn primary small-btn", text: t("o_approve_all"), attrs: { type: "button", disabled: busy }, on: { click: function () { change("approve", { all_awaiting: true }, t("o_approve_all_confirm") + (dates.date_from || dates.date_to ? "\n\n" + t("bf_bulk_all_dates") : "")); } } }),
+          el("button", { class: "btn no small-btn", text: t("o_cancel_all"), attrs: { type: "button", disabled: busy }, on: { click: function () { change("cancel", { all_awaiting: true }, t("o_cancel_all_confirm") + (dates.date_from || dates.date_to ? "\n\n" + t("bf_bulk_all_dates") : "")); } } }))));
     }
     if (note) {
       var box = S.sayBox();
@@ -95,6 +103,7 @@
       return el("button", { text: t(x[1]), attrs: { type: "button", "aria-pressed": tab === x[0] ? "true" : "false" },
         on: { click: function () { tab = x[0]; rows = null; note = null; S.redraw(); load(false); } } });
     })));
+    app.appendChild(SahraBooking.dates(dates, function(v){dates=v;rows=null;next=null;failed=null;S.redraw();load(false);}));
     if (failed) { app.appendChild(el("p", { class: "notice no", text: S.why(failed) })); return; }
     if (rows === null) { app.appendChild(el("p", { class: "muted", text: t("loading") })); return; }
     if (!rows.length) { app.appendChild(el("p", { class: "s-empty muted", text: t("o_none_" + (tab || "all")) })); return; }
@@ -103,7 +112,7 @@
     app.appendChild(Sahra.findBox({ value: find, placeholder: t("o_find_ph"), onChange: function (v) { find = v; fillList(list); } }));
     app.appendChild(list);
     fillList(list);
-    if (next) app.appendChild(el("button", { class: "btn small-btn", text: t("o_older"), attrs: { type: "button" }, on: { click: function () { load(true); } } }));
+    if (next) app.appendChild(el("button", { class: "btn small-btn", text: t("o_older"), attrs: { type: "button",disabled:loading }, on: { click: function () { if(!loading)load(true); } } }));
   }
 
   var first = true;

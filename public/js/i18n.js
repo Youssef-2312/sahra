@@ -1245,3 +1245,16 @@ Object.assign(SahraText.ar, {
 
 Object.assign(SahraText.en, { bf_pages_top:"Pages above results",bf_pages_bottom:"Pages below results" });
 Object.assign(SahraText.ar, { bf_pages_top:"الصفحات أعلى النتائج",bf_pages_bottom:"الصفحات أسفل النتائج" });
+
+Object.assign(SahraText.en, {
+ bf_dates:"Dates", bf_from_date:"Created from", bf_to_date:"Created through", bf_clear_dates:"Clear dates",
+ bf_date_hint:"Filter by creation date across all results. Dates use this device's timezone and include the last day.",
+ bf_date_invalid:"Choose an end date on or after the start date.",
+ bf_bulk_all_dates:"Approve all and Cancel all affect every awaiting email, including emails outside these dates."
+});
+Object.assign(SahraText.ar, {
+ bf_dates:"التواريخ", bf_from_date:"تاريخ الإنشاء من", bf_to_date:"تاريخ الإنشاء حتى", bf_clear_dates:"مسح التواريخ",
+ bf_date_hint:"التصفية حسب تاريخ الإنشاء في كل النتائج. التواريخ حسب المنطقة الزمنية لهذا الجهاز وتشمل اليوم الأخير.",
+ bf_date_invalid:"اختر تاريخ نهاية يساوي تاريخ البداية أو بعده.",
+ bf_bulk_all_dates:"الموافقة على الكل وإلغاء الكل يشملان جميع الرسائل المنتظرة، بما فيها الرسائل خارج هذه التواريخ."
+});

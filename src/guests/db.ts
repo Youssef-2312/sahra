@@ -1,3 +1,4 @@
+import type { DateRange } from "../lib/date-range";
 // Guest sign-up, the approval queue, release, name transfer and export. Like
 // src/db/index.ts and src/db/tickets.ts, every rule that decides whether a change
 // happens is inside the statement that makes it: capacity, the session check, the
@@ -110,7 +111,7 @@ export interface GuestTicket {
 export type BulkResult = Record<string, "done" | "already" | "refused">;
 
 export const MAX_BULK = 20;
-export interface TicketFilters { q?: string; typeId?: string; delivery?: string; entry?: string; booking?: string }
+export interface TicketFilters extends DateRange { q?: string; typeId?: string; delivery?: string; entry?: string; booking?: string }
 
 export class GuestDb {
   constructor(readonly driver: SqlDriver) {}
@@ -338,6 +339,7 @@ export class GuestDb {
     const query = !filters.q ? sql`` : ref ? sql`AND substr(t.id,1,6) = ${ref[1]!.toUpperCase()}`
       : sql`AND (t.guest_name LIKE ${like} ESCAPE '\\' OR t.guest_email LIKE ${like} ESCAPE '\\'
         OR t.id LIKE ${like} ESCAPE '\\' OR t.instagram LIKE ${like} ESCAPE '\\')`;
+    const dates = sql`${filters.createdFrom !== undefined ? sql`AND t.created_at >= ${filters.createdFrom}` : sql``} ${filters.createdBefore !== undefined ? sql`AND t.created_at < ${filters.createdBefore}` : sql``}`;
     const type = filters.typeId ? sql`AND t.type_id = ${filters.typeId}` : sql``;
     const entry = filters.entry === "used" ? sql`AND t.used_at IS NOT NULL` : filters.entry === "unused" ? sql`AND t.used_at IS NULL` : sql``;
     const delivery = filters.delivery === "released" ? sql`AND t.released_at IS NOT NULL`
@@ -353,7 +355,7 @@ export class GuestDb {
         t.used_at, t.qr_version, t.rev, t.type_id, (SELECT name FROM ticket_types WHERE id = t.type_id) AS type_name, t.price, ${ticketTotal("t")} AS total, t.payment,
         CASE WHEN t.guest_email IS NULL THEN 0 ELSE (SELECT COUNT(*) FROM tickets d WHERE d.party_id = t.party_id
           AND d.guest_email = t.guest_email AND d.id != t.id AND d.status IN ('pending', 'approved')) END AS same_email
-      FROM tickets t WHERE t.party_id = ${sess.partyId} AND (${status} = 'all' OR t.status = ${status}) ${cash} ${cursor} ${query} ${type} ${entry} ${delivery} ${booking}
+      FROM tickets t WHERE t.party_id = ${sess.partyId} AND (${status} = 'all' OR t.status = ${status}) ${cash} ${cursor} ${query} ${type} ${entry} ${delivery} ${booking} ${dates}
         AND ${sessionValid(sess, MANAGERS, now)}
       ORDER BY t.created_at, t.id LIMIT ${limit}`);
     return r.results;

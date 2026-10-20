@@ -17,7 +17,7 @@
   var TABS = [["pending", "q_waiting"], ["all", "bf_all_requests"]];
   var me = null, tab = "pending", rows = null, next = null, failed = null, cashOnly = false;
   var initialFilters = new URLSearchParams(location.search);
-  ["q","status","type","delivery","entry","booking","payment"].forEach(function(k){if(initialFilters.has(k))filters[k]=initialFilters.get(k);});
+  ["q","status","type","delivery","entry","booking","payment","date_from","date_to"].forEach(function(k){if(initialFilters.has(k))filters[k]=initialFilters.get(k);});
   if(initialFilters.size)tab="all";
   var expanded = {};
   var selected = {};              // id -> true

@@ -1528,3 +1528,41 @@ manual reduced motion. Event listeners are cleaned up on rerender/page exit.
 EN/AR, light/dark, 390/768/1440 browser checks confirmed 22 unique photo URLs,
 motion/reduced motion, zero horizontal overflow and no page errors. No backend,
 API, database, admission or email behavior changed.
+
+### Creation-date filters and smaller mobile cards (20 October 2026)
+
+Requests, Guests and Emails now have a visible Dates disclosure above results,
+with Created from / Created through, Apply and Clear dates in EN/AR. The final
+calendar day is included in the device timezone, including 23/25-hour DST days.
+Requests/Guests also expose these dates in the full filter sheet and active chips.
+The APIs validate epoch bounds and add bound SQL predicates before pagination;
+status, search, party scope and session checks remain enforced. No migration is
+needed. Filtering uses record creation time, not approval, check-in or sent time.
+
+Emails retains its status tabs and Older continuation, with stale response guards
+and disabled duplicate loads. Its cursor now accepts the same validated UUID,
+announcement and notice IDs used by the outbox, fixing Older when the last row
+is a guest message. Bulk approval/cancellation still acts on every awaiting
+email; both banner and confirmation explain that dates do not restrict “all”.
+
+Mobile cards preserve names, statuses, prices and expandable actions with 44px
+tap targets. A 390px English dark fixture measured Requests 150.7 -> 128.6px,
+Guests 119.5 -> 63.6px and Emails 177.4 -> 130.6px. Guest details sit beside the
+identity when closed, then expand to full width. Long text wraps; no essential
+status or action is removed. Themes, RTL and existing reduced-motion behavior
+are preserved.
+
+Research: Google search for mobile card density/progressive disclosure, then
+[Nielsen Norman Group on progressive disclosure](https://www.nngroup.com/articles/progressive-disclosure/)
+and [W3C target size guidance](https://www.w3.org/WAI/WCAG22/Understanding/target-size-minimum.html).
+Secondary details stay expandable; retained 44px controls exceed WCAG 2.2's
+24px minimum without making the entire card large.
+
+Validation: TypeScript and 570 tests across 45 files. New D1/API coverage tests
+inclusive/exclusive bounds, malformed/reversed ranges, filters before cursor
+pagination, status/search constraints, cross-party isolation, door denial and
+bulk email semantics. Browser fixtures cover 70 records, 55 matching dates,
+three ticket pages/two email pages, reset, invalid ranges and expanded cards in
+36 EN/AR light/dark layouts at 390/768/1440px, with zero horizontal overflow or
+page errors, plus DST checks. All emails and guest actions in browser tests are
+fixtures; no real mail was sent.

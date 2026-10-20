@@ -1,3 +1,4 @@
+import { parseDateRange } from "../lib/date-range";
 // The party's email outbox (owner or admin; door staff get 403): list, approve
 // rows awaiting approval ("message all guests"), cancel unsent rows. Sending is
 // the cron's job (src/email/sender.ts).
@@ -14,8 +15,8 @@ const STATUSES = new Set(["awaiting_approval", "queued", "sending", "sent", "fai
 
 function cursor(v: string | undefined): Cursor | null | false {
   if (!v) return null;
-  const m = /^(\d{1,16})\.([0-9a-f-]{36})$/.exec(v);
-  return m && isUuid(m[2]) ? { at: Number(m[1]), id: m[2]! } : false;
+  const m = /^(\d{1,16})\.(.{1,128})$/.exec(v);
+  return m && isOutboxId(m[2]) ? { at: Number(m[1]), id: m[2]! } : false;
 }
 
 /**
@@ -41,9 +42,11 @@ function selection(b: Record<string, unknown> | null): Selection | null {
 outboxRoutes.get("/", requireAuth(["owner", "admin"]), async (c) => {
   const status = c.req.query("status") ?? null;
   const before = cursor(c.req.query("before"));
+  const range = parseDateRange(c.req.query("created_from"), c.req.query("created_before"));
+  if (range === false) return json(c, 400, { error: "invalid_request" });
   if ((status !== null && !STATUSES.has(status)) || before === false) return json(c, 400, { error: "invalid_request" });
   const a = c.var.auth;
-  const r = await new OutboxAdmin(c.var.db.driver).list({ hash: a.hash, partyId: a.info.party_id }, c.var.deps.now(), status, before);
+  const r = await new OutboxAdmin(c.var.db.driver).list({ hash: a.hash, partyId: a.info.party_id }, c.var.deps.now(), status, before, range);
   return json(c, 200, r);
 });
 
