@@ -1258,3 +1258,6 @@ Object.assign(SahraText.ar, {
  bf_date_invalid:"اختر تاريخ نهاية يساوي تاريخ البداية أو بعده.",
  bf_bulk_all_dates:"الموافقة على الكل وإلغاء الكل يشملان جميع الرسائل المنتظرة، بما فيها الرسائل خارج هذه التواريخ."
 });
+
+Object.assign(SahraText.en,{age_label:"Age rating",age_hidden:"Not shown",age_minimum:"Minimum age",age_under_choice:"Under an age",age_cutoff:"Age cutoff",age_hint:"Choose a public age label. This does not verify guests’ ages.",age_invalid:"Enter a whole age from 1 to 99.",age_all:"All ages",age_value:"{age}+",age_under:"Under {age}",age_accessible:"Age rating: {rating}"});
+Object.assign(SahraText.ar,{age_label:"التصنيف العمري",age_hidden:"غير ظاهر",age_minimum:"حد أدنى للعمر",age_under_choice:"أقل من عمر محدد",age_cutoff:"العمر المحدد",age_hint:"اختر تصنيفًا عمريًا ظاهرًا. لا تتحقق سهرة من أعمار الضيوف.",age_invalid:"أدخل عمرًا صحيحًا من 1 إلى 99.",age_all:"كل الأعمار",age_value:"{age}+",age_under:"أقل من {age}",age_accessible:"التصنيف العمري: {rating}"});

@@ -667,6 +667,12 @@ var Sahra = (function () {
     return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
   }
 
-  return { t: t, el: el, clear: clear, api: api, errorText: errorText, money: money, amount: amount, when: when, date: date, time: time, rel: rel,
+  function ageRating(value) {
+    if (value === "all") return t("age_all");
+    var m = typeof value === "string" && /^(minimum|under):([1-9][0-9]?)$/.exec(value);
+    return m ? t(m[1] === "under" ? "age_under" : "age_value", {age:m[2]}) : null;
+  }
+
+  return { ageRating: ageRating, t: t, el: el, clear: clear, api: api, errorText: errorText, money: money, amount: amount, when: when, date: date, time: time, rel: rel,
     lang: lang, boot: boot, reveal: revealSections, store: store, SESSION_KEY: SESSION_KEY, token: token, title: title, problem: problem, signinView: signinView, motionCards: motionCards, appearanceSettings: appearanceSettings, copyButton: copyButton, fold: fold, matches: matches, findBox: findBox, confirm: confirmBox, notify: notify, ask: ask, contactCard: contactCard, ref: function (id) { return id ? "SAH-" + String(id).slice(0, 6) : ""; } };
 })();

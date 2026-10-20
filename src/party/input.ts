@@ -12,7 +12,7 @@ export const EDITABLE = [
   "payment_instructions", "capacity", "max_people_per_ticket", "address_mode", "reveal_at", "address_locked_at",
   "email_ticket_subject", "email_ticket_body", "email_link_subject", "email_link_body",
   "registration_opens_at", "registration_closes_at", "max_tickets_per_email",
-  "support_phone", "support_email", "support_note", "review_time",
+  "support_phone", "support_email", "support_note", "review_time", "age_rating",
 ] as const;
 export type EditableField = (typeof EDITABLE)[number];
 export type EditValues = Partial<Record<EditableField, string | number | null>>;
@@ -122,6 +122,11 @@ export function parseEdit(b: Record<string, unknown>): ParsedEdit {
     const s = text(b[f], TEXT_LIMITS[f]!, MULTILINE.has(f));
     if (s === undefined) return bad(f);
     values[f] = s;
+  }
+  if ("age_rating" in b) {
+    const age = b.age_rating;
+    if (age !== null && (typeof age !== "string" || (age !== "all" && !/^(?:minimum|under):[1-9][0-9]?$/.test(age)))) return bad("age_rating");
+    values.age_rating = age as string | null;
   }
   if ("support_phone" in b) {
     const ph = cleanPhone(b.support_phone);
