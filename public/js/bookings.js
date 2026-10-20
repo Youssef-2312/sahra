@@ -115,9 +115,29 @@
     root.addEventListener("toggle", function () { if (root.open) read(); });
     return root;
   }
+  function dateFilters(values, apply) {
+    var start = S.input("date_from", "date", { value: values.date_from || "", min:"1970-01-01", max:"9999-12-31" });
+    var end = S.input("date_to", "date", { value: values.date_to || "", min:"1970-01-01", max:"9999-12-31" });
+    var range = [values.date_from, values.date_to].filter(Boolean).join(" / ");
+    var box = el("details", { class:"bk-dates" }, el("summary", null,
+      el("span", {text:t("bf_dates")}), range ? el("span", {class:"bk-date-range",text:range,attrs:{dir:"ltr"}}) : null));
+    var form = el("form", {class:"bk-date-form"},
+      S.field(t("bf_from_date"), start), S.field(t("bf_to_date"), end),
+      el("div", {class:"bk-date-actions"},
+        el("button", {class:"btn primary small-btn",text:t("bf_apply"),attrs:{type:"submit"}}),
+        el("button", {class:"btn small-btn",text:t("bf_clear_dates"),attrs:{type:"button",disabled:!range},on:{click:function(){apply(Object.assign({},values,{date_from:"",date_to:""}));}}})),
+      el("p", {class:"small muted bk-date-hint",text:t("bf_date_hint")}));
+    function validate(){end.setCustomValidity(start.value && end.value && start.value > end.value ? t("bf_date_invalid") : "");}
+    start.addEventListener("input",validate);end.addEventListener("input",validate);
+    form.addEventListener("submit",function(e){e.preventDefault();validate();if(!form.reportValidity())return;
+      apply(Object.assign({},values,{date_from:start.value,date_to:end.value}));});
+    box.appendChild(form);return box;
+  }
   function params(values) {
     var q = new URLSearchParams();
-    Object.keys(values).forEach(function (k) { if (values[k]) q.set(k, values[k]); });
+    Object.keys(values).forEach(function (k) { if (values[k] && k !== "date_from" && k !== "date_to") q.set(k, values[k]); });
+    if (values.date_from) q.set("created_from", String(new Date(values.date_from + "T00:00:00").getTime()));
+    if (values.date_to) { var end = new Date(values.date_to + "T00:00:00"); end.setDate(end.getDate() + 1); q.set("created_before", String(end.getTime())); }
     return q;
   }
   function filters(values, types, apply, withStatus) {
@@ -129,19 +149,20 @@
       ["payment", "bf_payment", [["cash",t("bf_cash")]]]
     ];
     if (withStatus) choices.unshift(["status","bf_status", [["pending",t("q_waiting")],["approved",t("q_approved")],["cancelled",t("q_cancelled_tab")],["rejected",t("q_rejected")]]]);
+    choices.push(["date_from", "bf_from_date", []], ["date_to", "bf_to_date", []]);
     var active = choices.filter(function (x) { return values[x[0]] && values[x[0]] !== "all"; });
     var search = S.input("q", "search", { maxlength: 80, value: values.q || "", placeholder: t("bf_search"), autocomplete: "off", enterkeyhint: "search" });
-    var bar = el("div", { class: "bk-filterbar" });
+    var bar = el("div", { class: "bk-filterbar" }, dateFilters(values, apply));
     var form = el("form", { class: "bk-search", attrs: { role: "search" } }, search,
       el("button", { class: "btn primary", text: t("g_search"), attrs: { type: "submit" } }));
     form.addEventListener("submit", function (e) { e.preventDefault(); apply(Object.assign({}, values, { q: search.value.trim() })); });
     function sheet() {
       var previous = document.activeElement;
-      var fields = choices.map(function (x) { return S.field(t(x[1]), S.select(x[0], [["",t("bf_all")]].concat(x[2]), values[x[0]] === "all" ? "" : values[x[0]])); });
+      var fields = choices.map(function (x) { return S.field(t(x[1]), x[0].indexOf("date_") === 0 ? S.input(x[0], "date", { value: values[x[0]] || "", min:"1970-01-01", max:"9999-12-31" }) : S.select(x[0], [["",t("bf_all")]].concat(x[2]), values[x[0]] === "all" ? "" : values[x[0]])); });
       var f = el("form", { attrs: { method: "dialog" } },
         el("h2", { attrs: { id: "bk-filter-title" }, text: t("bf_filters") }),
         el("div", { class: "bk-filter-fields" }, fields),
-        el("p", { class: "small muted", text: t("bf_result_hint") }));
+        el("p", { class: "small muted", text: t("bf_result_hint") }), el("p", { class: "small muted", text: t("bf_date_hint") }));
       var dialog = el("dialog", { class: "bk-filter-sheet", attrs: { "aria-labelledby": "bk-filter-title" } }, f);
       function close() { dialog.close(); dialog.remove(); if (previous && previous.isConnected) previous.focus(); }
       f.appendChild(el("div", { class: "bk-filter-actions" },
@@ -150,9 +171,11 @@
       f.addEventListener("submit", function (e) {
         e.preventDefault(); var next = Object.assign({}, values, { q: search.value.trim() });
         choices.forEach(function (x) { next[x[0]] = f.elements[x[0]].value; });
+        if (next.date_from && next.date_to && next.date_from > next.date_to) { f.elements.date_to.setCustomValidity(t("bf_date_invalid")); f.elements.date_to.reportValidity(); return; }
         if (withStatus && !next.status) next.status = "all";
         close(); apply(next);
       });
+      f.addEventListener("input", function () { f.elements.date_to.setCustomValidity(""); });
       dialog.addEventListener("cancel", function (e) { e.preventDefault(); close(); });
       document.body.appendChild(dialog); dialog.showModal(); f.querySelector("select").focus();
     }
@@ -177,5 +200,5 @@
       el("button", {class:"btn bk-page-top",attrs:{type:"button","aria-label":t("bf_top"),title:t("bf_top")},on:{click:top}},S.icon("search")));
   }
 
-  window.SahraBooking = { card: card, guide: guide, filters: filters, params: params, pager: pager };
+  window.SahraBooking = { card: card, guide: guide, filters: filters, params: params, dates: dateFilters, pager: pager };
 })();

@@ -11,7 +11,7 @@
   var notes = {};      // ticket id -> [cls, text, link?]
   var searchSeq = 0, nextFound = null, loadingMore = false, pageIndex = 0, pageCursors = [null], filters = { status:"approved" };
   var initialFilters = new URLSearchParams(location.search);
-  ["status","type","delivery","entry","booking","payment"].forEach(function(k){if(initialFilters.has(k))filters[k]=initialFilters.get(k);});
+  ["status","type","delivery","entry","booking","payment","date_from","date_to"].forEach(function(k){if(initialFilters.has(k))filters[k]=initialFilters.get(k);});
   var guestView = initialFilters.has("q") || filters.status !== "approved" ? "all" : "approved";
   if (guestView === "all" && !initialFilters.has("status")) filters.status = "all";
   var expandedGuests = {};

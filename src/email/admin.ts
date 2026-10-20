@@ -1,3 +1,4 @@
+import type { DateRange } from "../lib/date-range";
 // The party's outbox as its owner/admins see it: list (paged), approve rows that
 // await approval, cancel unsent rows. Every rule, including the session check,
 // is inside the statement that reads or changes the rows.
@@ -26,7 +27,7 @@ export class OutboxAdmin {
   constructor(private readonly driver: SqlDriver) {}
 
   /** Newest first; `before` continues after the last row of the previous page. */
-  async list(sess: SessionRef, now: number, status: string | null, before: Cursor | null) {
+  async list(sess: SessionRef, now: number, status: string | null, before: Cursor | null, range: DateRange = {}) {
     const ok = sessionValid(sess, ["owner", "admin"], now);
     const after = before
       ? sql`AND (created_at < ${before.at} OR (created_at = ${before.at} AND id < ${before.id}))`
@@ -34,6 +35,8 @@ export class OutboxAdmin {
     const r = await this.driver.all<Record<string, unknown>>(sql`SELECT id, kind, to_email, ticket_id, subject, body_text, status,
         created_at, created_by, approved_at, approved_by, attempts, next_attempt_at, sent_at, provider, last_error, cancelled_at, cancelled_by
       FROM outbox WHERE party_id = ${sess.partyId} AND ${ok} ${status ? sql`AND status = ${status}` : sql``} ${after}
+        ${range.createdFrom !== undefined ? sql`AND created_at >= ${range.createdFrom}` : sql``}
+        ${range.createdBefore !== undefined ? sql`AND created_at < ${range.createdBefore}` : sql``}
       ORDER BY created_at DESC, id DESC LIMIT ${OUTBOX_PAGE + 1}`);
     const rows = r.results.slice(0, OUTBOX_PAGE);
     const last = rows.at(-1);
