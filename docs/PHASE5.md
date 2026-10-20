@@ -1301,3 +1301,68 @@ checks pass 12 booking layouts, 12 filter/pagination layouts with 45 tickets ove
 three pages, and six dashboard layouts in EN/AR at 390/768/1440. They report 0px
 overflow and zero unexpected JavaScript errors; 72 booking buttons measure at
 least 44px high. All browser mutations use intercepted fixtures.
+
+### NovaHub workspace, fixed navigation and device appearance (20 October 2026)
+
+The owner supplied `https://bynova.vercel.app/nova-hub` as the dashboard reference.
+The expanded public demo was inspected at phone and desktop widths. Its off-white
+workspace, black analytics panel, compact pills, thin borders and card grid guide
+the new layout. The actual app at `https://bynova-hub.vercel.app` redirects this
+browser to an approved-Google-account sign-in page. Its private dashboard has not
+been inspected, so this is not a verified identical copy of that private view.
+
+Staff pages now share a three-line menu button in the sticky top bar. Its drawer
+contains every authorised destination, appearance settings and sign-out. The
+phone/tablet bottom navigation is Overview / Requests / Guests / Open scanner.
+It mounts directly under body, outside animated main content. This corrects the
+confirmed bug where a filled transform animation made the old fixed navigation
+scroll with the main element. The shell survives data refreshes; dialogs restore
+focus and the menu filters owner-only links. Desktop retains a horizontal menu.
+
+Overview, Activity and Ticket types are separate keyboard-operable views at all
+widths. Overview has a request chart with real 7/14-day totals, approved-capacity
+gauge, approved/check-in counts, consistent metric cards and task/search panels.
+Secondary event controls are grouped in one disclosure, with explicit wording
+that door check-in and ticket-request registration are separate. The view and
+chart range survive reload via non-personal URL parameters. Search drafts survive
+refresh. Statistics use the server snapshot timestamp; relative sync age uses a
+monotonic clock. Failed/partial refresh and stale data are visible, and admission
+changes disable when the current door state cannot be verified. Normal motion
+animates content while persistent navigation remains outside those transforms.
+
+All 18 HTML entry points load `appearance.js` before styles. Device default is
+the initial colour setting and follows live light/dark preference changes. Users
+can override it with Light or Dark, choose comfortable/compact spacing, reduce
+motion, and select subtle glass or solid surfaces. The settings live in the
+staff menu or the appearance button on public pages. Preferences apply at once,
+persist locally, synchronise across open tabs and reset without clearing unrelated
+data. Invalid or blocked storage falls back to usable device defaults. Device
+reduced-motion and reduced-transparency preferences always take precedence.
+Manual reduced motion also stops JavaScript ticket artwork/reveal animations.
+
+The header brand uses a symmetrical three-column grid, so menu/account widths do
+not move it away from the centre. The Sahra mark and wordmark are black on light
+surfaces and white on dark surfaces, including after live theme changes. Public
+phone pages keep account access as a labelled profile icon. Appearance tokens
+cover public and staff surfaces, controls and semantic states. QR pixels stay
+black on white, and scanner verdict surfaces retain their opaque colours.
+Compact settings do not reduce touch-control heights. All new wording is EN/AR.
+
+Browser validation uses local Wrangler and intercepted API fixtures, with no
+production mutations or real email. It covers 72 staff layouts (six pages, two
+themes, EN/AR at 390/768/1440), 36 appearance layouts (dashboard/contact/about),
+and 48 public layouts (home/request form/released ticket/idle scanner). These
+report zero horizontal overflow and zero unexpected JavaScript errors. The
+largest measured header-brand centre error is 0.008 px. Normal-motion scroll
+checks report 0 px bottom-bar movement. Additional flows cover live device theme
+changes, manual overrides, persistence/reset/cross-tab settings, blocked/corrupt
+storage, minimum 44 px new controls, reduced motion, role-aware menus, failure
+states, keyboard tabs, date ranges and retained search drafts. Existing 12
+pagination/filter layouts and 96 footer/account-state layouts also pass.
+Two colour-contrast regressions cover light/dark text, primary controls and
+semantic states. No database migration is required.
+
+Required final checks: TypeScript passes; all 567 Vitest tests in 44 files pass,
+including both theme contrast regressions. The earlier 565-test count grew by
+two. The work is prepared on claude/p5-frontend for review; production deployment
+is a separate step.

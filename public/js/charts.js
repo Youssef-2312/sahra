@@ -68,14 +68,15 @@ var SahraCharts = (function () {
     return out;
   }
 
-  function requestsChart(stats, party, big) {
+  function requestsChart(stats, party, big, range) {
     var tz = party && party.time_zone;
-    var days = perDay(stats, party, 14);
+    var count = range === 7 ? 7 : 14;
+    var days = perDay(stats, party, count);
     var items = days.map(function (d, i) {
       return { value: d.value, label: big || i % 2 === 1 ? dayLabel(d.ms, tz) : "", tip: dayLabel(d.ms, tz) + ": " + d.value };
     });
     var total = days.reduce(function (n, d) { return n + d.value; }, 0);
-    return card(t("d_chart_requests"), bars(items, PALETTE[0], big), null, big ? t("d_last14", { n: total }) : null);
+    return card(t("d_chart_requests"), bars(items, PALETTE[0], big), null, big ? (range ? t("sh_period_total", { days: count, n: total }) : t("d_last14", { n: total })) : null);
   }
 
   /** A small bar strip for a stat card (no labels; the card says the number). */
@@ -129,6 +130,7 @@ var SahraCharts = (function () {
   }
 
   function card(title, chart, extra, note) {
+    if (chart && chart.tagName.toLowerCase() === "svg") chart.setAttribute("aria-label", title + (note ? ": " + note : ""));
     return el("section", { class: "card chart" },
       el("div", { class: "chart-head" }, el("h2", { text: title }), note ? el("span", { class: "muted", text: note }) : null),
       chart, extra || null);

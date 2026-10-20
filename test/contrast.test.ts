@@ -27,4 +27,22 @@ describe("colour contrast", () => {
       for (const bg of ["bg", "surface"]) expect(ratio(token(fg), token(bg)), `${fg} on ${bg}`).toBeGreaterThanOrEqual(4.5);
     }
   });
+
+  for (const theme of ["light", "dark"]) {
+    it(`${theme} appearance keeps text, controls and semantic states at AA contrast`, () => {
+      const block = css.split(`:root[data-theme="${theme}"]`)[1]?.split("}")[0];
+      expect(block).toBeTruthy();
+      const value = (name: string) => {
+        const found = new RegExp(`--ap-${name}:\\s*(#[0-9a-fA-F]{3,6})(?=;)`).exec(block!);
+        if (!found) throw new Error(`${theme}: ${name} missing`);
+        const hex = found[1]!;
+        return hex.length === 4 ? "#" + hex.slice(1).split("").map((c) => c + c).join("") : hex;
+      };
+      for (const fg of ["text", "muted", "accent"]) {
+        for (const bg of ["bg", "paper"]) expect(ratio(value(fg), value(bg)), `${theme}: ${fg} on ${bg}`).toBeGreaterThanOrEqual(4.5);
+      }
+      expect(ratio(value("on-primary"), value("primary"))).toBeGreaterThanOrEqual(4.5);
+      for (const state of ["yes", "no", "maybe"]) expect(ratio(value(state), value(`${state}-bg`)), `${theme}: ${state}`).toBeGreaterThanOrEqual(4.5);
+    });
+  }
 });
