@@ -226,10 +226,10 @@ export class GuestDb {
    */
   async listedParties(now: number) {
     const r = await this.driver.all<{ id: string; name: string; starts_at: number; ends_at: number | null; time_zone: string | null;
-      capacity: number; held: number; registration_opens_at: number | null; registration_closes_at: number | null; support_phone: string | null; cancelled_at: number | null; prices: string; flyers: string }>(
+      age_rating: string | null; capacity: number; held: number; registration_opens_at: number | null; registration_closes_at: number | null; support_phone: string | null; cancelled_at: number | null; prices: string; flyers: string }>(
       // One pass over the public types gives both the lowest price and how many different prices there are
       // (the card says "EGP 350" for one price, "From EGP 350" for several).
-      sql`SELECT p.id, p.name, p.starts_at, p.ends_at, p.time_zone, p.capacity, ${held(sql`p.id`)} AS held,
+      sql`SELECT p.id, p.name, p.starts_at, p.ends_at, p.time_zone, p.age_rating, p.capacity, ${held(sql`p.id`)} AS held,
           p.registration_opens_at, p.registration_closes_at, p.support_phone, p.cancelled_at,
           (SELECT json_array(MIN(tt.price), COUNT(DISTINCT tt.price)) FROM ticket_types tt
             WHERE tt.party_id = p.id AND tt.archived_at IS NULL AND tt.staff_only = 0 AND ${waveReady(now)}) AS prices,

@@ -89,12 +89,22 @@
   // ------------------------------------------------------------- the cards
 
   function basics() {
+    var parts = (party.age_rating || "").split(":"), mode=parts[0], age=S.input("age_cutoff","number",{min:1,max:99,step:1,value:parts[1] || "",placeholder:"18"});
+    var choice=S.select("age_mode",[["",t("age_hidden")],["all",t("age_all")],["minimum",t("age_minimum")],["under",t("age_under_choice")]],mode);
+    function syncAge(){age.disabled=choice.value !== "minimum" && choice.value !== "under";age.required=!age.disabled;}
+    choice.addEventListener("change",syncAge);syncAge();
     return formCard("basics", t("s_basics"), t("s_basics_p"), [
       S.field(t("s_name"), S.input("name", "text", { maxlength: 80, required: true, value: party.name || "", dir: "auto" })),
+      el("div",{class:"s-two"},S.field(t("age_label"),choice,t("age_hint")),S.field(t("age_cutoff"),age)),
       S.field(t("s_description"), textarea("description", party.description, 2000, 4), t("s_description_h")),
     ], function (f, box) {
       if (!val(f, "name")) { S.say(box, "no", t("s_name_needed")); return null; }
-      return { name: val(f, "name"), description: textOrNull(f, "description") };
+      var selected=val(f,"age_mode"), n=Number(val(f,"age_cutoff")), rating=selected === "all" ? "all" : null;
+      if (selected === "minimum" || selected === "under") {
+        if (!Number.isInteger(n) || n < 1 || n > 99) {S.say(box,"no",t("age_invalid"));age.focus();return null;}
+        rating=selected+":"+n;
+      }
+      return { name: val(f, "name"), description: textOrNull(f, "description"),age_rating:rating };
     });
   }
 

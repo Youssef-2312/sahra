@@ -95,3 +95,6 @@ html[lang=ar] .home.marketing .hero-bg .tilt{transform:translate(-50%,-50%) rota
 @media(max-width:600px){.home.marketing .hero-bg .ph{width:320px;height:240px}}
 @media(prefers-reduced-motion:reduce){.home.marketing .hero-bg .lane{will-change:auto}}
 html[data-motion=reduced] .home.marketing .hero-bg .lane{will-change:auto}
+
+.home.marketing .party-card .age-rating{display:inline-flex;align-items:center;justify-content:center;align-self:flex-start;min-height:26px;padding:3px 9px;border:1px solid var(--ap-line);border-radius:999px;font-size:12px;font-weight:600;line-height:1.4;color:var(--ap-text);background:var(--ap-subtle);width:max-content;max-width:100%}
+html[lang=ar] .home.marketing .party-card .age-rating{align-self:flex-start}

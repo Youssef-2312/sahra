@@ -240,3 +240,11 @@ Outbox cursors accept validated UUID/announce/notice IDs. “Approve all” and
 “Cancel all” still cover all awaiting emails, with explicit warnings when dates
 are set. Mobile identity/status rows remain visible; details expand to full width
 and controls retain 44px targets. Required suite is now 570 tests in 45 files.
+
+### Age rating release gate (21 October 2026)
+
+Migration 0030 adds nullable age_rating. Apply it on production before merging
+or deploying the age-rating PR. It changes no existing party's rating. Settings
+supports Not shown / All ages / Minimum age / Under an age, with a numeric
+cutoff 1–99; public cards and signup facts share EN/AR labels. This field is a
+label, not age verification. The suite now has 572 tests in 46 files.

@@ -1574,3 +1574,23 @@ absolute coordinates above the page. Header padding no longer reserves an
 unrelated fixed space. Verified that the button intersects neither the title nor
 the stats at 320/390/768/1440px, EN/AR, light/dark (16 layouts), with zero overflow
 or page errors. TypeScript and all 570 tests passed. No database changes.
+
+### Optional public age label (21 October 2026, migration required)
+
+Settings > Basics now has Not shown, All ages, Minimum age and Under an age,
+with a 1–99 cutoff. Labels such as 18+ and Under 18 appear on homepage party
+cards and signup facts, localized EN/AR. This is display metadata, not identity
+or age verification. Existing parties stay unlabelled until edited. Server
+validation accepts only null, all, minimum:N or under:N with canonical ages.
+The existing owner/admin checks, audit, ledger snapshots and backup/recovery
+column handling cover the field. No guest age is collected.
+
+Apply migrations/0030_age_rating.sql to production before merging this change:
+`npx wrangler d1 migrations apply sahra-prod --remote` from the updated feature
+branch. Do not deploy reads of this column before the migration is applied.
+The owner applies production migrations; this release must wait for that step.
+
+Validation: TypeScript and 572 tests in 46 files, including field validation,
+owner-only save/clear, party isolation, public details and list visibility.
+Playwright checked all four modes, saved state and localized homepage badges in
+12 EN/AR light/dark 390/768/1440 layouts, with no overflow or page errors.

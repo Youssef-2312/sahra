@@ -152,6 +152,7 @@
         el("span", { class: "when", text: Sahra.when(p.starts_at, p.time_zone) }),
         el("span", { class: "name", text: p.name, attrs: { dir: "auto", title: p.name } }),
         price ? el("span", { class: "price-line", text: price }) : null,
+        Sahra.ageRating(p.age_rating) ? el("span", {class:"age-rating",text:Sahra.ageRating(p.age_rating),attrs:{"aria-label":t("age_accessible",{rating:Sahra.ageRating(p.age_rating)}),dir:p.age_rating.indexOf("minimum:") === 0 ? "ltr" : "auto"}}) : null,
         availability(p, my),
         el("span", { class: "go", text: action })));
   }
