@@ -1413,3 +1413,37 @@ only horizontal overflow and brand centring.
 Validation: 32 EN/AR light/dark layouts at 320, 390, 768, 899, 900, 1024,
 1286 and 1440 px passed shell containment, sibling separation, content clearance,
 profile interaction and sticky top-zero checks, with zero overflow/page errors.
+
+## Marketing page preview (20 October 2026)
+
+About now uses a framed Nova-inspired hero, corner crosshairs, a small badge,
+64 px desktop/36 px phone heading, concise bilingual copy and pill/text actions.
+Per the owner's clarification, the visual stays a single existing rendered
+Sahra ticket, styled with perspective and edge fades, rather than a dashboard.
+Arabic mirrors the perspective and alignment. The existing explanatory sections
+remain, with quieter cards and accurate one-use QR wording. The statement below
+the hero separates product simplicity from strict door validation.
+
+Homepage keeps the existing party data, search/filter logic, remembered ticket
+links, ticket-kind guide, preparation tips and FAQs. Adds a real four-step ticket
+sequence and invitation-only host contact band. Existing hero photos are used
+without a continuous collage animation; images below the fold lazy-load.
+Marketing styles live in marketing.css after appearance.css. Header/footer JS
+and all server, guest-flow and database code are unchanged. The owner's separate
+navbar clarification increases desktop spacing and puts links beneath the centred
+brand, using the existing appearance stylesheet. Mobile controls retain their
+44 px or larger touch targets.
+
+The pages use at most one content entrance, honour reduced motion and no longer
+invoke per-section reveal effects. Public wording has 603 matching EN/AR keys.
+Local Playwright fixtures passed 24 theme/language/390-768-1440 layouts with zero
+horizontal overflow/page errors, including search/filter chips, remembered links,
+ticket tabs, FAQs, navbar bounds and profile Settings. Touch checks cover language,
+profile Sign in and Contact navigation. Eight requested preview screenshots are
+provided for review before deployment. Fixture API traffic is intercepted.
+
+Final checks: TypeScript and all 567 Vitest tests in 44 files pass. Dedicated
+motion checks confirm no animations with reduced motion, at most one content
+entrance otherwise, and no section animations triggered by scrolling. Mobile
+button failures were not reproduced in the tested public controls; the owner has
+been asked to identify the specific failing control. This preview is not deployed.
