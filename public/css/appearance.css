@@ -213,3 +213,17 @@ html[data-theme] body.staff-app .guest-workspace .s-card .g-list>.g-guest-card{d
 .ticket-identity .facts li.small{grid-column:1/-1}
 .ticket-identity .facts li:has(strong[dir=ltr]){display:flex;grid-column:1/-1;justify-content:space-between;align-items:baseline;gap:10px;padding-top:8px;border-top:1px solid var(--ap-line)}
 .ticket-identity .facts li:has(strong[dir=ltr]) br{display:none}
+
+/* Public header in two rows (owner): logo, search, language and account on top;
+   the page links on their own row underneath, divided by a hairline. Staff pages keep their own bar. */
+html[data-theme] body:not(.staff-app) .topbar{display:grid;grid-template-columns:auto minmax(0,1fr) auto;grid-template-rows:auto auto;column-gap:12px;row-gap:0;padding-block:0}
+html[data-theme] body:not(.staff-app) .topbar>.brand{grid-column:1;grid-row:1;justify-self:start;padding-block:10px}
+html[data-theme] body:not(.staff-app) .topbar>.topbar-end{grid-column:3;grid-row:1;justify-self:end}
+html[data-theme] body:not(.staff-app) .topbar>.public-nav{grid-column:1/-1;grid-row:2;display:flex;flex-wrap:wrap;justify-content:center;gap:4px;margin:0;padding:6px 0;border-top:1px solid var(--ap-line);position:static;transform:none}
+html[data-theme] body:not(.staff-app) .topbar>.public-nav a{min-height:40px;padding:8px 14px;font-size:14px}
+@media(max-width:600px){html[data-theme] body:not(.staff-app) .topbar>.public-nav{justify-content:space-between;gap:0}html[data-theme] body:not(.staff-app) .topbar>.public-nav a{font-size:13px;padding:8px 10px}}
+
+/* Labels above headings (owner: the spaced mono capitals looked odd): the site font, sentence case. */
+html[data-theme] .label-line,html[data-theme] .sh-heading .label-line,html[data-theme] .kicker{font-family:var(--font-body);font-size:14px;font-weight:600;letter-spacing:0;text-transform:none;line-height:1.4;color:var(--ap-muted)}
+html[data-theme] .label-line{display:block;margin:0 0 6px}
+html[data-theme] body:not(.staff-app) .topbar>.public-nav{background:transparent;box-shadow:none;backdrop-filter:none;-webkit-backdrop-filter:none;border-radius:0}
