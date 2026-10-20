@@ -1566,3 +1566,11 @@ three ticket pages/two email pages, reset, invalid ranges and expanded cards in
 36 EN/AR light/dark layouts at 390/768/1440px, with zero horizontal overflow or
 page errors, plus DST checks. All emails and guest actions in browser tests are
 fixtures; no real mail was sent.
+
+### Guest tools header overlap (21 October 2026)
+
+Guest tools now lives inside the normal flex-wrapping staff header instead of
+absolute coordinates above the page. Header padding no longer reserves an
+unrelated fixed space. Verified that the button intersects neither the title nor
+the stats at 320/390/768/1440px, EN/AR, light/dark (16 layouts), with zero overflow
+or page errors. TypeScript and all 570 tests passed. No database changes.

@@ -575,7 +575,8 @@
   window.addEventListener("hashchange",showGuestView);
   function render(me, app) {
     app.classList.add("guest-workspace");
-    app.appendChild(el("div",{class:"g-view-toolbar"},el("a",{class:"btn small-btn",attrs:{id:"guest-view-switch",href:"#guest-tools"},text:t("qc_tools")})));
+    var toolbar=el("div",{class:"g-view-toolbar"},el("a",{class:"btn small-btn",attrs:{id:"guest-view-switch",href:"#guest-tools"},text:t("qc_tools")}));
+    (app.querySelector(".staff-head") || app).appendChild(toolbar);
     tilesNode = tiles();
     var list=el("section",{attrs:{id:"guest-list-view"}},tilesNode,findCard());
     var tools=el("section",{class:"g-tool-grid",attrs:{id:"guest-tools-view"}},
