@@ -9,3 +9,6 @@ load-test-report-*.json
 
 # The owner's email account list (app passwords): scripts/email-accounts.mjs
 email-accounts.txt
+
+# Built static site (scripts/build-assets.mjs)
+dist/

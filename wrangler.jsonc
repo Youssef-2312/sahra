@@ -18,7 +18,11 @@
   "preview_urls": false,
   "observability": { "enabled": true, "head_sampling_rate": 1 },
   // Pages and static files are static assets: they do not invoke the Worker.
-  "assets": { "directory": "./public", "html_handling": "auto-trailing-slash", "not_found_handling": "none" },
+  // They are built from public/ into dist/public first (minified scripts and styles,
+  // versioned copies the browser may keep; scripts/build-assets.mjs). Wrangler runs
+  // this build itself before `wrangler deploy` and `wrangler dev`.
+  "build": { "command": "node scripts/build-assets.mjs", "watch_dir": "public" },
+  "assets": { "directory": "./dist/public", "html_handling": "auto-trailing-slash", "not_found_handling": "none" },
   "vars": {
     "PUBLIC_ORIGIN": "https://sahra.bynova.workers.dev",
     // Production Google OAuth client (the client ID is not a secret).
@@ -55,7 +59,7 @@
       "workers_dev": true,
       "preview_urls": false,
       "observability": { "enabled": true, "head_sampling_rate": 1 },
-      "assets": { "directory": "./public", "html_handling": "auto-trailing-slash", "not_found_handling": "none" },
+      "assets": { "directory": "./dist/public", "html_handling": "auto-trailing-slash", "not_found_handling": "none" },
       "vars": {
         "PUBLIC_ORIGIN": "https://sahra-staging.bynova.workers.dev",
         // Staging Google OAuth client (separate from production).
