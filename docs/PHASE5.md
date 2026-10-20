@@ -1398,3 +1398,18 @@ show green. Twelve booking regressions and twelve pagination/filter layouts
 also passed. All network writes were intercepted; no real email was sent.
 TypeScript and all 567 Vitest tests in 44 files pass. No migration is required.
 This batch is prepared for review; production deployment is a separate action.
+
+### Navbar containment correction (20 October 2026)
+
+The deployed public header inherited desktop absolute positioning from sahra.css.
+That removed its link row from layout, allowing links below the shell and over
+page content. Explicitly reset position, inset and transform in appearance.css.
+Desktop public links now occupy the left grid column, with the brand centred and
+account controls on the right; smaller widths retain two rows in normal flow.
+The targeted browser regression checks link bounds against the shell, brand and
+account controls, and checks main content clears the shell, rather than checking
+only horizontal overflow and brand centring.
+
+Validation: 32 EN/AR light/dark layouts at 320, 390, 768, 899, 900, 1024,
+1286 and 1440 px passed shell containment, sibling separation, content clearance,
+profile interaction and sticky top-zero checks, with zero overflow/page errors.
