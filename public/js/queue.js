@@ -313,6 +313,12 @@
     if (bulkNote) content.appendChild(el("p", { class: "notice " + bulkNote.cls, text: bulkNote.text }));
     if (failed) { content.appendChild(el("p", { class: "notice no", text: failed })); return; }
     if (!rows) { content.appendChild(el("p", { class: "muted", text: t("loading") })); return; }
+    function pageControls(position) {
+      return SahraBooking.pager(rows.length, next, loadingRows, function (direction) { load(direction); }, function () {
+        var search = content.querySelector('.bk-search input'); search.scrollIntoView({block:"center"}); search.focus({preventScroll:true});
+      }, pageIndex, position);
+    }
+    content.appendChild(pageControls("top"));
     if (!rows.length) content.appendChild(el("p", { class: "empty", text: cashOnly ? t("q_none_cash") : t("q_none") }));
     else {
       // The filter redraws only the list below it, so typing keeps its place.
@@ -321,9 +327,7 @@
       content.appendChild(list);
       fillList(list);
     }
-    content.appendChild(SahraBooking.pager(rows.length, next, loadingRows, function (direction) { load(direction); }, function () {
-      var search = content.querySelector('.bk-search input'); search.scrollIntoView({block:"center"}); search.focus({preventScroll:true});
-    }, pageIndex));
+    content.appendChild(pageControls("bottom"));
     content.appendChild(el("div", { class: "page-tools" },
       el("div", { class: "stack buttons" }, el("button", { class: "btn", text: t("q_export"), attrs: { type: "button" }, on: { click: exportCsv } })),
       tab === "pending" ? staleTool() : null, SahraBooking.guide()));
@@ -408,7 +412,7 @@
     next = r.body.next;
     render();
     if (move) {
-      var first = app.querySelector('.req') || app.querySelector('.bk-pager');
+      var first = app.querySelector('.bk-pager-top') || app.querySelector('.req');
       if (first) { first.scrollIntoView({block:"start"}); first.focus({preventScroll:true}); }
     }
   }

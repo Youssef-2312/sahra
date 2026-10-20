@@ -84,3 +84,14 @@ html[lang=ar] .marketing :is(h1,h2,h3){letter-spacing:0;line-height:1.4}
 .home.marketing .hero .copy{align-items:center}
 .home.marketing .hero p{text-align:center;margin-inline:auto}
 .home.marketing .hero-actions{justify-content:center}
+/* Continuous, non-duplicated photo lanes. JS recycles only offscreen nodes. */
+.home.marketing .hero-bg{display:block;overflow:hidden}
+.home.marketing .hero-bg .tilt{width:max-content;gap:8px;transform:translate(-50%,-50%) rotate(-8deg)}
+.home.marketing .hero-bg .lane{display:flex;gap:8px;width:max-content;animation:none!important;will-change:transform;margin:0}
+.home.marketing .hero-bg .lane:nth-child(even){margin:0}
+.home.marketing .hero-bg .ph{width:512px;height:320px;flex:none}
+.home.marketing .hero-bg .ph img{width:100%;height:100%;object-fit:cover;display:block}
+html[lang=ar] .home.marketing .hero-bg .tilt{transform:translate(-50%,-50%) rotate(8deg)}
+@media(max-width:600px){.home.marketing .hero-bg .ph{width:320px;height:240px}}
+@media(prefers-reduced-motion:reduce){.home.marketing .hero-bg .lane{will-change:auto}}
+html[data-motion=reduced] .home.marketing .hero-bg .lane{will-change:auto}

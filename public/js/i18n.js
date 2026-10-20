@@ -1242,3 +1242,6 @@ Object.assign(SahraText.ar, {
   mk_host_badge: "لحفلتك القادمة", mk_host_title: "تنظيم أقل. سهرة أكثر.",
   mk_host_p: "التذاكر ومراجعة الطلبات وفريق الباب في مكان واحد. سهرة متاحة بالدعوة.", mk_host_action: "نظّم حفلتك مع سهرة"
 });
+
+Object.assign(SahraText.en, { bf_pages_top:"Pages above results",bf_pages_bottom:"Pages below results" });
+Object.assign(SahraText.ar, { bf_pages_top:"الصفحات أعلى النتائج",bf_pages_bottom:"الصفحات أسفل النتائج" });
