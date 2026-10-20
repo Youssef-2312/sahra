@@ -1,11 +1,8 @@
 import { cloudflareTest, readD1Migrations } from "@cloudflare/vitest-pool-workers";
-import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig(async () => {
-  // The Worker's static assets are the built site (wrangler.jsonc); build it once if missing.
-  if (!existsSync("./dist/public/index.html")) execFileSync(process.execPath, ["scripts/build-assets.mjs"], { stdio: "inherit" });
   const migrations = await readD1Migrations("./migrations");
   const ledgerMigrations = await readD1Migrations("./migrations-ledger");
   // Staging-only SQL is applied too (it must be harmless on any database).
