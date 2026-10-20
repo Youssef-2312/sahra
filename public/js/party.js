@@ -10,6 +10,8 @@
 (function () {
   var t = Sahra.t, el = Sahra.el, S = SahraStaff;
   var party = null, types = null, form = null, flyers = null, loadErr = null;
+  var settingPanels = {};
+  var activeSetting = window.location.hash.slice(1) || null;
   var nodes = {};          // section id -> its card
   var notes = {};          // section id -> [cls, text]: the answer shown after a rebuild
   var editing = null;      // the ticket type being edited: null, "new" or its id
@@ -612,6 +614,7 @@
       var n = nodes[o[0]];
       var hit = !n || Sahra.matches(settingFind, [n.textContent, [].map.call(n.querySelectorAll("[placeholder]"), function (x) { return x.placeholder; }).join(" ")]);
       if (n) n.hidden = !hit;
+      if (settingPanels[o[0]]) settingPanels[o[0]].hidden = !hit;
       var li = toc.querySelectorAll("li")[i];
       if (li) li.hidden = !hit;
       any = any || hit;
@@ -621,6 +624,7 @@
 
   function render(me, app) {
     who = me;
+    app.classList.add("settings-compact");
     if (loadErr) { app.appendChild(el("p", { class: "notice no", text: S.why(loadErr) })); return; }
     if (!party) { app.appendChild(el("p", { class: "muted", text: t("loading") })); return; }
     var order = ORDER.filter(function (o) { return o[0] !== "cancel" || me.staff.role === "owner"; });
@@ -633,10 +637,35 @@
     none.hidden = true;
     main.appendChild(Sahra.findBox({ value: settingFind, placeholder: t("s_find_ph"), onChange: function (v) { settingFind = v; filterSections(toc, none, order); } }));
     main.appendChild(none);
-    order.forEach(function (o) { nodes[o[0]] = BUILD[o[0]](); main.appendChild(nodes[o[0]]); });
+    settingPanels = {};
+    order.forEach(function (o) {
+      var card = BUILD[o[0]](); nodes[o[0]] = card;
+      var panel = el("details", { class: "s-setting-panel", attrs: { open: activeSetting === o[0] } },
+        el("summary", { text: t(o[1]) }), card);
+      settingPanels[o[0]] = panel;
+      panel.addEventListener("toggle", function () {
+        if (panel.open) {
+          activeSetting = o[0];
+          Object.keys(settingPanels).forEach(function (id) { if (id !== o[0]) settingPanels[id].open = false; });
+        } else if (activeSetting === o[0]) activeSetting = null;
+      });
+      main.appendChild(panel);
+    });
+    toc.querySelectorAll("a").forEach(function (link) {
+      link.addEventListener("click", function () { openSetting(link.hash.slice(1)); });
+    });
     app.appendChild(el("div", { class: "s-layout" }, toc, main));
     filterSections(toc, none, order);
   }
+
+  function openSetting(id) {
+    var panel = settingPanels[id];
+    if (!panel) return;
+    activeSetting = id; panel.hidden = false; panel.open = true;
+    if (nodes[id]) nodes[id].hidden = false;
+    requestAnimationFrame(function () { panel.scrollIntoView({ block: "start" }); });
+  }
+  window.addEventListener("hashchange", function () { openSetting(window.location.hash.slice(1)); });
 
   var ready = false;
   SahraStaff.start({

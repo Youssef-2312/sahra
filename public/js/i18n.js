@@ -1216,12 +1216,12 @@ Object.assign(SahraText.ar, {
 });
 
 Object.assign(SahraText.en, {
-  nav_profile:"Profile menu", nav_settings:"Settings", nav_sign_out:"Sign out", nav_arabic:"Switch to Arabic", nav_english:"Switch to English",
+  nav_profile:"Profile menu", nav_menu:"Menu", nav_settings:"Settings", nav_sign_out:"Sign out", nav_arabic:"Switch to Arabic", nav_english:"Switch to English",
   qc_review:"Review details", qc_guest_details:"Details and actions", qc_tools:"Guest tools", qc_back_guests:"Back to guest list",
   qc_door_scanner:"Door scanner", qc_camera_title:"Ready to scan", qc_camera_on:"Camera on. Point it at a guest's QR code."
 });
 Object.assign(SahraText.ar, {
-  nav_profile:"قائمة الحساب", nav_settings:"الإعدادات", nav_sign_out:"تسجيل الخروج", nav_arabic:"التبديل إلى العربية", nav_english:"التبديل إلى الإنجليزية",
+  nav_profile:"قائمة الحساب", nav_menu:"القائمة", nav_settings:"الإعدادات", nav_sign_out:"تسجيل الخروج", nav_arabic:"التبديل إلى العربية", nav_english:"التبديل إلى الإنجليزية",
   qc_review:"مراجعة التفاصيل", qc_guest_details:"التفاصيل والإجراءات", qc_tools:"أدوات الضيوف", qc_back_guests:"العودة إلى قائمة الضيوف",
   qc_door_scanner:"ماسح الدخول", qc_camera_title:"جاهز للمسح", qc_camera_on:"الكاميرا تعمل. وجّهها إلى رمز QR الخاص بالضيف."
 });

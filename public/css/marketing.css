@@ -80,3 +80,7 @@ html[lang=ar] .marketing :is(h1,h2,h3){letter-spacing:0;line-height:1.4}
 @media(max-width:600px){.mk-ticket-scene{padding-top:0}.mk-ticket-perspective{width:100%;margin-inline-start:0}}
 .home.marketing .date-badge .m{text-transform:none;letter-spacing:0}
 .marketing :is(#parties,#how,#mine){scroll-margin-top:144px}
+.home.marketing .hero{justify-content:center;text-align:center}
+.home.marketing .hero .copy{align-items:center}
+.home.marketing .hero p{text-align:center;margin-inline:auto}
+.home.marketing .hero-actions{justify-content:center}

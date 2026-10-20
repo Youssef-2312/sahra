@@ -333,6 +333,9 @@
 
   function fillList(list) {
     Sahra.clear(list);
+    var selectionTools = list.parentNode.querySelector(".bk-filterbar > .g-actions") || list;
+    var previousSelect = selectionTools.querySelector(".q-select-all");
+    if (previousSelect) previousSelect.remove();
     var all = grouped(rows), shown = all.filter(found);
     var keep = {};
     shown.forEach(function (g) { (g.ids || [g.id]).forEach(function (id) { keep[id] = true; }); });
@@ -343,7 +346,7 @@
     }
     if (!shown.length) { list.appendChild(el("p", { class: "empty", text: t("q_find_none") })); return; }
     if (selectable.length > 1) {
-      list.appendChild(el("button", { class: "btn link", text: t("q_select_all"), attrs: { type: "button" },
+      selectionTools.appendChild(el("button", { class: "btn link q-select-all", text: t("q_select_all"), attrs: { type: "button" },
         on: { click: function () { selectable.slice(0, MAX).forEach(function (r) { selected[r.id] = true; }); render(); } } }));
     }
     list.appendChild(el("div", { class: "reqs" }, shown.map(card)));

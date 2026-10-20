@@ -161,7 +161,7 @@
 
   function organisers(o) {
     var list = o.organisers.filter(function (x) { return Sahra.matches(finds.organisers, [x.name, x.email, x.disabled_at ? t("p_state_disabled") : ""]); });
-    return el("div", null, o.organisers.length > 4 ? finder("organisers", "p_find_people_ph") : null,
+    return el("div", null, finder("organisers", "p_find_people_ph"),
       o.organisers.length && !list.length ? empty("q_find_none") : null,
       o.organisers.length ? el("ul", { class: "g-list" }, list.map(function (person) {
       var key = "org:" + person.id, path = "/api/platform/organisers/" + encodeURIComponent(person.id);
@@ -231,14 +231,15 @@
       el("div", { class: "g-name-line" }, el("strong", { text: p.name, attrs: { dir: "auto" } }), pill(p.disabled_at ? "disabled" : p.admission_state),
         siteOwner && p.disabled_at && p.unpaid ? el("span", { class: "pill no", text: t("p_unpaid_pill") }) : null),
       el("p", { class: "muted small", text: p.id, attrs: { dir: "ltr" } }),
-      el("dl", { class: "s-platform-facts" }, detail("p_capacity", p.capacity),
-        siteOwner ? [detail("p_organiser", p.organiser_name || t("p_none")), detail("p_staff", p.staff), detail("p_sessions", p.active_sessions),
-          detail("p_tickets", counts(p.tickets)), detail("p_emails", counts(p.outbox))] : null),
+      el("details", { class: "s-platform-details platform-party-more" }, el("summary", { text: t("q_details") }),
+        el("dl", { class: "s-platform-facts" }, detail("p_capacity", p.capacity),
+          siteOwner ? [detail("p_organiser", p.organiser_name || t("p_none")), detail("p_staff", p.staff), detail("p_sessions", p.active_sessions),
+            detail("p_tickets", counts(p.tickets)), detail("p_emails", counts(p.outbox))] : null)),
       acts.length ? el("div", { class: "g-actions" }, acts) : null, notice(key));
     if (siteOwner && !p.disabled_at && disabling[key]) li.appendChild(disablePanel(p, key, path));
     // Not paid (site owner only, folded away): switch the party off in one step, after one confirmation.
     // The reason is kept for this panel only; the party's team sees an ordinary switched-off party.
-    if (siteOwner && !p.disabled_at) li.appendChild(el("details", { class: "s-platform-details" }, el("summary", { text: t("p_payment") }),
+    if (siteOwner && !p.disabled_at) li.querySelector(".platform-party-more").appendChild(el("details", { class: "s-platform-details" }, el("summary", { text: t("p_payment") }),
       el("p", { class: "muted small", text: t("p_unpaid_help") }),
       el("div", { class: "g-actions" }, action(key, path + "/disable", { reason: "unpaid" }, "parties", "p_party_unpaid_done", "p_confirm_unpaid", "p_unpaid_go", "no"))));
     if (siteOwner && p.no_active_owner) {
@@ -288,6 +289,8 @@
   }
 
   function render() {
+    document.body.classList.add("platform-app");
+    app.classList.add("platform-workspace");
     var typing = document.activeElement && document.activeElement.dataset && document.activeElement.dataset.findKey;
     var caret = typing ? document.activeElement.selectionStart : null;
     // Preserve unsent edits and open details through background loads and language changes.
@@ -306,8 +309,8 @@
     var navItems = [["mine", "p_my_parties"]];
     if (me.organiser) navItems.push(["create", "p_create"]);
     if (me.site_owner) navItems.push(["health", "p_health"], ["organisers", "p_organisers"], ["parties", "p_parties"], ["owners", "p_site_owners"]);
-    app.appendChild(el("nav", { class: "staff-nav", attrs: { "aria-label": t("p_nav") } }, navItems.map(function (n) { return el("a", { text: t(n[1]), attrs: { href: "#" + n[0] } }); }),
-      action("logout", "/api/platform/logout", {}, null, null, null, "s_sign_out", "staff-out", "/platform")));
+    navItems.push(["myname", "p_your_name"]);
+    app.appendChild(el("nav", { class: "staff-nav platform-tabs", attrs: { "aria-label": t("p_nav") } }, navItems.map(function (n) { return el("a", { text: t(n[1]), attrs: { href: "#" + n[0] } }); })));
     app.appendChild(el("header", { class: "staff-head" }, el("div", null,
       el("p", { class: "label-line", text: (me.site_owner || me.organiser).name.split("@")[0], attrs: { dir: "auto" } }),
       el("h1", { text: t(me.site_owner ? "p_site_owner" : "p_title") }),
@@ -326,7 +329,7 @@
         S.section("parties", t("p_parties"), t("p_parties_intro"), content("parties", function (d) {
           if (!d.parties.length) return empty("p_no_parties");
           var list = d.parties.filter(function (p) { return Sahra.matches(finds.parties, [p.name, p.id, p.organiser_name, p.disabled_at ? t("p_state_disabled") : ""]); });
-          return el("div", null, d.parties.length > 4 ? finder("parties", "p_find_parties_ph") : null,
+          return el("div", null, finder("parties", "p_find_parties_ph"),
             list.length ? el("ul", { class: "g-list" }, list.map(function (p) { return partyRow(p, true); })) : empty("q_find_none"));
         })),
         el("div", null, S.section("organisers", t("p_organisers"), t("p_organisers_intro"), content("organisers", organisers)),
@@ -338,11 +341,31 @@
       (drafts[f.dataset.form] || []).forEach(function (pair) { var input = f.querySelector('[name="' + pair[0] + '"]'); if (input) input.value = pair[1]; });
     });
     app.querySelectorAll("details").forEach(function (d, i) { d.open = !!open[i]; });
+    showPlatformView();
     if (typing) {
       var again = app.querySelector('[data-find-key="' + typing + '"]');
       if (again) { again.focus(); try { again.setSelectionRange(caret, caret); } catch (x) { /* not a text field */ } }
     }
   }
+
+  function showPlatformView() {
+    if (!me) return;
+    var allowed = ["mine", "myname"];
+    if (me.organiser) allowed.push("create");
+    if (me.site_owner) allowed.push("parties", "organisers", "owners", "health");
+    var selected = window.location.hash.slice(1);
+    if (allowed.indexOf(selected) < 0) selected = me.site_owner ? "parties" : "mine";
+    allowed.forEach(function (id) { var panel = document.getElementById(id); if (panel) panel.hidden = id !== selected; });
+    app.querySelectorAll(".platform-tabs a").forEach(function (link) {
+      if (link.hash === "#" + selected) link.setAttribute("aria-current", "page");
+      else link.removeAttribute("aria-current");
+    });
+  }
+  window.addEventListener("hashchange", function () {
+    showPlatformView();
+    var tabs = app.querySelector(".platform-tabs");
+    if (tabs) tabs.scrollIntoView({ block: "start" });
+  });
 
   var r = await Sahra.api.get("/api/platform/me");
   if (r.ok) { me = r.body; headers["x-sahra-csrf"] = me.csrf; Sahra.store.set(Sahra.SESSION_KEY, "platform"); }

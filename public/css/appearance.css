@@ -223,3 +223,49 @@ html[data-theme] body .topbar>.public-nav{position:static;inset:auto;transform:n
  html[data-theme] body .topbar>.brand img{width:36px;height:36px}
  html[data-theme] body .topbar>.public-nav a{min-height:46px;padding:10px 20px;white-space:nowrap;font-size:14px}
 }
+/* Labels above headings (owner: the spaced mono capitals looked odd): the site font, sentence case. */
+html[data-theme] .label-line,html[data-theme] .sh-heading .label-line,html[data-theme] .kicker{font-family:var(--font-body);font-size:14px;font-weight:600;letter-spacing:0;text-transform:none;line-height:1.4;color:var(--ap-muted)}
+html[data-theme] .label-line{display:block;margin:0 0 6px}
+
+/* Public header (owner: like Selective Cars' navbar, with Sahra in the centre): one floating,
+   rounded, translucent bar. Links at the start, Sahra centred, search/language/account at the end.
+   Narrow screens: a menu button holds the links; the sides stay equal so Sahra stays centred. */
+html[data-theme]{--nav-bg:rgba(12,13,16,.8);--nav-ring:rgba(255,255,255,.12);--nav-shadow:0 10px 40px -12px rgba(0,0,0,.6)}
+html[data-theme="light"]{--nav-bg:rgba(255,255,255,.84);--nav-ring:rgba(23,25,29,.12);--nav-shadow:0 10px 32px -16px rgba(23,25,29,.28)}
+html[data-theme] body:not(.staff-app) .topbar-shell,html[data-theme] body:not(.staff-app) .topbar-shell.scrolled{position:sticky;top:12px;z-index:30;width:min(64rem,calc(100% - 20px));max-width:none;margin:12px auto 0;padding:0;border:0;border-radius:999px;background:transparent;box-shadow:none;backdrop-filter:none;-webkit-backdrop-filter:none}
+html[data-theme] body:not(.staff-app) .topbar{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;column-gap:8px;row-gap:0;max-width:none;margin:0;padding:6px;padding-inline:8px;border:1px solid var(--nav-ring);border-radius:999px;background:var(--nav-bg);box-shadow:var(--nav-shadow);-webkit-backdrop-filter:blur(20px) saturate(140%);backdrop-filter:blur(20px) saturate(140%)}
+html[data-theme] body:not(.staff-app) .topbar>.brand{grid-column:2;grid-row:1;justify-self:center;padding:0;margin:0}
+html[data-theme] body:not(.staff-app) .topbar>.topbar-end{grid-column:3;grid-row:1;justify-self:end;display:flex;align-items:center;gap:6px;margin:0}
+html[data-theme] body:not(.staff-app) .topbar>.public-nav{grid-column:1;grid-row:1;justify-self:start;display:flex;flex-wrap:nowrap;gap:0;margin:0;padding:0;border:0;background:transparent;box-shadow:none;backdrop-filter:none;-webkit-backdrop-filter:none;position:static;transform:none;width:auto}
+html[data-theme] body:not(.staff-app) .topbar>.public-nav a{position:relative;min-height:44px;padding:10px 13px;border:0;border-radius:999px;background:transparent;color:var(--ap-muted);font-size:15px;font-weight:600;letter-spacing:.005em;white-space:nowrap;transform:none}
+html[data-theme] body:not(.staff-app) .topbar>.public-nav a:hover,html[data-theme] body:not(.staff-app) .topbar>.public-nav a[aria-current=page]{color:var(--ap-text);background:transparent;border:0}
+html[data-theme] body:not(.staff-app) .topbar>.public-nav a[aria-current=page]::after{content:"";position:absolute;inset-inline:13px;bottom:7px;height:1px;background:var(--ap-accent)}
+html[data-theme] body:not(.staff-app) .topbar :is(.nav-search,.lang-switch){width:44px;min-width:44px;height:44px;min-height:44px;padding:0;border:1px solid var(--nav-ring);border-radius:999px;background:transparent;color:var(--ap-text)}
+html[data-theme] body:not(.staff-app) .topbar .nav-account{border-radius:999px!important;border-color:var(--nav-ring)!important;background:transparent!important}
+html[data-theme] body:not(.staff-app) .topbar :is(.nav-search,.lang-switch,.nav-account,.nav-toggle):hover{background:var(--ap-subtle)}
+.nav-toggle{display:none}
+html[data-theme] body:not(.staff-app) .topbar>.nav-toggle{grid-column:1;grid-row:1;justify-self:start;align-items:center;justify-content:center;width:44px;height:44px;padding:0;border:1px solid var(--nav-ring);border-radius:999px;background:transparent;color:var(--ap-text);cursor:pointer}
+.nav-toggle>span,.nav-toggle>span::before,.nav-toggle>span::after{display:block;width:16px;height:1.5px;border-radius:2px;background:currentColor}
+.nav-toggle>span{position:relative}.nav-toggle>span::before,.nav-toggle>span::after{content:"";position:absolute;left:0}.nav-toggle>span::before{top:-5px}.nav-toggle>span::after{top:5px}
+.links-menu a[aria-current=page]{font-weight:600}
+@media(max-width:1023px){
+ html[data-theme] body:not(.staff-app) .topbar{grid-template-columns:44px 44px minmax(0,1fr) 44px 44px;column-gap:6px;padding-inline:6px}
+ html[data-theme] body:not(.staff-app) .topbar>.public-nav{display:none}
+ html[data-theme] body:not(.staff-app) .topbar>.nav-toggle{display:inline-flex}
+ html[data-theme] body:not(.staff-app) .topbar>.topbar-end{display:contents}
+ html[data-theme] body:not(.staff-app) .topbar .nav-search{grid-column:2;grid-row:1;display:inline-flex}
+ html[data-theme] body:not(.staff-app) .topbar>.brand{grid-column:3}
+ html[data-theme] body:not(.staff-app) .topbar .lang-switch{grid-column:4;grid-row:1}
+ html[data-theme] body:not(.staff-app) .topbar .nav-account{grid-column:5;grid-row:1}
+}
+@media(max-width:600px){html[data-theme] body:not(.staff-app) .topbar-shell,html[data-theme] body:not(.staff-app) .topbar-shell.scrolled{top:8px;margin-top:8px;width:calc(100% - 16px)}}
+/* Latest owner layout: larger public desktop header, with links below Sahra. */
+@media(min-width:900px){
+ html[data-theme] body:not(.staff-app) .topbar-shell,html[data-theme] body:not(.staff-app) .topbar-shell.scrolled{width:min(76rem,calc(100% - 40px))}
+ html[data-theme] body:not(.staff-app) .topbar{grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);padding:14px 20px 10px;row-gap:10px}
+ html[data-theme] body:not(.staff-app) .topbar>.brand{grid-column:2;grid-row:1;font-size:25px}
+ html[data-theme] body:not(.staff-app) .topbar>.topbar-end{display:flex;grid-column:3;grid-row:1}
+ html[data-theme] body:not(.staff-app) .topbar>.nav-toggle{display:none}
+ html[data-theme] body:not(.staff-app) .topbar>.public-nav{display:flex;grid-column:1/-1;grid-row:2;width:100%;justify-content:center;justify-self:center;gap:12px}
+ html[data-theme] body:not(.staff-app) .topbar>.public-nav a{min-height:46px;padding:10px 20px;font-size:14px}
+}

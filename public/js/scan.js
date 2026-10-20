@@ -260,11 +260,11 @@
     app.appendChild(wrap);
     var app0 = app;
     app = wrap;
-    app.appendChild(el("a", { class: "btn link", text: (Sahra.lang() === "ar" ? "\u2192 " : "\u2190 ") + t("back"), attrs: { href: me.staff.role === "door" ? "/" : "/dashboard.html" } }));
+    app.appendChild(el("a", { class: "btn link", text: t("back"), attrs: { href: me.staff.role === "door" ? "/" : "/dashboard.html" } }));
     app.appendChild(el("header", { class: "scan-heading" },
       el("div",null,el("p",{class:"small muted",text:t("qc_door_scanner")}),el("h1",{text:party?party.name:me.party.name,attrs:{dir:"auto"}})),
       el("span", { class: "pill scan-rule", text: t("sc_rule") })));
-    var stage=el("section",{class:"scan-stage"});
+    var stage=el("section",{class:"scan-stage",hidden:!!lookup});
     var finder = el("div", { class: "viewfinder" }, video, el("div", { class: "frame" }));
     finder.hidden = !stream; stage.appendChild(finder);
     if (stream) video.play().catch(function () {});

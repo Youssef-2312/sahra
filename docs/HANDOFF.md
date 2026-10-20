@@ -214,3 +214,19 @@ No backend changes or migrations. Local fixtures cover both themes, EN/AR and
 phone/tablet/desktop, plus booking/pagination and fail-closed scanner checks.
 Current required suite: 567 tests in 44 files, plus TypeScript. Production remains
 a separate owner-authorized deployment step.
+
+### Marketing and compact workspaces (20 October 2026)
+
+About/home now load marketing.css after appearance.css. Keep the single existing
+About ticket with perspective/fades, without its former concept caption; the
+owner explicitly chose it over a dashboard mockup. Home hero copy/actions are
+centred. The public desktop header is larger with links below the centred brand;
+the remote floating header and mobile menu work were preserved.
+
+Staff pages and scanner load staff-compact.css after appearance.css. Settings
+uses one open disclosure at a time, preserving forms, save feedback and hash
+links. Use window.location in party.js because its location() builder shadows
+the browser global. Platform uses its own compact views and separate auth, not
+SahraStaff.start or party sessions. Keep all owner-only permissions, confirmation
+steps and retry bodies. Scanner lookup hides its camera card but does not change
+server verification, verdicts or QR handling. No backend edits or migrations.
