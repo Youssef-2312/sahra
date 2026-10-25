@@ -1594,3 +1594,21 @@ Validation: TypeScript and 572 tests in 46 files, including field validation,
 owner-only save/clear, party isolation, public details and list visibility.
 Playwright checked all four modes, saved state and localized homepage badges in
 12 EN/AR light/dark 390/768/1440 layouts, with no overflow or page errors.
+
+### Send QR from Guests and refresh its status (25 October 2026)
+
+Approved, unreleased guests now have Send QR, calling the existing /tickets/release
+endpoint. Previously Guests only offered Resend ticket, which emails a link and
+does not release a QR. Released tickets retain Resend ticket. Pending, held and
+used records do not offer the new release action. Server rules remain unchanged.
+
+Guests re-reads ticket rows and stats after successful actions, including resends;
+no released timestamp is guessed in the browser. Release checks each ticket's
+result, so a 200 response containing refused cannot show success. Duplicate clicks
+on the same action are blocked. Feedback distinguishes QR release from email
+delivery and covers guests without an email address.
+
+TypeScript and 572 tests passed. Playwright fixtures checked release -> new label
+-> resend in 12 EN/AR light/dark 390/768/1440 layouts, with no page errors or
+overflow. Additional EN/AR fixtures covered refused release, missing email,
+pending and held records. No real emails were sent or live guest records changed.

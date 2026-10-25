@@ -1802,3 +1802,6 @@ Object.assign(SahraText.ar, {
   sh_types_hint: "الأماكن المعتمدة والمنتظرة حسب نوع التذكرة", sh_manage_types: "إدارة أنواع التذاكر", sh_type_counts: "{approved} معتمد · {pending} قيد الانتظار",
   sh_period_total: "{n} طلبات خلال {days} يومًا"
 });
+
+Object.assign(SahraText.en,{g_send_qr:"Send QR",g_qr_released:"QR released. Check Emails for the ticket email's delivery status.",g_qr_released_no_email:"QR released. No email address is saved for this guest.",g_qr_release_refused:"The QR could not be released. Review the guest's current status."});
+Object.assign(SahraText.ar,{g_send_qr:"إرسال رمز QR",g_qr_released:"صدر رمز QR. راجع صفحة الرسائل لمعرفة حالة تسليم بريد التذكرة.",g_qr_released_no_email:"صدر رمز QR. لا يوجد عنوان بريد محفوظ لهذا الضيف.",g_qr_release_refused:"تعذّر إصدار رمز QR. راجع حالة الضيف الحالية."});
