@@ -77,16 +77,18 @@
 
   // Bring back cancelled tickets (TicketDb.restore): a new QR code; refused when there is no place left.
   var restoreOps = {};
-  async function restoreTickets(ids) {
+  async function restoreTickets(ids, action) {
+    action=action || "restore";
     var out = {};
     for (var i = 0; i < ids.length; i++) {
       var id = ids[i];
-      var op = restoreOps[id] || (restoreOps[id] = crypto.randomUUID());
-      var r = await post("/api/tickets/" + encodeURIComponent(id) + "/restore", { op: op });
-      if (r.status !== 503) delete restoreOps[id];
+      var key=action+":"+id;
+      var op = restoreOps[key] || (restoreOps[key] = crypto.randomUUID());
+      var r = await post("/api/tickets/" + encodeURIComponent(id) + "/"+action, { op: op });
+      if (r.status !== 503) delete restoreOps[key];
       var code = r.body && r.body.error;
-      out[id] = r.ok ? { cls: "yes", text: t("g_done_restore"), state: "restored" }
-        : { cls: "no", text: code === "not_allowed" ? t("g_not_allowed_restore") : SahraText.en["g_restore_" + code] ? t("g_restore_" + code)
+      out[id] = r.ok ? { cls: "yes", text: t(action === "unreject" ? "g_done_unreject" : "g_done_restore"), state: "restored" }
+        : { cls: "no", text: code === "not_allowed" ? t(action === "unreject" ? "g_not_allowed_unreject" : "g_not_allowed_restore") : SahraText.en["g_restore_" + code] ? t("g_restore_" + code)
           : r.status === 503 ? t("not_confirmed") : Sahra.errorText(r) };
     }
     return out;
@@ -222,6 +224,16 @@
         actions.appendChild(el("button", { class: "btn primary main", text: t("q_send"), attrs: { type: "button" },
           on: { click: function () { run(ids, release); } } }));
       }
+      var rejectedMembers=(row.members || [row]).filter(function(m){return m.status === "rejected" && !m.used_at && !m.hold_at;});
+      if(rejectedMembers.length) actions.appendChild(el("button",{class:"btn",text:t("ur_action"),attrs:{type:"button"},on:{click:async function(){
+        var targets=rejectedMembers.map(function(m){return m.id;});
+        var prompt=targets.length === 1 ? t("ur_confirm",{name:rejectedMembers[0].guest_name || Sahra.ref(targets[0])}) : t("ur_confirm_group",{n:targets.length,names:rejectedMembers.map(function(m){return m.guest_name || Sahra.ref(m.id);}).join(", ")});
+        if(!(await Sahra.confirm(prompt,{ok:t("ur_action")})))return;
+        var outcomes;
+        await run(targets,async function(ids){outcomes=await restoreTickets(ids,"unreject");return outcomes;});
+        var done=outcomes && targets.filter(function(id){return outcomes[id].cls === "yes";}).length;
+        if(done){await load(false);await Sahra.notify(t("ur_returned_count",{n:done}));}
+      }}}));
       if (tab === "cancelled" && !(row.members || [row]).some(function (m) { return m.used_at; })) {
         actions.appendChild(el("button", { class: "btn", text: t("g_restore"), attrs: { type: "button" },
           on: { click: async function () {
