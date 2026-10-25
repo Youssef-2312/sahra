@@ -1636,3 +1636,18 @@ refusal guards. The unauthenticated route coverage suite includes the new route.
 Browser fixtures passed 24 EN/AR light/dark Requests/Guests layouts at
 390/768/1440 with confirmation, server-read pending labels and no overflow/page
 errors, plus EN/AR refusal cases. No real ticket actions or emails were sent.
+
+### Make rejected filters reachable from default views (25 October 2026)
+
+Status was previously hidden in Requests' Waiting tab and Guests' Active guests
+view, making Rejected hard to find. The filter sheet now always includes Status.
+Selecting Rejected, Cancelled or another non-default status switches to All
+requests / All records automatically. Changing Requests tabs resets status to
+that tab while preserving other filters. A view's default status does not add
+redundant filter chips/counts. Existing server queries and authorization remain
+unchanged; no migration.
+
+TypeScript and 577 tests pass. Browser fixtures cover 24 EN/AR light/dark
+Requests/Guests layouts at 390/768/1440: open filters from the default tab, select
+Rejected, confirm the full-list switch, and undo a rejection. No horizontal
+overflow or page errors; all mutations stubbed.

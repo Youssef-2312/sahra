@@ -189,8 +189,8 @@
   var findNode = null;
   function findCard() {
     var f = SahraBooking.filters(Object.assign({}, filters, {q:query}), types, function (v) {
-      filters = v; if (guestView === "approved") filters.status = "approved"; search(v.q || "");
-    }, guestView === "all");
+      filters = v; guestView=v.status === "approved" ? "approved" : "all"; search(v.q || "");
+    }, true, guestView === "approved" ? "approved" : null);
     var tabs = el("div", {class:"tabs",attrs:{"aria-label":t("g_title")}}, [["approved","bf_active_guests"],["all","bf_all_records"]].map(function(x){
       return el("button",{text:t(x[1]),attrs:{type:"button","aria-pressed":guestView===x[0]?"true":"false"},on:{click:function(){guestView=x[0];filters.status=x[0]==="approved"?"approved":"all";search(query);}}});
     }));
