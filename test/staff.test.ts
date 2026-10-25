@@ -49,9 +49,9 @@ describe("staff management", () => {
     const { h, party, os } = await setup();
     const body = { staff_id: newId(), invite_id: newId(), name: "Rokaia", email: "Rokaia.A@gmail.com", role: "admin" };
     const r1 = await h.req("/api/staff/google-invite", api(os, body));
-    expect(await r1.json()).toEqual({ status: "created", email: "rokaiaa@gmail.com" });
+    expect(await r1.json()).toEqual({ status: "created", email: "rokaiaa@gmail.com", email_status:"queued" });
     const r2 = await h.req("/api/staff/google-invite", api(os, body));
-    expect(await r2.json()).toEqual({ status: "already", email: "rokaiaa@gmail.com" });
+    expect(await r2.json()).toEqual({ status: "already", email: "rokaiaa@gmail.com", email_status:"queued" });
     const dup = await h.req("/api/staff/google-invite", api(os, { ...body, staff_id: newId(), invite_id: newId() }));
     expect(dup.status).toBe(409);
     expect(await listLog(`log/${party}/staff/${body.staff_id}/`)).toHaveLength(1);

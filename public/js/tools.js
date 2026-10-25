@@ -9,6 +9,7 @@
   var data = null, failed = null, me = null;
   var notes = {};           // staff or invite id -> [cls, text]
   var doorLink = null;      // { name, link, expires } after creating a door link
+  var mailOps = {}, mailBusy = {};
   var pending = {};         // form key -> ids kept until confirmed (a retry is the same invitation)
 
   function idsFor(key) { return pending[key] || (pending[key] = { staff_id: crypto.randomUUID(), invite_id: crypto.randomUUID(), token: Sahra.token() }); }
@@ -26,6 +27,16 @@
     var r = await S.act(path, body || {});
     notes[id] = r.ok ? ["yes", done] : ["no", r.body && r.body.error === "not_allowed" ? t("tm_not_allowed") : S.why(r)];
     await load();
+  }
+
+  async function resendInvitation(s){
+    if(mailBusy[s.id])return;
+    mailBusy[s.id]=true;S.redraw();
+    var op=mailOps[s.id] || (mailOps[s.id]=crypto.randomUUID());
+    try{var r=await S.act("/api/staff/"+encodeURIComponent(s.id)+"/resend-invitation",{op:op});
+      if(r.status!==503)delete mailOps[s.id];
+      notes[s.id]=r.ok ? ["yes",t(r.body.status === "queued" ? "tm_email_queued" : "tm_email_recent")] : ["no",r.body && r.body.error === "not_allowed" ? t("tm_email_not_allowed") : S.why(r)];
+    }finally{delete mailBusy[s.id];await load();}
   }
 
   function invitesOf(staffId) {
@@ -51,6 +62,10 @@
         run(s.id, "/api/staff/" + s.id + "/disable", {}, t("tm_disable_confirm", { name: s.name }), t("tm_disabled_done"));
       } } }));
     }
+    if(!s.disabled_at && !joined && s.role !== "door" && open.length){
+      acts.push(el("button",{class:"btn small-btn",text:t("tm_email_resend"),attrs:{type:"button",disabled:!!mailBusy[s.id]},on:{click:function(){resendInvitation(s);}}}));
+      acts.push(S.copyButton(location.origin+"/signin",t("tm_copy_signin")));
+    }
     open.forEach(function (i) {
       acts.push(el("button", { class: "btn link danger", text: t("tm_revoke"), attrs: { type: "button" }, on: { click: function () {
         run(s.id, "/api/invites/" + i.id + "/revoke", {}, t("tm_revoke_confirm"), t("tm_revoked_done"));
@@ -62,6 +77,10 @@
         el("div", { class: "g-name-line" }, el("strong", { text: s.name + (self ? " (" + t("tm_you") + ")" : ""), attrs: { dir: "auto" } }), el("span", { class: "pill " + state[0], text: state[1] })),
         el("span", { class: "muted small", text: line, attrs: { dir: "auto" } })),
       acts.length ? el("div", { class: "g-actions" }, acts) : null);
+    if(!s.disabled_at && !joined && s.role !== "door" && open.length){
+      li.appendChild(el("p",{class:"small muted",text:s.invitation_email_status ? t("tm_email_status",{status:t("o_st_"+s.invitation_email_status)}) : t("tm_email_none")}));
+      li.appendChild(el("p",{class:"small muted",text:t("tm_signin_now")}));
+    }
     if (notes[s.id]) { var box = S.sayBox(); S.say(box, notes[s.id][0], notes[s.id][1]); li.appendChild(el("div", { class: "g-note" }, box)); delete notes[s.id]; }
     return li;
   }
@@ -124,7 +143,7 @@
       var r = await S.act("/api/staff/google-invite", { staff_id: ids.staff_id, invite_id: ids.invite_id, name: name, email: email, role: f.elements.role.value });
       if (r.status !== 503) delete pending.google;
       if (!r.ok) { S.say(box, "no", r.body && r.body.error === "not_allowed_or_already_invited" ? t("tm_already") : S.why(r)); return; }
-      notes.google = ["yes", t("tm_invited_done", { email: r.body.email })];
+      notes.google = ["yes", t(r.body.email_status === "queued" ? "tm_invited_queued" : "tm_invited_done", { email: r.body.email })];
       f.reset();
       await load();
     });

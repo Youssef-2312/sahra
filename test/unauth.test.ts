@@ -58,6 +58,7 @@ const cases: Case[] = [
   ["revoke invite, junk session", "POST", "/api/invites/:id/revoke", (h) => h.req(`/api/invites/${id}/revoke`, { method: "POST", headers: JSON_H, cookies: junkCookie })],
   ["staff list, junk session", "GET", "/api/staff", (h) => h.req("/api/staff", { cookies: junkCookie })],
   ["google invite, junk session", "POST", "/api/staff/google-invite", (h) => h.req("/api/staff/google-invite", { method: "POST", headers: JSON_H, cookies: junkCookie, body: JSON.stringify({ staff_id: id, invite_id: newId(), name: "x", email: "x@gmail.com", role: "owner" }) })],
+  ["resend team invitation, junk session", "POST", "/api/staff/:id/resend-invitation", (h) => h.req(`/api/staff/${newId()}/resend-invitation`, { method: "POST", headers: JSON_H, cookies: junkCookie, body: JSON.stringify({ op: newId() }) })],
   ["door invite, junk session", "POST", "/api/staff/door-invite", (h) => h.req("/api/staff/door-invite", { method: "POST", headers: JSON_H, cookies: junkCookie, body: JSON.stringify({ staff_id: id, invite_id: newId(), name: "x", token: newToken() }) })],
   ["role change, junk session", "POST", "/api/staff/:id/role", (h) => h.req(`/api/staff/${id}/role`, { method: "POST", headers: JSON_H, cookies: junkCookie, body: JSON.stringify({ role: "owner" }) })],
   ["disable, junk session", "POST", "/api/staff/:id/disable", (h) => h.req(`/api/staff/${id}/disable`, { method: "POST", headers: JSON_H, cookies: junkCookie })],

@@ -1651,3 +1651,31 @@ TypeScript and 577 tests pass. Browser fixtures cover 24 EN/AR light/dark
 Requests/Guests layouts at 390/768/1440: open filters from the default tab, select
 Rejected, confirm the full-list switch, and undo a rejection. No horizontal
 overflow or page errors; all mutations stubbed.
+
+### Team invitation email notifications (25 October 2026)
+
+The Google team-invite endpoint previously created access only; it never queued
+email, despite the Send invitation label. Invitations now add a bilingual
+staff_invite email in the same database batch as staff/invite creation. It links
+to /signin with no bearer token; the invited Google account and active invitation
+still determine access. Retries deduplicate by invitation ID. No migration.
+
+Active pending Google invitations have Resend invitation and Copy sign-in link.
+Team rows show the latest invitation email status, or explicitly state that no
+email was queued (legacy invitations). New-invite feedback says queued rather
+than delivered and directs owners to Emails. Existing invitations are not
+emailed automatically on deployment; the owner can explicitly resend them.
+
+Resending is owner-only with origin/CSRF, an operation UUID, existing daily
+limits and a ten-minute queued/sending/sent cooldown. Failed/cancelled delivery
+can be retried. Both the read and insert check party/session, active Google
+invitation, unlinked/non-disabled staff, expiry and revocation. A confirmation
+read prevents a stale invite from being falsely reported as queued. Email does
+not grant permissions; a stale message cannot revive revoked/expired access.
+
+TypeScript and 581 tests in 48 files passed. Tests cover atomic/idempotent mail,
+legacy resend, cooldown/failure retry, role/party/expiry/revocation/joined guards,
+status visibility and unauthenticated zero writes. Browser fixtures passed 12
+EN/AR light/dark 390/768/1440 layouts for create, resend, status, cooldown and
+copy-link controls, with no overflow/page errors. No live mail was sent or
+existing staff invitations changed during testing.
