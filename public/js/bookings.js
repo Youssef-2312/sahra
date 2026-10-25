@@ -140,7 +140,7 @@
     if (values.date_to) { var end = new Date(values.date_to + "T00:00:00"); end.setDate(end.getDate() + 1); q.set("created_before", String(end.getTime())); }
     return q;
   }
-  function filters(values, types, apply, withStatus) {
+  function filters(values, types, apply, withStatus, defaultStatus) {
     var choices = [
       ["type", "bf_type", types.map(function (x) { return [x.id, x.name]; })],
       ["delivery", "bf_delivery", [["released",t("bf_released")],["unreleased",t("bf_unreleased")],["emailed",t("bf_emailed")]]],
@@ -150,7 +150,7 @@
     ];
     if (withStatus) choices.unshift(["status","bf_status", [["pending",t("q_waiting")],["approved",t("q_approved")],["cancelled",t("q_cancelled_tab")],["rejected",t("q_rejected")]]]);
     choices.push(["date_from", "bf_from_date", []], ["date_to", "bf_to_date", []]);
-    var active = choices.filter(function (x) { return values[x[0]] && values[x[0]] !== "all"; });
+    var active = choices.filter(function (x) { return values[x[0]] && values[x[0]] !== "all" && !(x[0] === "status" && values.status === defaultStatus); });
     var search = S.input("q", "search", { maxlength: 80, value: values.q || "", placeholder: t("bf_search"), autocomplete: "off", enterkeyhint: "search" });
     var bar = el("div", { class: "bk-filterbar" }, dateFilters(values, apply));
     var form = el("form", { class: "bk-search", attrs: { role: "search" } }, search,
