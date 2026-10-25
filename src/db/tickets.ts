@@ -284,14 +284,29 @@ export class TicketDb {
         AND NOT EXISTS (SELECT 1 FROM refunds r WHERE r.ticket_id = tickets.id)`, now, actor, op);
   }
 
+  /** Undo rejection returns only to pending, never approved/released. Capacity
+   * is re-reserved atomically; the previous rejection remains in the audit log. */
+  unreject(sess: SessionRef, id: string, now: number, actor: string, op: string) {
+    const held = (col: string, value: Sql) => sql`(SELECT COALESCE(SUM(o.people),0) FROM tickets o WHERE o.${raw(col)} = ${value} AND o.status IN ('pending','approved'))`;
+    return this.change(sess, ["owner","admin"], id, "unrejected",
+      sql`status = 'pending', reject_reason = NULL, rejected_at = NULL, rejected_by = NULL,
+        approved_at = NULL, approved_by = NULL, released_at = NULL, released_by = NULL, qr_version = qr_version + 1`,
+      sql`status = 'rejected' AND used_scan_id IS NULL AND used_at IS NULL AND hold_at IS NULL
+        AND (SELECT cancelled_at FROM parties WHERE id = tickets.party_id) IS NULL
+        AND ${held("party_id",sql`tickets.party_id`)} + tickets.people <= (SELECT capacity FROM parties WHERE id = tickets.party_id)
+        AND (tickets.type_id IS NULL OR (SELECT quantity FROM ticket_types WHERE id = tickets.type_id) IS NULL
+          OR ${held("type_id",sql`tickets.type_id`)} + tickets.people <= (SELECT quantity FROM ticket_types WHERE id = tickets.type_id))
+        AND NOT EXISTS (SELECT 1 FROM refunds r WHERE r.ticket_id = tickets.id)`, now, actor, op);
+  }
+
   /** Read-only: why restore() refused this ticket. */
-  async restoreRefusal(partyId: string, id: string) {
-    const r = await this.driver.all<{ status: string; used: number; party_cancelled: number; refund: number }>(sql`SELECT t.status,
-        t.used_scan_id IS NOT NULL AS used, p.cancelled_at IS NOT NULL AS party_cancelled,
+  async restoreRefusal(partyId: string, id: string, expected = "cancelled") {
+    const r = await this.driver.all<{ status: string; used: number; party_cancelled: number; refund: number; held: number }>(sql`SELECT t.status,
+        (t.used_scan_id IS NOT NULL OR t.used_at IS NOT NULL) AS used, t.hold_at IS NOT NULL AS held, p.cancelled_at IS NOT NULL AS party_cancelled,
         EXISTS (SELECT 1 FROM refunds r WHERE r.ticket_id = t.id) AS refund
       FROM tickets t JOIN parties p ON p.id = t.party_id WHERE t.id = ${id} AND t.party_id = ${partyId}`);
     const x = r.results[0];
-    if (!x || x.status !== "cancelled" || x.used) return "not_allowed";
+    if (!x || x.status !== expected || x.used || (expected === "rejected" && x.held)) return "not_allowed";
     if (x.party_cancelled) return "party_cancelled";
     if (x.refund) return "refund_recorded";
     return "full";

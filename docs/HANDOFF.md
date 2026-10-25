@@ -248,3 +248,10 @@ or deploying the age-rating PR. It changes no existing party's rating. Settings
 supports Not shown / All ages / Minimum age / Under an age, with a numeric
 cutoff 1–99; public cards and signup facts share EN/AR labels. This field is a
 label, not age verification. The suite now has 572 tests in 46 files.
+
+### Undo rejection (25 October 2026)
+
+Undo rejection returns rejected requests to pending review, with capacity/type,
+refund/hold/used/cancelled-party guards, ledger intent, audit and QR version bump.
+It never approves, sends email or releases a QR. Requests/Guests use explicit
+confirmation and read back status. No migration; suite now 577 tests in 47 files.

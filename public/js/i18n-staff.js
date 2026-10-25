@@ -1805,3 +1805,9 @@ Object.assign(SahraText.ar, {
 
 Object.assign(SahraText.en,{g_send_qr:"Send QR",g_qr_released:"QR released. Check Emails for the ticket email's delivery status.",g_qr_released_no_email:"QR released. No email address is saved for this guest.",g_qr_release_refused:"The QR could not be released. Review the guest's current status."});
 Object.assign(SahraText.ar,{g_send_qr:"إرسال رمز QR",g_qr_released:"صدر رمز QR. راجع صفحة الرسائل لمعرفة حالة تسليم بريد التذكرة.",g_qr_released_no_email:"صدر رمز QR. لا يوجد عنوان بريد محفوظ لهذا الضيف.",g_qr_release_refused:"تعذّر إصدار رمز QR. راجع حالة الضيف الحالية."});
+
+Object.assign(SahraText.en,{ur_action:"Undo rejection",ur_confirm:"Return {name} to pending review? This does not approve the request, send an email or release a QR.",ur_confirm_group:"Return these {n} rejected ticket requests to pending review: {names}? This does not approve them, send emails or release QRs.",g_done_unreject:"Rejection undone. The request is pending review; no email or QR was sent.",ur_returned_count:"Returned {n} ticket requests to pending review."});
+Object.assign(SahraText.ar,{ur_action:"التراجع عن الرفض",ur_confirm:"إعادة طلب {name} إلى انتظار المراجعة؟ لن تتم الموافقة عليه أو إرسال بريد أو إصدار رمز QR.",ur_confirm_group:"إعادة هذه الطلبات المرفوضة وعددها {n} إلى انتظار المراجعة: {names}؟ لن تتم الموافقة عليها أو إرسال رسائل بريد أو إصدار رموز QR.",g_done_unreject:"تم التراجع عن الرفض. الطلب بانتظار المراجعة، ولم يُرسل بريد أو رمز QR.",ur_returned_count:"أُعيد {n} من طلبات التذاكر إلى انتظار المراجعة."});
+
+Object.assign(SahraText.en,{g_not_allowed_unreject:"This request cannot be returned to pending review. Refresh and check its current status."});
+Object.assign(SahraText.ar,{g_not_allowed_unreject:"لا يمكن إعادة هذا الطلب إلى انتظار المراجعة. حدّث الصفحة وراجع حالته الحالية."});

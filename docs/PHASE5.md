@@ -1612,3 +1612,27 @@ TypeScript and 572 tests passed. Playwright fixtures checked release -> new labe
 -> resend in 12 EN/AR light/dark 390/768/1440 layouts, with no page errors or
 overflow. Additional EN/AR fixtures covered refused release, missing email,
 pending and held records. No real emails were sent or live guest records changed.
+
+### Undo rejection (25 October 2026)
+
+Requests and Guests now offer Undo rejection on rejected, unused, unheld
+records. Requests supports the rejected members shown in a grouped card with
+an explicit member/count confirmation; Guests acts on one person. The action
+returns to pending review, never approval or QR release, and sends no email.
+Both views re-query server state afterward; rejected-only filters naturally
+remove reopened requests. Approval still requires the normal separate action.
+
+POST /api/tickets/:id/unreject uses owner/admin auth, origin/CSRF, an op UUID,
+ledger intent and change-log flush, and an audit row. The SQL statement re-reserves
+party/type capacity, refuses cancelled parties, holds, used tickets and refunds,
+clears active rejection/approval/release metadata and bumps QR version. Original
+rejection history remains in the audit. Retries reuse the operation until a
+confirmed response. Existing cancellation restoration behavior is retained.
+No migration or live guest changes are required.
+
+TypeScript and 577 tests in 47 files passed, including pending/no-QR/no-email,
+idempotency, audit history, CSRF/roles/party isolation, concurrent capacity and
+refusal guards. The unauthenticated route coverage suite includes the new route.
+Browser fixtures passed 24 EN/AR light/dark Requests/Guests layouts at
+390/768/1440 with confirmation, server-read pending labels and no overflow/page
+errors, plus EN/AR refusal cases. No real ticket actions or emails were sent.

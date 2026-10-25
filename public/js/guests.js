@@ -73,7 +73,7 @@
   async function run(x, action, body, confirmText, safe) {
     var key = action + ":" + x.id;
     if (actionBusy[key]) return;
-    if (confirmText && !(await Sahra.confirm(confirmText, { danger: !safe }))) return;
+    if (confirmText && !(await Sahra.confirm(confirmText, { danger: !safe, ok:action === "unreject" ? t("ur_action") : undefined }))) return;
     actionBusy[key] = true;
     redrawFind();
     try {
@@ -93,7 +93,7 @@
       } else if (!r.ok) {
         var code = r.body && r.body.error;
         notes[x.id] = ["no", code === "not_allowed" ? t("g_not_allowed_" + action)
-          : action === "restore" && SahraText.en["g_restore_" + code] ? t("g_restore_" + code) : S.why(r)];
+          : (action === "restore" || action === "unreject") && SahraText.en["g_restore_" + code] ? t("g_restore_" + code) : S.why(r)];
       } else {
         notes[x.id] = ["yes", t("g_done_" + action), link];
         delete open[x.id];
@@ -120,6 +120,7 @@
       live && !x.used_at ? el("button", { class: "btn small-btn", text: t("g_transfer"), attrs: { type: "button", "aria-expanded": open[x.id] === "transfer" ? "true" : "false" }, on: { click: function () { open[x.id] = open[x.id] === "transfer" ? null : "transfer"; redrawFind(); } } }) : null,
       // A cancelled ticket can be brought back (owner request), with a new QR code.
       x.status === "cancelled" && !x.used_at ? el("button", { class: "btn small-btn", text: t(x.approved_at == null ? "bk_restore_request" : "g_restore"), attrs: { type: "button" }, on: { click: function () { run(x, "restore", null, t(x.approved_at == null ? "bk_restore_request_confirm" : "g_restore_confirm", { name: x.guest_name || Sahra.ref(x.id) }), true); } } }) : null);
+    if(x.status === "rejected" && !x.used_at && !x.hold_at) actions.appendChild(el("button",{class:"btn small-btn",text:t("ur_action"),attrs:{type:"button",disabled:!!actionBusy["unreject:"+x.id]},on:{click:function(){run(x,"unreject",null,t("ur_confirm",{name:x.guest_name || Sahra.ref(x.id)}),true);}}}));
     var note = notes[x.id];
     var li = el("li", { class: "g-row g-guest-card", attrs:{"data-ticket":x.id,tabindex:-1} },
       el("div", { class: "g-who" },
