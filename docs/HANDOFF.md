@@ -255,3 +255,13 @@ Undo rejection returns rejected requests to pending review, with capacity/type,
 refund/hold/used/cancelled-party guards, ledger intent, audit and QR version bump.
 It never approves, sends email or releases a QR. Requests/Guests use explicit
 confirmation and read back status. No migration; suite now 577 tests in 47 files.
+
+### Team invitation emails (25 October 2026)
+
+Google team invites now atomically queue bilingual email; previously they only
+granted sign-in access. Pending invitations have explicit resend/copy-sign-in
+controls and latest email status. Legacy invitations are not auto-emailed at
+release. Queue status is not proof of delivery; use Emails for failures/retries.
+Resends require owner auth/CSRF, active unlinked staff/invite, operation UUID and
+cooldown/daily limits. Access always requires the invited Google account. No
+migration. Required suite now 581 tests in 48 files.

@@ -7,6 +7,7 @@
 import type { SqlDriver } from "./driver";
 import { inList, sql, type Sql } from "./sql";
 import { CONFIG } from "../env";
+import { outboxInsert, type OutboxRow } from "../outbox";
 import { PLATFORM } from "../platform/db";
 
 /**
@@ -206,7 +207,7 @@ export class Db {
   // All of these are owner-only; the owner check is inside each statement.
 
   async createGoogleInvite(sess: SessionRef, actor: string, a: {
-    staffId: string; inviteId: string; name: string; email: string; role: "owner" | "admin"; now: number; expiresAt: number; op: string;
+    staffId: string; inviteId: string; name: string; email: string; role: "owner" | "admin"; now: number; expiresAt: number; op: string; mail?: OutboxRow;
   }) {
     const ok = sessionValid(sess, ["owner"], a.now);
     const p = sess.partyId;
@@ -220,12 +221,17 @@ export class Db {
         SELECT ${a.inviteId}, 'google', ${p}, ${a.staffId}, ${a.role}, ${actor}, ${a.now}, ${a.expiresAt}, ${a.op}, 'invite_created'
         WHERE EXISTS (SELECT 1 FROM staff WHERE id = ${a.staffId} AND last_op = ${a.op})
           AND NOT EXISTS (SELECT 1 FROM invites WHERE id = ${a.inviteId})`,
+      ...(a.mail ? [outboxInsert(a.mail,sql`${ok} AND EXISTS (SELECT 1 FROM invites i JOIN staff st ON st.id = i.staff_id
+        WHERE i.id = ${a.inviteId} AND i.party_id = ${p} AND st.party_id = ${p} AND st.id = ${a.staffId}
+          AND st.invited_email = ${a.email} AND st.disabled_at IS NULL AND st.google_sub IS NULL
+          AND i.kind = 'google' AND i.used_at IS NULL AND i.revoked_at IS NULL AND i.expires_at > ${a.now})
+        AND NOT EXISTS (SELECT 1 FROM outbox WHERE id = ${a.mail.id})`)] : []),
       audit(a.now, actor, "staff_added", "staff", sql`SELECT party_id, id, rev FROM staff WHERE id = ${a.staffId} AND last_op = ${a.op}`),
       audit(a.now, actor, "invite_created", "invite", sql`SELECT party_id, id, rev FROM invites WHERE id = ${a.inviteId} AND last_op = ${a.op}`),
       sql`SELECT st.id, st.party_id, st.invited_email, st.role, i.id AS invite_id, i.party_id AS invite_party, ${ok} AS ok
         FROM staff st LEFT JOIN invites i ON i.id = ${a.inviteId} AND i.staff_id = st.id WHERE st.id = ${a.staffId}`,
     ]);
-    const row = rs[4]!.results[0] as undefined | { party_id: string; invited_email: string; role: string; invite_id: string | null; ok: number };
+    const row = rs.at(-1)!.results[0] as undefined | { party_id: string; invited_email: string; role: string; invite_id: string | null; ok: number };
     if (rs[0]!.meta.changes === 1) return "created" as const;
     // A retry is answered "already" only while the session still holds the authority.
     if (row && Number(row.ok) === 1 && row.party_id === p && row.invited_email === a.email && row.role === a.role && row.invite_id) return "already" as const;
@@ -391,7 +397,8 @@ export class Db {
   async listStaff(sess: SessionRef, now: number) {
     const ok = sessionValid(sess, ["owner"], now);
     const rs = await this.driver.batch([
-      sql`SELECT id, name, role, invited_email, google_sub IS NOT NULL AS linked, disabled_at, created_at, rev
+      sql`SELECT id, name, role, invited_email, google_sub IS NOT NULL AS linked, disabled_at, created_at, rev,
+          (SELECT status FROM outbox o WHERE o.party_id = staff.party_id AND o.to_email = staff.invited_email AND o.kind = 'staff_invite' ORDER BY o.created_at DESC,o.id DESC LIMIT 1) AS invitation_email_status
         FROM staff WHERE party_id = ${sess.partyId} AND ${ok} ORDER BY created_at`,
       sql`SELECT id, kind, staff_id, role, created_at, expires_at, used_at, revoked_at, rev
         FROM invites WHERE party_id = ${sess.partyId} AND ${ok} ORDER BY created_at`,
