@@ -8,6 +8,7 @@
   var t = Sahra.t, el = Sahra.el, S = SahraStaff;
   var stats = null, types = [], found = null, query = "", party = null;
   var ops = {};        // "action:ticket" -> op id, kept until the server confirms (a retry is the same change)
+  var actionBusy = {};
   var notes = {};      // ticket id -> [cls, text, link?]
   var searchSeq = 0, nextFound = null, loadingMore = false, pageIndex = 0, pageCursors = [null], filters = { status:"approved" };
   var initialFilters = new URLSearchParams(location.search);
@@ -70,27 +71,41 @@
   }
 
   async function run(x, action, body, confirmText, safe) {
-    if (confirmText && !(await Sahra.confirm(confirmText, { danger: !safe }))) return;
     var key = action + ":" + x.id;
-    var path = "/api/tickets/" + encodeURIComponent(x.id) + "/" + action;
-    var r = await S.act(path, action === "resend" ? {} : Object.assign({ op: opFor(key) }, body || {}));
-    if (r.status !== 503) delete ops[key];
-    var link = r.body && r.body.link ? location.origin + r.body.link : null;
-    if (action === "resend") {
-      notes[x.id] = r.ok ? ["yes", r.body.status === "queued" ? t("g_resent") : t("g_resent_already"), link]
-        : r.body && r.body.error === "no_email" ? ["maybe", t("g_no_email"), link] : ["no", S.why(r)];
-    } else if (!r.ok) {
-      var code = r.body && r.body.error;
-      notes[x.id] = ["no", code === "not_allowed" ? t("g_not_allowed_" + action)
-        : action === "restore" && SahraText.en["g_restore_" + code] ? t("g_restore_" + code) : S.why(r)];
-    } else {
-      notes[x.id] = ["yes", t("g_done_" + action), link];
-      delete open[x.id];
-      if (query || Array.isArray(found)) await search(query);
-      await loadStats();
-      try { localStorage.setItem("sahra_ticket_change", String(Date.now())); } catch (_) {}
-    }
+    if (actionBusy[key]) return;
+    if (confirmText && !(await Sahra.confirm(confirmText, { danger: !safe }))) return;
+    actionBusy[key] = true;
     redrawFind();
+    try {
+      var path = action === "release" ? "/api/tickets/release" : "/api/tickets/" + encodeURIComponent(x.id) + "/" + action;
+      var payload = action === "release" ? {ids:[x.id]} : action === "resend" ? {} : Object.assign({ op: opFor(key) }, body || {});
+      var r = await S.act(path, payload);
+      if (r.status !== 503) delete ops[key];
+      var link = r.body && r.body.link ? location.origin + r.body.link : null;
+      if (action === "release") {
+        var result = r.body && r.body.results && r.body.results[x.id];
+        notes[x.id] = r.ok && (result === "done" || result === "already")
+          ? ["yes", t(x.guest_email ? "g_qr_released" : "g_qr_released_no_email")]
+          : ["no", r.ok ? t("g_qr_release_refused") : S.why(r)];
+      } else if (action === "resend") {
+        notes[x.id] = r.ok ? ["yes", r.body.status === "queued" ? t("g_resent") : t("g_resent_already"), link]
+          : r.body && r.body.error === "no_email" ? ["maybe", t("g_no_email"), link] : ["no", S.why(r)];
+      } else if (!r.ok) {
+        var code = r.body && r.body.error;
+        notes[x.id] = ["no", code === "not_allowed" ? t("g_not_allowed_" + action)
+          : action === "restore" && SahraText.en["g_restore_" + code] ? t("g_restore_" + code) : S.why(r)];
+      } else {
+        notes[x.id] = ["yes", t("g_done_" + action), link];
+        delete open[x.id];
+      }
+      // Always read the authoritative ticket after a successful action, including
+      // a bulk release refusal (the guest may have been cancelled in another tab).
+      if (r.ok) {
+        if (query || Array.isArray(found)) await search(query);
+        await loadStats();
+        if (action !== "resend") try { localStorage.setItem("sahra_ticket_change", String(Date.now())); } catch (_) {}
+      }
+    } finally { delete actionBusy[key]; redrawFind(); }
   }
 
   function guestRow(x) {
@@ -98,7 +113,8 @@
     var meta = [x.type_name, x.people === 1 ? t("s_type_one") : t("s_type_exactly", { n: x.people })].filter(Boolean).join(" · ");
     var live = x.status === "pending" || x.status === "approved";
     var actions = el("div", { class: "g-actions" },
-      live ? el("button", { class: "btn small-btn", text: t("g_resend"), attrs: { type: "button" }, on: { click: function () { run(x, "resend"); } } }) : null,
+      x.status === "approved" && !x.released_at && !x.hold_at && !x.used_at ? el("button", {class:"btn primary small-btn",text:t("g_send_qr"),attrs:{type:"button",disabled:!!actionBusy["release:"+x.id]},on:{click:function(){run(x,"release");}}}) : null,
+      live && x.released_at ? el("button", { class: "btn small-btn", text: t("g_resend"), attrs: { type: "button",disabled:!!actionBusy["resend:"+x.id] }, on: { click: function () { run(x, "resend"); } } }) : null,
       x.status === "approved" && !x.used_at ? el("button", { class: "btn small-btn", text: t("g_reissue"), attrs: { type: "button" }, on: { click: function () { run(x, "reissue", null, t("g_reissue_confirm")); } } }) : null,
       live && !x.used_at ? el("button", { class: "btn small-btn", text: t("g_change_email"), attrs: { type: "button", "aria-expanded": open[x.id] === "email" ? "true" : "false" }, on: { click: function () { open[x.id] = open[x.id] === "email" ? null : "email"; redrawFind(); } } }) : null,
       live && !x.used_at ? el("button", { class: "btn small-btn", text: t("g_transfer"), attrs: { type: "button", "aria-expanded": open[x.id] === "transfer" ? "true" : "false" }, on: { click: function () { open[x.id] = open[x.id] === "transfer" ? null : "transfer"; redrawFind(); } } }) : null,
