@@ -1679,3 +1679,53 @@ status visibility and unauthenticated zero writes. Browser fixtures passed 12
 EN/AR light/dark 390/768/1440 layouts for create, resend, status, cooldown and
 copy-link controls, with no overflow/page errors. No live mail was sent or
 existing staff invitations changed during testing.
+
+### Form-answer insights, dropdown views and public SEO (26 October 2026)
+
+The owner clarified that age reporting means spreadsheet-style analytics, not
+age filters on guest lists or admission totals. Dashboard > Form insights now
+summarizes a selected existing text/choice question, ticket-status scope and
+optional creation dates. The read-only owner/admin endpoint aggregates all
+matching records before limiting the displayed/exported distribution to the
+50 most common answers. It reports missing answers, usable numeric responses,
+below/equal/above a cutoff, minimum/maximum/average and ticket places. Arabic
+and Persian digits and Arabic decimal separators normalize for numeric counts;
+non-numeric/unsupported values remain separate. Numeric answers use plain
+signed decimals within ±1e15; comparison cutoffs are bounded to ±1e12.
+
+Group answers stay on the responding ticket and are not inherited by other
+members. The UI separates recorded answers and ticket places and explains that
+shared answers are not individual ages. Photo questions are excluded. Existing
+form questions, approval, email, QR and scanner rules are unchanged. No migration.
+CSV export neutralizes spreadsheet formula prefixes and uses aggregates only.
+Question/scope/threshold/dates can be remembered in the page URL; raw answers
+are never cached in browser storage. Reports load on demand and refresh with the
+visible dashboard, without changing its operational totals.
+
+Requests and Dashboard views now use matching 44px native dropdowns. Guests'
+header selector combines Active guests, All records and individual guest tools;
+selected tools display alone, with existing hash links and form DOM retained.
+Empty tools show a neutral empty state. My parties in the menu is a distinct
+52px outlined icon button, with the same destination and permission gating.
+
+Public Home/About/Contact/Privacy/Terms now have canonical URLs, descriptions,
+Open Graph/social cards, a 1200×630 real public-page preview image and localized
+browser metadata. Homepage has crawlable bilingual no-JS copy and WebSite
+microdata without inline scripts. Sitemap lists only those five public pages;
+robots excludes API crawling. All ticket, signup, find, sign-in and staff HTML
+pages use noindex/nofollow/noarchive. No private ticket data is added to metadata.
+Arabic currently shares the public URLs and uses client language selection;
+there are no invented separate hreflang pages or guarantees of search ranking.
+
+The planned domain and owner-provided EGP 1,078.00 two-item checkout subtotal
+(excluding taxes/fees) are documented in DOMAIN.md. It is not bought/connected;
+all canonical URLs and PUBLIC_ORIGIN stay on sahra.bynova.workers.dev.
+
+Validation: TypeScript and 587 tests in 49 files. New D1/API tests cover numeric
+normalization, missing/invalid/group responses, categorical/top-50 summaries,
+status/date scope, party isolation and owner/admin vs door/unauth access. Browser
+fixtures cover 12 EN/AR light/dark phone/tablet/desktop analytics/navigation/menu
+layouts, formula-safe CSV and 24 Rejected/Undo-rejection navigation regressions,
+with no overflow/errors. SEO checks cover five public pages in EN/AR, thirteen
+private noindex pages, sitemap/robots, social image and no inline scripts. All
+browser ticket/staff mutations are stubbed; no live guests or email are changed.

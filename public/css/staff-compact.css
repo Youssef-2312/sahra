@@ -189,3 +189,40 @@ body.staff-app .guest-workspace .staff-head{display:flex;flex-wrap:wrap;align-it
 body.staff-app .guest-workspace .staff-head>.g-view-toolbar{position:static;inset:auto;flex:none;margin-inline-start:auto;max-width:100%}
 body.staff-app .guest-workspace .staff-head>.g-view-toolbar .btn{min-height:44px;white-space:normal}
 body.staff-app .guest-workspace .staff-head>div:not(.g-view-toolbar){min-width:0;flex:1 1 140px}
+/* Native view fields keep secondary pages compact, keyboard accessible and RTL aware. */
+body.staff-app .s-view-picker{min-width:0;max-width:100%;margin-block:8px 12px}
+body.staff-app .s-view-select{display:block;width:auto;max-width:100%;min-width:180px;min-height:44px;padding:10px 36px 10px 14px;border:1px solid var(--ap-line);border-radius:12px;background-color:var(--ap-paper);color:var(--ap-text);font:inherit;font-size:14px;font-weight:500;cursor:pointer}
+html[lang=ar] body.staff-app .s-view-select{padding-inline:14px 36px}
+body.staff-app .g-view-toolbar .s-view-picker{margin:0}
+body.staff-app .g-view-toolbar .s-view-select{min-width:150px;max-width:240px}
+body.staff-app .g-tool-panel[hidden]{display:none}
+.staff-menu .staff-menu-account>.staff-mine{display:flex;align-items:center;gap:12px;width:100%;min-height:52px;padding:12px 14px;margin:0 0 12px;border:1px solid var(--ap-line);border-radius:12px;background:var(--ap-subtle);color:var(--ap-text);text-decoration:none;font-size:14px;font-weight:600;transition:background-color .16s,border-color .16s}
+.staff-menu-account>.staff-mine>svg{width:20px;height:20px;flex:none}
+.staff-menu-account>.staff-mine>svg:last-child{margin-inline-start:auto;width:16px;height:16px}
+html[lang=ar] .staff-menu-account>.staff-mine>svg:last-child{transform:rotate(180deg)}
+.staff-menu .staff-menu-account>.staff-mine:hover{border-color:var(--ap-accent);background:var(--ap-paper)}
+.staff-desktop-nav .staff-mine{display:flex;align-items:center;gap:8px;text-decoration:none}
+.staff-desktop-nav .staff-mine svg{width:16px;height:16px;flex:none}
+.staff-desktop-nav .staff-mine svg:last-child{margin-inline-start:auto}
+body.staff-app .fi-card{min-width:0}
+body.staff-app .fi-controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+body.staff-app .fi-controls .field{min-width:0}
+body.staff-app .fi-controls select{width:100%;max-width:100%;min-height:44px;font-size:16px}
+body.staff-app .fi-compare{display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin-bottom:14px}
+body.staff-app .fi-compare .field{flex:1;min-width:120px;margin:0}
+body.staff-app .fi-compare input{width:100%;min-width:0;min-height:44px;font-size:16px}
+body.staff-app .fi-compare .btn{min-height:44px;width:auto}
+body.staff-app .fi-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-block:12px}
+body.staff-app .fi-metric{min-width:0;border:1px solid var(--ap-line);border-radius:12px;padding:12px;background:var(--ap-subtle);display:grid;gap:8px}
+body.staff-app .fi-metric span{font-size:12px;line-height:1.4;overflow-wrap:anywhere}
+body.staff-app .fi-metric strong{font-size:24px;line-height:1.2}
+body.staff-app .fi-comparison{grid-template-columns:repeat(3,minmax(0,1fr))}
+body.staff-app .fi-table-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:18px;flex-wrap:wrap}
+body.staff-app .fi-table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:13px}
+body.staff-app .fi-table th,body.staff-app .fi-table td{padding:12px 8px;border-bottom:1px solid var(--ap-line);text-align:start;vertical-align:top;overflow-wrap:anywhere}
+body.staff-app .fi-table th:first-child,body.staff-app .fi-table td:first-child{width:50%}
+body.staff-app .fi-bar{display:block;height:3px;max-width:100%;margin-top:8px;background:var(--ap-accent);border-radius:4px}
+@media(max-width:640px){body.staff-app .fi-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}body.staff-app .fi-comparison{grid-template-columns:repeat(3,minmax(0,1fr))}body.staff-app .fi-metric{padding:9px}body.staff-app .fi-controls{gap:8px}body.staff-app .fi-metric strong{font-size:22px}body.staff-app .s-view-select{width:100%;font-size:16px}body.staff-app .g-view-toolbar{max-width:100%}}
+body.staff-app .s-view-select{display:inline-flex;align-items:center;justify-content:space-between;gap:8px;height:44px;white-space:nowrap}
+body.staff-app .fi-controls select{display:flex;align-items:center;gap:8px;height:44px;font-size:14px;padding-inline:10px;white-space:nowrap}
+.fi-table caption{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0}

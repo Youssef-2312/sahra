@@ -317,10 +317,7 @@
     var content = SahraStaff.workspace(app, "queue", me.staff.role);
     content.appendChild(el("header", { class: "staff-head" }, el("div", null,
       el("p", { class: "label-line", text: me.party.name }), el("h1", { text: t("q_title") }))));
-    content.appendChild(el("div", { class: "tabs", attrs: { role: "group" } }, TABS.map(function (x) {
-      return el("button", { text: t(x[1]), attrs: { type: "button", "aria-pressed": tab === x[0] ? "true" : "false" },
-        on: { click: function () { if (tab !== x[0]) { tab = x[0]; filters.status=x[0]; load(false); } } } });
-    })));
+    content.appendChild(SahraStaff.viewPicker("requests-view",TABS.map(function(x){return [x[0],t(x[1])];}),tab,function(value){if(tab!==value){tab=value;filters.status=value;load(false);}}));
     content.appendChild(SahraBooking.filters(Object.assign({},filters,{status:tab === "pending" ? "pending" : filters.status || "all"}), filterTypes, function (v) { filters = v; tab=v.status === "pending" ? "pending" : "all"; cashOnly = v.payment === "cash"; load(false); }, true, tab === "pending" ? "pending" : null));
     if (bulkNote) content.appendChild(el("p", { class: "notice " + bulkNote.cls, text: bulkNote.text }));
     if (failed) { content.appendChild(el("p", { class: "notice no", text: failed })); return; }

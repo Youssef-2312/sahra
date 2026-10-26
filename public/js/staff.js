@@ -44,7 +44,7 @@ var SahraStaff = (function () {
   // One sign-in: an account that also has My parties (a party owner who creates
   // parties, or the site owner) gets a link back there, and signing out ends both.
   var platform; // undefined: not asked yet; null: none
-  function myParties() { return el("a", { class: "staff-mine", text: t("p_my_parties"), attrs: { href: "/platform" } }); }
+  function myParties() { return el("a", { class: "staff-mine", attrs: { href: "/platform" } },icon("parties"),el("span",{text:t("p_my_parties")}),icon("arrow")); }
   async function askPlatform() {
     platform = null;
     var r = await Sahra.api.get("/api/platform/me");
@@ -74,6 +74,7 @@ var SahraStaff = (function () {
   var shellState = null, shellKey = "";
   function icon(name) {
     var paths = {
+      parties: "M4 7h16v14H4z M8 3h12v4 M8 7v14 M4 11h4 M4 17h4",
       dashboard: "M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z",
       queue: "M8 4h12v16H8z M4 8H2m2 4H2m2 4H2 M11 8h6m-6 4h6m-6 4h4",
       guests: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8 M22 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75",
@@ -266,9 +267,16 @@ var SahraStaff = (function () {
     return t(k, Object.assign({ n: n }, vars || {}));
   }
 
+  function viewPicker(id, choices, value, change) {
+    var control=select(id,choices,value);control.id=id;control.className="s-view-select";
+    control.setAttribute("aria-label",t("fi_page_view"));
+    control.addEventListener("change",function(){change(control.value);});
+    return el("div",{class:"s-view-picker"},control);
+  }
+
   /** A button that copies a text and says so. */
   function copyButton(text, label) { return Sahra.copyButton(text, label || t("s_copy")); }
 
-  return { start: start, act: act, field: field, input: input, select: select, check: check, section: section,
+  return { viewPicker:viewPicker, start: start, act: act, field: field, input: input, select: select, check: check, section: section,
     say: say, sayMs: sayMs, sayBox: sayBox, why: why, local: local, copyButton: copyButton, sleep: sleep, nav: nav, workspace: workspace, redraw: redraw, tn: tn, icon: icon };
 })();

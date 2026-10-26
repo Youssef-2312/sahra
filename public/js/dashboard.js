@@ -8,9 +8,9 @@
   var busy = false, refreshing = false, syncError = false, admissionVerified = false;
   var updatedAt = null, fetchedAt = null, drawn = false, findText = "", controlsOpen = false;
   var initial = new URLSearchParams(location.search);
-  var activeTab = ["overview", "activity", "types"].includes(initial.get("view")) ? initial.get("view") : "overview";
+  var activeTab = ["overview", "activity", "types", "insights"].includes(initial.get("view")) ? initial.get("view") : "overview";
   var days = initial.get("days") === "7" ? 7 : 14;
-  var TABS = [["overview", "dm_tab_overview"], ["activity", "dm_tab_activity"], ["types", "dm_tab_types"]];
+  var TABS = [["overview", "dm_tab_overview"], ["activity", "dm_tab_activity"], ["types", "dm_tab_types"], ["insights", "fi_title"]];
   var REFRESH_MS = 60000;
 
   function rememberView() {
@@ -54,25 +54,10 @@
   }
 
   function tabs() {
-    return el("div", { class: "sh-dashboard-tabs", attrs: { role: "tablist", "aria-label": t("dm_overview") } }, TABS.map(function (x, index) {
-      var b = el("button", { class: "sh-tab", text: t(x[1]), attrs: { type: "button", role: "tab", id: "dm-tab-" + x[0], "aria-selected": activeTab === x[0] ? "true" : "false", "aria-controls": "dm-panel-" + x[0], tabindex: activeTab === x[0] ? 0 : -1 }, on: { click: function () { choose(x[0]); } } });
-      b.addEventListener("keydown", function (e) {
-        var n = index;
-        if (e.key === "Home") n = 0;
-        else if (e.key === "End") n = TABS.length - 1;
-        else if (e.key === "ArrowRight" || e.key === "ArrowLeft") n = (index + (e.key === "ArrowRight" ? 1 : -1) * (document.documentElement.dir === "rtl" ? -1 : 1) + TABS.length) % TABS.length;
-        else return;
-        e.preventDefault(); choose(TABS[n][0]);
-      });
-      return b;
-    }));
-  }
-  function choose(key) {
-    activeTab = key; rememberView(); render();
-    document.getElementById("dm-tab-" + key).focus({ preventScroll: true });
+    return S.viewPicker("dashboard-view",TABS.map(function(x){return [x[0],t(x[1])];}),activeTab,function(key){activeTab=key;rememberView();render();if(key === "insights")SahraFormInsights.refresh();document.getElementById("dashboard-view").focus({preventScroll:true});});
   }
   function panel(key) {
-    return el("section", { class: "sh-dash-panel", hidden: activeTab !== key, attrs: { id: "dm-panel-" + key, role: "tabpanel", "aria-labelledby": "dm-tab-" + key, tabindex: 0 } });
+    return el("section",{class:"sh-dash-panel",hidden:activeTab!==key,attrs:{id:"dm-panel-"+key,"aria-label":t(TABS.find(function(x){return x[0]===key;})[1])}});
   }
 
   function ranges() {
@@ -196,7 +181,9 @@
           el("span", { text: t("sh_type_counts", { approved: row.approved, pending: row.pending }) }), S.icon("arrow"));
       })));
     }
-    app.appendChild(types); updateSync();
+    app.appendChild(types);
+    if(activeTab === "insights"){var insights=panel("insights");app.appendChild(insights);SahraFormInsights.mount(insights,me.party.id);}
+    updateSync();
     if (!drawn) { Sahra.reveal(app); drawn = true; }
     if (typing) { var box = document.getElementById("d-find"); if (box && !box.closest("[hidden]")) { box.focus({ preventScroll: true }); try { box.setSelectionRange(caret, caret); } catch (_) {} } }
   }
@@ -211,7 +198,7 @@
       admissionVerified = rs[1].ok;
       if (rs[1].ok) admission = rs[1].body;
       if (rs[2].ok) party = rs[2].body;
-    } finally { refreshing = false; render(); }
+    } finally { refreshing = false; render(); if(activeTab === "insights")SahraFormInsights.refresh(); }
   }
 
   (async function () {

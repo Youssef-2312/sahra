@@ -11,6 +11,9 @@ import { Hono } from "hono/tiny";
 import { flushChangeLog } from "../changelog";
 import { json, readJson, requireAuth, type AppEnv } from "../context";
 import { isUuid, newId } from "../lib/crypto";
+import { formInsights,insightCutoff,INSIGHT_SCOPES } from "../guests/insights";
+import { storedForm } from "../guests/form";
+import { parseDateRange } from "../lib/date-range";
 import { GuestDb } from "../guests/db";
 import { isTypeId } from "../guests/types";
 import { chargeStaff } from "../limits";
@@ -37,6 +40,22 @@ partyRoutes.get("/", requireAuth(["owner", "admin", "door"]), async (c) => {
   const p = await partyDb(c).get(a.info.party_id);
   if (!p) return json(c, 404, { error: "not_found" });
   return json(c, 200, a.info.role === "door" ? doorView(p) : staffView(p, c.var.deps.now()));
+});
+
+/** Owner/admin aggregate view only; never changes ticket or admission state. */
+partyRoutes.get("/form-insights",requireAuth(["owner","admin"]),async(c)=>{
+  const a=c.var.auth,now=c.var.deps.now(),scope=c.req.query("scope") || "approved",cutoff=insightCutoff(c.req.query("cutoff"));
+  const range=parseDateRange(c.req.query("created_from"),c.req.query("created_before"));
+  if(!INSIGHT_SCOPES.has(scope)||cutoff===false||range===false)return json(c,400,{error:"invalid_request"});
+  const row=(await c.var.db.driver.all<{guest_form:string|null}>(sql`SELECT guest_form FROM parties WHERE id=${a.info.party_id}
+    AND ${sessionValid({hash:a.hash,partyId:a.info.party_id},["owner","admin"],now)}`)).results[0];
+  if(!row)return json(c,401,{error:"not_signed_in"});
+  const questions=storedForm(row.guest_form).questions.filter(q=>q.type!=="photo").map(q=>({id:q.id,label:q.label,type:q.type}));
+  const requested=c.req.query("question"),question=requested || questions[0]?.id || null;
+  if(requested&&!questions.some(q=>q.id===requested))return json(c,400,{error:"invalid_request"});
+  if(!question)return json(c,200,{questions,question:null,scope,cutoff,summary:null,answers:[],truncated:false});
+  const result=await formInsights(c.var.db.driver,{hash:a.hash,partyId:a.info.party_id},now,question,scope,cutoff,range);
+  return json(c,200,{questions,question,scope,cutoff,...result});
 });
 
 /**

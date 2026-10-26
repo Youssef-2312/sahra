@@ -142,6 +142,7 @@ const cases: Case[] = [
   ["announce, junk session", "POST", "/api/party/announce", (h) => h.req("/api/party/announce", { method: "POST", headers: JSON_H, cookies: junkCookie, body: JSON.stringify({ op: newId(), subject: "Hi", body: "Hello" }) })],
   ["announce, no session", "POST", "/api/party/announce", (h) => h.req("/api/party/announce", { method: "POST", headers: JSON_H, body: JSON.stringify({ op: newId(), subject: "Hi", body: "Hello" }) })],
   ["party stats, junk session", "GET", "/api/party/stats", (h) => h.req("/api/party/stats", { cookies: junkCookie })],
+  ["party form insights, junk session", "GET", "/api/party/form-insights", (h) => h.req("/api/party/form-insights", { cookies: junkCookie })],
   ["party pictures, junk session", "GET", "/api/party/flyers", (h) => h.req("/api/party/flyers", { cookies: junkCookie })],
   ["upload picture, junk session", "POST", "/api/party/flyers", (h) => {
     const fd = new FormData();
