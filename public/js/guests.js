@@ -191,9 +191,6 @@
     var f = SahraBooking.filters(Object.assign({}, filters, {q:query}), types, function (v) {
       filters = v; guestView=v.status === "approved" ? "approved" : "all"; search(v.q || "");
     }, true, guestView === "approved" ? "approved" : null);
-    var tabs = el("div", {class:"tabs",attrs:{"aria-label":t("g_title")}}, [["approved","bf_active_guests"],["all","bf_all_records"]].map(function(x){
-      return el("button",{text:t(x[1]),attrs:{type:"button","aria-pressed":guestView===x[0]?"true":"false"},on:{click:function(){guestView=x[0];filters.status=x[0]==="approved"?"approved":"all";search(query);}}});
-    }));
     var body;
     if (found === null) body = el("p", { class: "small muted", text: t("g_search_h") });
     else if (found === "loading") body = el("p", { class: "muted", text: t("loading") });
@@ -216,7 +213,7 @@
     if (Array.isArray(found)) body.appendChild(pageControls("bottom"));
     body.setAttribute("role", "status");
     body.setAttribute("aria-live", "polite");
-    findNode = S.section("find", t("g_find"), null, tabs, f, Array.isArray(found) ? pageControls("top") : null, body, SahraBooking.guide());
+    findNode = S.section("find", t("g_find"), null, f, Array.isArray(found) ? pageControls("top") : null, body, SahraBooking.guide());
     findNode.dataset.guestView=guestView;
     return findNode;
   }
@@ -226,6 +223,7 @@
     var old = findNode;
     old.parentNode.replaceChild(findCard(), old);
     if(Array.isArray(found)) Sahra.motionCards(findNode,".g-guest-card","guests:"+pageIndex+":"+found.map(function(x){return x.id;}).join(","));
+    showGuestView();
     if (hadFocus) findNode.querySelector("input[name=q]").focus();
   }
 
@@ -585,14 +583,21 @@
     var tools=isToolsView(),list=document.getElementById("guest-list-view"),panel=document.getElementById("guest-tools-view"),link=document.getElementById("guest-view-switch");
     if(!list||!panel)return;
     list.hidden=tools;panel.hidden=!tools;
-    link.textContent=t(tools?"qc_back_guests":"qc_tools");link.href=tools?"#find":"#guest-tools";
+    if(link)link.value=tools ? location.hash.slice(1) : guestView === "approved" ? "active" : "records";
+    var selected=location.hash.slice(1);
+    panel.querySelectorAll(":scope>.g-tool-panel").forEach(function(d){d.hidden=tools && selected!=="guest-tools" && !d.querySelector('[id="'+selected.replace(/[^a-z-]/g,"")+'"]');});
     var target=panel.querySelector(location.hash && location.hash!=="#guest-tools" && location.hash!=="#find" ? '[id="'+location.hash.slice(1).replace(/[^a-z-]/g,"")+'"]':".g-tool-panel");
     if(tools&&target){var disclosure=target.closest("details");if(disclosure)disclosure.open=true;}
+    var empty=panel.querySelector(".g-view-empty");if(!empty){empty=el("p",{class:"small muted g-view-empty",text:t("fi_no_view_data")});panel.appendChild(empty);}empty.hidden=!tools || selected === "guest-tools" || !!target;
   }
   window.addEventListener("hashchange",showGuestView);
   function render(me, app) {
     app.classList.add("guest-workspace");
-    var toolbar=el("div",{class:"g-view-toolbar"},el("a",{class:"btn small-btn",attrs:{id:"guest-view-switch",href:"#guest-tools"},text:t("qc_tools")}));
+    var choices=[["active",t("bf_active_guests")],["records",t("bf_all_records")],["guest-tools",t("qc_tools")],["issue",t("g_issue")],["import",t("g_import")],["announce",t("g_announce")],["refunds",t("g_refunds")],["manual",t("g_manual")],["scanners",t("g_scanners")],["holds",t("g_holds")]].filter(function(x){return x[0]!=="holds" || me.staff.role === "owner";});
+    var toolbar=el("div",{class:"g-view-toolbar"},S.viewPicker("guest-view-switch",choices,"active",function(value){
+      if(value === "active" || value === "records"){guestView=value === "active" ? "approved" : "all";filters.status=guestView === "approved" ? "approved" : "all";location.hash="find";showGuestView();search(query);}
+      else {location.hash=value;showGuestView();}
+    }));
     (app.querySelector(".staff-head") || app).appendChild(toolbar);
     tilesNode = tiles();
     var list=el("section",{attrs:{id:"guest-list-view"}},tilesNode,findCard());

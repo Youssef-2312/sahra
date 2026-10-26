@@ -265,3 +265,19 @@ release. Queue status is not proof of delivery; use Emails for failures/retries.
 Resends require owner auth/CSRF, active unlinked staff/invite, operation UUID and
 cooldown/daily limits. Access always requires the invited Google account. No
 migration. Required suite now 581 tests in 48 files.
+
+### Form insights, page selectors and SEO (26 October 2026)
+
+Dashboard > Form insights is read-only owner/admin analytics over existing form
+answers. It is not a global age filter and never changes operational totals.
+Answers are not inherited across group members; display/export separates answer
+counts and ticket places. The server aggregates all scoped records and caps only
+the displayed/exported answer breakdown at 50. Keep formula-safe CSV and no
+browser storage of raw answers. No migration; suite now 587 tests in 49 files.
+
+Requests/Dashboard/Guests use native view dropdowns; Guest tool hash routes and
+form DOM remain intact. My parties has a distinct menu button but unchanged
+permissions. SEO indexes only public marketing/legal pages; private ticket and
+staff pages remain noindex. See DOMAIN.md for the owner's planned domain purchase
+and EGP 1,078.00 quoted two-item subtotal. Do not change canonical/PUBLIC_ORIGIN
+or buy anything until the owner actually owns and connects the domain.
