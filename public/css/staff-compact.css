@@ -284,3 +284,7 @@ body.staff-app .bk-filterbar>.bk-filter-chips{grid-column:1/-1;margin:0}
  body.staff-app .bk-filterbar>.g-actions{grid-column:1;justify-content:flex-start}
  body.staff-app .bk-filterbar input[type=search]{font-size:16px}
 }
+
+body.staff-app .fi-export-actions{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+body.staff-app .fi-export-actions .btn{margin:0;min-height:44px}
+body.staff-app .fi-age-shortcut{margin-block:8px;min-height:44px;white-space:normal}

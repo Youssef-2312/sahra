@@ -304,3 +304,13 @@ and Emails align controls on desktop and wrap on smaller widths. Emails uses a
 status dropdown and Dates dialog; search still covers loaded rows only. Preserve
 server date/status queries and the existing bulk-email warnings/scope. No server
 changes or migrations; suite remains 592 tests.
+
+### Written-age and numbered-name reports (26 October 2026)
+
+Select the age question in Form insights, then Approved guests aged 18 or older.
+Written single ages in common English/Arabic formats are included; missing,
+ambiguous/multiple ages and birth years stay unknown. This is self-reported data,
+not verification. Strict numeric summaries remain unchanged. People lists are
+numbered across pages; copy-all walks the selected group's cursor pages and does
+not copy partial results on failure. No raw names/answers in URL or browser
+storage, no new endpoint/migration. Suite: 593 tests in 50 files plus TypeScript.
