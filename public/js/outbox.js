@@ -99,17 +99,22 @@
       S.say(box, note[0], note[1]);
       app.appendChild(box);
     }
-    app.appendChild(el("div", { class: "tabs", attrs: { role: "group", "aria-label": t("o_show") } }, TABS.map(function (x) {
-      return el("button", { text: t(x[1]), attrs: { type: "button", "aria-pressed": tab === x[0] ? "true" : "false" },
-        on: { click: function () { tab = x[0]; rows = null; note = null; S.redraw(); load(false); } } });
-    })));
-    app.appendChild(SahraBooking.dates(dates, function(v){dates=v;rows=null;next=null;failed=null;S.redraw();load(false);}));
+    var list = el("div"), search=S.input("email_search","search",{value:find,placeholder:t("o_find_ph"),"aria-label":t("o_find_ph"),maxlength:200});
+    var form=el("form",{class:"bk-search",attrs:{role:"search"}},search,el("button",{class:"btn primary",text:t("g_search"),attrs:{type:"submit"}}));
+    function filterRows(){find=search.value;if(rows)fillList(list);}
+    search.addEventListener("input",filterRows);form.addEventListener("submit",function(e){e.preventDefault();filterRows();});
+    var toolbar=el("div",{class:"bk-filterbar o-filterbar"},S.viewPicker("email-view",TABS.map(function(x){return [x[0],t(x[1])];}),tab,function(value){tab=value;rows=null;note=null;S.redraw();load(false);}),form,
+      el("div",{class:"g-actions"},el("button",{class:"btn bk-date-shortcut",text:t("bf_dates"),attrs:{type:"button"},on:{click:function(){
+        var dialog,control=SahraBooking.dates(dates,function(v){dialog.close();dates=v;rows=null;next=null;failed=null;S.redraw();load(false);});control.open=true;
+        dialog=S.openPanel(t("bf_dates"),control);dialog.querySelector('input').focus();
+      }}})));
+    var range=[dates.date_from,dates.date_to].filter(Boolean).join(" / ");
+    if(range)toolbar.appendChild(el("div",{class:"bk-filter-chips"},el("span",{class:"pill",text:t("bf_dates")+": "+range,attrs:{dir:"auto"}})));
+    app.appendChild(toolbar);
     if (failed) { app.appendChild(el("p", { class: "notice no", text: S.why(failed) })); return; }
     if (rows === null) { app.appendChild(el("p", { class: "muted", text: t("loading") })); return; }
     if (!rows.length) { app.appendChild(el("p", { class: "s-empty muted", text: t("o_none_" + (tab || "all")) })); return; }
     // Filter by recipient, subject or text; redraws only the list, so typing keeps its place.
-    var list = el("div");
-    app.appendChild(Sahra.findBox({ value: find, placeholder: t("o_find_ph"), onChange: function (v) { find = v; fillList(list); } }));
     app.appendChild(list);
     fillList(list);
     if (next) app.appendChild(el("button", { class: "btn small-btn", text: t("o_older"), attrs: { type: "button",disabled:loading }, on: { click: function () { if(!loading)load(true); } } }));
