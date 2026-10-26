@@ -11,7 +11,7 @@ import { Hono } from "hono/tiny";
 import { flushChangeLog } from "../changelog";
 import { json, readJson, requireAuth, type AppEnv } from "../context";
 import { isUuid, newId } from "../lib/crypto";
-import { formInsights,insightCutoff,INSIGHT_SCOPES } from "../guests/insights";
+import { formInsights,insightRecords,insightCutoff,INSIGHT_SCOPES,INSIGHT_OPERATORS,INSIGHT_GROUPS,INSIGHT_SORTS } from "../guests/insights";
 import { storedForm } from "../guests/form";
 import { parseDateRange } from "../lib/date-range";
 import { GuestDb } from "../guests/db";
@@ -50,12 +50,19 @@ partyRoutes.get("/form-insights",requireAuth(["owner","admin"]),async(c)=>{
   const row=(await c.var.db.driver.all<{guest_form:string|null}>(sql`SELECT guest_form FROM parties WHERE id=${a.info.party_id}
     AND ${sessionValid({hash:a.hash,partyId:a.info.party_id},["owner","admin"],now)}`)).results[0];
   if(!row)return json(c,401,{error:"not_signed_in"});
-  const questions=storedForm(row.guest_form).questions.filter(q=>q.type!=="photo").map(q=>({id:q.id,label:q.label,type:q.type}));
+  const questions=storedForm(row.guest_form).questions.filter(q=>q.type!=="photo").map(q=>({id:q.id,label:q.label,type:q.type,options:q.options || []}));
   const requested=c.req.query("question"),question=requested || questions[0]?.id || null;
   if(requested&&!questions.some(q=>q.id===requested))return json(c,400,{error:"invalid_request"});
   if(!question)return json(c,200,{questions,question:null,scope,cutoff,summary:null,answers:[],truncated:false});
-  const result=await formInsights(c.var.db.driver,{hash:a.hash,partyId:a.info.party_id},now,question,scope,cutoff,range);
-  return json(c,200,{questions,question,scope,cutoff,...result});
+  const filters={type:c.req.query("type"),delivery:c.req.query("delivery"),entry:c.req.query("entry")};
+  if((filters.type!==undefined&&!isTypeId(filters.type))||(filters.delivery!==undefined&&!['released','unreleased'].includes(filters.delivery))||(filters.entry!==undefined&&!['used','unused'].includes(filters.entry)))return json(c,400,{error:"invalid_request"});
+  const includeRecords=c.req.query("records"),operator=c.req.query("operator") || "below",group=c.req.query("group") || "matching",sort=c.req.query("sort") || "newest",value=c.req.query("value") || "",q=(c.req.query("q") || "").trim(),after=c.req.query("after"),upper=insightCutoff(c.req.query("upper"));
+  if((includeRecords!==undefined&&includeRecords!=="1")||!INSIGHT_OPERATORS.has(operator)||!INSIGHT_GROUPS.has(group)||!INSIGHT_SORTS.has(sort)||value.length>500||q.length>80||(after!==undefined&&!isBase32(after,16))||upper===false||(operator==='between'&&upper<cutoff)||(includeRecords==='1'&&['text_equal','contains'].includes(operator)&&!value.trim()))return json(c,400,{error:"invalid_request"});
+  const sess={hash:a.hash,partyId:a.info.party_id};
+  const result=await formInsights(c.var.db.driver,sess,now,question,scope,cutoff,range,filters);
+  const types=(await c.var.db.driver.all(sql`SELECT id,name FROM ticket_types WHERE party_id=${a.info.party_id} AND ${sessionValid(sess,["owner","admin"],now)} ORDER BY sort,name,id`)).results;
+  const people=includeRecords==='1' ? await insightRecords(c.var.db.driver,sess,now,question,scope,cutoff,range,{...filters,operator,group,sort,value,q,after,upper}) : null;
+  return json(c,200,{questions,question,scope,cutoff,types,...result,people});
 });
 
 /**

@@ -210,10 +210,10 @@
         var input = findNode.querySelector('input[name=q]'); input.scrollIntoView({block:"center"}); input.focus({preventScroll:true});
       }, pageIndex, position);
     }
-    if (Array.isArray(found)) body.appendChild(pageControls("bottom"));
+    if (Array.isArray(found) && (pageIndex || nextFound)) body.appendChild(pageControls("bottom"));
     body.setAttribute("role", "status");
     body.setAttribute("aria-live", "polite");
-    findNode = S.section("find", t("g_find"), null, f, Array.isArray(found) ? pageControls("top") : null, body, SahraBooking.guide());
+    findNode = S.section("find", t("g_find"), null, f, Array.isArray(found) && (pageIndex || nextFound) ? pageControls("top") : null, body, SahraBooking.guide());
     findNode.dataset.guestView=guestView;
     return findNode;
   }

@@ -1729,3 +1729,39 @@ layouts, formula-safe CSV and 24 Rejected/Undo-rejection navigation regressions,
 with no overflow/errors. SEO checks cover five public pages in EN/AR, thirteen
 private noindex pages, sitemap/robots, social image and no inline scripts. All
 browser ticket/staff mutations are stubbed; no live guests or email are changed.
+
+### Answer drilldowns and compact Requests controls (26 October 2026)
+
+Form insights now has Summary and People & records views. Owners/admins can
+inspect matching, non-matching and missing/unusable records for a selected form
+question. Eleven conditions cover numeric comparisons, inclusive ranges, exact
+text, contains, answered, missing and unusable numeric answers. Missing/invalid
+ages never silently become zero or a numeric non-match. Summary counts and
+answer rows open the corresponding drilldown. These are reports, not approval,
+rejection, admission or age-verification decisions.
+
+Reports can be scoped by ticket status (including rejected/cancelled), creation
+dates, ticket type, QR release and check-in state. Record lists add name/reference
+search, six stable sorts, 20-record cursor pages, current-page formula-safe CSV
+and links to existing guest records. Cohort totals cover the report scope; search
+narrows the selected list only. Group answers are not inherited. No photo data,
+QR tokens or email addresses are returned by this drilldown. Raw answers, text
+conditions and name searches stay out of page URLs and browser storage. The
+existing owner/admin-only endpoint retains SQL party/session guards. No migration
+or change to guest, payment, email or scanner actions.
+
+Requests now places its view, search, Dates, Filters and More actions in one
+responsive toolbar. CSV export, reject-old-requests and guidance move into More
+actions; the latter two open native dialogs. Existing destructive confirmation,
+retry and permission rules stay in place. Requests and Guests omit pagination
+cards for empty/single-page results, retaining arrows when more pages exist.
+Dates remain server queries across the full list and are also in Filters.
+
+Validation: TypeScript and 592 tests in 50 files. New API tests exercise cohorts,
+all condition kinds, filters, literal search, stable pagination under six sorts,
+validation, role/party isolation and read-only behavior. Browser fixtures cover
+12 EN/AR light/dark layouts at 390/768/1440px, plus 24 rejected/undo-rejection
+regressions and eight arrow/date/confirmation checks. All measured horizontal
+overflow is 0px, with no page errors. Empty Requests toolbar height: 58px desktop,
+115–117px tablet, 169–171px phone. Test records are fictional and all browser
+mutations are intercepted. No real email or guest changes.

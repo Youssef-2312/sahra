@@ -317,8 +317,10 @@
     var content = SahraStaff.workspace(app, "queue", me.staff.role);
     content.appendChild(el("header", { class: "staff-head" }, el("div", null,
       el("p", { class: "label-line", text: me.party.name }), el("h1", { text: t("q_title") }))));
-    content.appendChild(SahraStaff.viewPicker("requests-view",TABS.map(function(x){return [x[0],t(x[1])];}),tab,function(value){if(tab!==value){tab=value;filters.status=value;load(false);}}));
-    content.appendChild(SahraBooking.filters(Object.assign({},filters,{status:tab === "pending" ? "pending" : filters.status || "all"}), filterTypes, function (v) { filters = v; tab=v.status === "pending" ? "pending" : "all"; cashOnly = v.payment === "cash"; load(false); }, true, tab === "pending" ? "pending" : null));
+    var toolbar=SahraBooking.filters(Object.assign({},filters,{status:tab === "pending" ? "pending" : filters.status || "all"}),filterTypes,function(v){filters=v;tab=v.status === "pending" ? "pending" : "all";cashOnly=v.payment === "cash";load(false);},true,tab === "pending" ? "pending" : null);
+    toolbar.prepend(SahraStaff.viewPicker("requests-view",TABS.map(function(x){return [x[0],t(x[1])];}),tab,function(value){if(tab!==value){tab=value;filters.status=value;load(false);}}));
+    var menu=SahraStaff.select("request_actions",[["",t("fx_more_actions")],["export",t("fx_export")]].concat(tab === "pending"?[["stale",t("fx_old_requests")]]:[]).concat([["help",t("fx_help")]]),"");menu.className="s-view-select q-more-actions";menu.setAttribute("aria-label",t("fx_more_actions"));menu.addEventListener("change",function(){var action=menu.value;menu.value="";if(action === "export")exportCsv();else if(action === "stale"){var tool=staleTool();tool.open=true;SahraStaff.openPanel(t("fx_old_requests"),tool);}else if(action === "help"){var guide=SahraBooking.guide();guide.open=true;SahraStaff.openPanel(t("fx_help"),guide);}});toolbar.querySelector(".g-actions").appendChild(menu);
+    content.appendChild(toolbar);
     if (bulkNote) content.appendChild(el("p", { class: "notice " + bulkNote.cls, text: bulkNote.text }));
     if (failed) { content.appendChild(el("p", { class: "notice no", text: failed })); return; }
     if (!rows) { content.appendChild(el("p", { class: "muted", text: t("loading") })); return; }
@@ -327,7 +329,8 @@
         var search = content.querySelector('.bk-search input'); search.scrollIntoView({block:"center"}); search.focus({preventScroll:true});
       }, pageIndex, position);
     }
-    content.appendChild(pageControls("top"));
+    if(pageIndex || next)content.appendChild(pageControls("top"));
+    else if(rows.length)content.appendChild(el("p",{class:"small muted q-result-count",text:t("bf_page_count",{n:rows.length})}));
     if (!rows.length) content.appendChild(el("p", { class: "empty", text: cashOnly ? t("q_none_cash") : t("q_none") }));
     else {
       // The filter redraws only the list below it, so typing keeps its place.
@@ -336,10 +339,7 @@
       content.appendChild(list);
       fillList(list);
     }
-    content.appendChild(pageControls("bottom"));
-    content.appendChild(el("div", { class: "page-tools" },
-      el("div", { class: "stack buttons" }, el("button", { class: "btn", text: t("q_export"), attrs: { type: "button" }, on: { click: exportCsv } })),
-      tab === "pending" ? staleTool() : null, SahraBooking.guide()));
+    if(pageIndex || next)content.appendChild(pageControls("bottom"));
     var bar = bulkbar();
     if (bar) content.appendChild(bar);
   }
@@ -379,10 +379,13 @@
       el("div", { class: "s-save" }, el("button", { class: "btn no small-btn", text: t("q_stale_go"), attrs: { type: "submit", disabled: busy } }), box));
     f.addEventListener("submit", async function (e) {
       e.preventDefault();
+      if(busy)return;
       var hours = Number(f.elements.hours.value), reason = f.elements.reason.value.trim();
       if (!(hours >= 1 && hours <= 720) || !reason) { SahraStaff.say(box, "no", t("q_stale_needed")); return; }
       if (!(await Sahra.confirm(t("q_stale_confirm", { h: hours }), { danger: true }))) return;
+      if(busy)return;
       busy = true;
+      var submit=f.querySelector('button[type=submit]');submit.disabled=true;
       var total = 0, r;
       for (var round = 0; round < 100; round++) {
         r = await post("/api/tickets/reject-stale", { hours: hours, reason: reason });
@@ -392,7 +395,7 @@
       }
       busy = false;
       stale.note = r.ok ? ["yes", SahraStaff.tn("q_stale_done", total)] : ["no", SahraStaff.why(r) + (total ? " " + SahraStaff.tn("q_stale_done", total) : "")];
-      stale.open = true;
+      stale.open = true;submit.disabled=false;SahraStaff.say(box,stale.note[0],stale.note[1]);
       await load(false);
     });
     var d = el("details", { class: "card q-stale" }, el("summary", { text: t("q_stale") }), el("p", { class: "small muted", text: t("q_stale_p") }), f);

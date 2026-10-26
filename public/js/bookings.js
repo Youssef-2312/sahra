@@ -152,11 +152,11 @@
     choices.push(["date_from", "bf_from_date", []], ["date_to", "bf_to_date", []]);
     var active = choices.filter(function (x) { return values[x[0]] && values[x[0]] !== "all" && !(x[0] === "status" && values.status === defaultStatus); });
     var search = S.input("q", "search", { maxlength: 80, value: values.q || "", placeholder: t("bf_search"), autocomplete: "off", enterkeyhint: "search" });
-    var bar = el("div", { class: "bk-filterbar" }, dateFilters(values, apply));
+    var bar = el("div", { class: "bk-filterbar" });
     var form = el("form", { class: "bk-search", attrs: { role: "search" } }, search,
       el("button", { class: "btn primary", text: t("g_search"), attrs: { type: "submit" } }));
     form.addEventListener("submit", function (e) { e.preventDefault(); apply(Object.assign({}, values, { q: search.value.trim() })); });
-    function sheet() {
+    function sheet(focusName) {
       var previous = document.activeElement;
       var fields = choices.map(function (x) { return S.field(t(x[1]), x[0].indexOf("date_") === 0 ? S.input(x[0], "date", { value: values[x[0]] || "", min:"1970-01-01", max:"9999-12-31" }) : S.select(x[0], [["",t("bf_all")]].concat(x[2]), values[x[0]] === "all" ? "" : values[x[0]])); });
       var f = el("form", { attrs: { method: "dialog" } },
@@ -177,9 +177,10 @@
       });
       f.addEventListener("input", function () { f.elements.date_to.setCustomValidity(""); });
       dialog.addEventListener("cancel", function (e) { e.preventDefault(); close(); });
-      document.body.appendChild(dialog); dialog.showModal(); f.querySelector("select").focus();
+      document.body.appendChild(dialog); dialog.showModal(); (typeof focusName === "string" && f.elements[focusName] || f.querySelector("select")).focus();
     }
     bar.append(form, el("div", { class: "g-actions" },
+      el("button",{class:"btn bk-date-shortcut",text:t("bf_dates"),attrs:{type:"button"},on:{click:function(){sheet("date_from");}}}),
       el("button", { class: "btn", text: t("bf_filters") + (active.length ? " · " + active.length : ""), attrs: { type: "button" }, on: { click: sheet } }),
       el("button", { class: "btn", text: t("bf_reset"), attrs: { type: "button", disabled: !active.length && !values.q }, on: { click: function () { apply(withStatus ? {status:"all"} : {}); } } })));
     if (active.length) bar.appendChild(el("div", { class: "bk-filter-chips" }, active.map(function (x) {
