@@ -296,3 +296,11 @@ Requests uses one toolbar and More actions for CSV, stale-request rejection and
 guidance. Native dialogs retain destructive confirmation. Empty/single-page
 Requests/Guests lists have no redundant pagination cards; multipage arrows and
 full-list server date filters remain. Keep 44px controls and EN/AR/RTL themes.
+
+### Staff toolbar alignment (26 October 2026)
+
+Shared list controls reset inherited margins and use 44px height. Requests/Guests
+and Emails align controls on desktop and wrap on smaller widths. Emails uses a
+status dropdown and Dates dialog; search still covers loaded rows only. Preserve
+server date/status queries and the existing bulk-email warnings/scope. No server
+changes or migrations; suite remains 592 tests.

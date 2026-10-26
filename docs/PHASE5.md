@@ -1765,3 +1765,18 @@ regressions and eight arrow/date/confirmation checks. All measured horizontal
 overflow is 0px, with no page errors. Empty Requests toolbar height: 58px desktop,
 115–117px tablet, 169–171px phone. Test records are fictional and all browser
 mutations are intercepted. No real email or guest changes.
+
+### Align list toolbars across staff pages (26 October 2026)
+
+Removed inherited action-group top margins and standardized list-toolbar search,
+buttons and selectors to 44px with common vertical alignment. Requests and Guests
+share the fix. Emails now uses the same toolbar for its status dropdown, existing
+loaded-email search and Dates dialog. Email search still searches loaded rows;
+status/date selection remains a server query and bulk-email scope is unchanged.
+Desktop controls share a single row, tablet/phone controls wrap without overflow.
+
+Validation: TypeScript and 592 tests; 48 browser fixtures across Requests, Guests
+and Emails, EN/AR, light/dark and 390/768/1024/1440px. All visible toolbar controls
+measure 44px; desktop y positions are equal, horizontal overflow is 0px and no
+page errors occurred. Separate email fixtures verify search, status/date query
+parameters and zero mutations. No server changes or migrations.
