@@ -267,6 +267,8 @@ var SahraStaff = (function () {
     return t(k, Object.assign({ n: n }, vars || {}));
   }
 
+  function openPanel(title,body){var previous=document.activeElement,id="panel-"+Math.random().toString(36).slice(2),dialog=el("dialog",{class:"bk-filter-sheet s-panel-dialog",attrs:{"aria-labelledby":id}},el("div",{class:"s-panel-heading"},el("h2",{text:title,attrs:{id:id}}),el("button",{class:"btn small-btn",text:t("bf_close"),attrs:{type:"button"},on:{click:function(){dialog.close();}}})),body);dialog.addEventListener("close",function(){dialog.remove();if(previous&&previous.isConnected)previous.focus();});document.body.appendChild(dialog);dialog.showModal();dialog.querySelector("button").focus();return dialog;}
+
   function viewPicker(id, choices, value, change) {
     var control=select(id,choices,value);control.id=id;control.className="s-view-select";
     control.setAttribute("aria-label",t("fi_page_view"));
@@ -277,6 +279,6 @@ var SahraStaff = (function () {
   /** A button that copies a text and says so. */
   function copyButton(text, label) { return Sahra.copyButton(text, label || t("s_copy")); }
 
-  return { viewPicker:viewPicker, start: start, act: act, field: field, input: input, select: select, check: check, section: section,
+  return { openPanel:openPanel, viewPicker:viewPicker, start: start, act: act, field: field, input: input, select: select, check: check, section: section,
     say: say, sayMs: sayMs, sayBox: sayBox, why: why, local: local, copyButton: copyButton, sleep: sleep, nav: nav, workspace: workspace, redraw: redraw, tn: tn, icon: icon };
 })();

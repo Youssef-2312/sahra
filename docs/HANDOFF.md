@@ -281,3 +281,18 @@ permissions. SEO indexes only public marketing/legal pages; private ticket and
 staff pages remain noindex. See DOMAIN.md for the owner's planned domain purchase
 and EGP 1,078.00 quoted two-item subtotal. Do not change canonical/PUBLIC_ORIGIN
 or buy anything until the owner actually owns and connects the domain.
+
+### Answer drilldowns and Requests toolbar (26 October 2026)
+
+Form insights > People & records lists matches/non-matches/unknowns for eleven
+answer conditions, with report filters, six sorts, private in-memory search,
+20-record pages and current-page CSV. Missing/unusable ages stay separate from
+numeric non-matches. Counts are report-scoped; search narrows only the list.
+Do not inherit answers across group members or treat a report as age verification.
+The existing endpoint remains read-only owner/admin with party/session SQL guards.
+No migration. Required suite: 592 tests in 50 files plus TypeScript.
+
+Requests uses one toolbar and More actions for CSV, stale-request rejection and
+guidance. Native dialogs retain destructive confirmation. Empty/single-page
+Requests/Guests lists have no redundant pagination cards; multipage arrows and
+full-list server date filters remain. Keep 44px controls and EN/AR/RTL themes.
