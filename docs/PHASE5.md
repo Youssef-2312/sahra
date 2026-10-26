@@ -1780,3 +1780,32 @@ and Emails, EN/AR, light/dark and 390/768/1024/1440px. All visible toolbar contr
 measure 44px; desktop y positions are equal, horizontal overflow is 0px and no
 page errors occurred. Separate email fixtures verify search, status/date query
 parameters and zero mutations. No server changes or migrations.
+
+### Written-age reports and numbered guest names (26 October 2026)
+
+Form insights has an Approved guests aged 18 or older shortcut. Select the age
+question first; the shortcut sets approved scope, age-at-least 18, matching group
+and name sorting, retaining other visible report filters. The new age condition
+recognizes a single plain age or common English/Arabic prefixes/suffixes, with
+Arabic/Persian digit normalization. It accepts ages 0–120 and does not turn birth
+years, multiple ages, arbitrary embedded digits or unclear text into a match.
+Unsupported/missing answers stay unknown. Strict numeric summaries and existing
+text conditions remain unchanged. Answers are self-reported, not verification;
+answers are never inherited across group members.
+
+People & records now numbers names across pages. Copy all names in this group
+keeps the selected conditions, filters, search and sort. It walks server cursor pages, deduplicates ticket IDs and copies
+only after completion. A failed page or repeated cursor never copies a partial
+list; changing the report cancels the copy. Raw names/answers remain in memory,
+not URL/storage. Existing per-page formula-safe CSV remains available. No new
+endpoint or migration; the same SQL party/session and owner/admin guards apply.
+Written-age CTEs are materialized only for this condition to prevent SQLite
+expression expansion; ordinary reports retain their existing query path.
+
+Validation: TypeScript and 593 tests in 50 files. API cases cover written ages,
+Arabic/Persian digits, ambiguous text/birth years, threshold bounds and unchanged
+strict reports. Twelve browser fixtures cover EN/AR, light/dark and 390/768/1440px:
+shortcut parameters, numbered page/full-group copying, cursor pages, safe CSV,
+unknown groups, 0px overflow and no page errors. A later-page failure fixture
+confirms no partial clipboard write and retry availability. No live guests,
+admission settings or email are changed.

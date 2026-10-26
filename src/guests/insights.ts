@@ -16,8 +16,18 @@ function normalized(){
   for(const alphabet of digits)for(let i=0;i<10;i++)value=`replace(${value},'${alphabet[i]}','${i}')`;
   return raw(`replace(${value},'٫','.')`);
 }
+// Recognize a single written age, not arbitrary embedded digits or birth years.
+function ageAffix(column:string,parts:string[],prefix:boolean){
+ const cases=parts.map(part=>{const literal="'"+part.replace(/'/g,"''")+"'";return prefix?`WHEN substr(${column},1,${part.length})=${literal} THEN trim(substr(${column},${part.length+1}))`:`WHEN substr(${column},-${part.length})=${literal} THEN trim(substr(${column},1,length(${column})-${part.length}))`;});
+ return raw(`CASE ${cases.join(' ')} ELSE ${column} END`);
+}
+function ageSource(){return sql`, age_normalized AS MATERIALIZED (SELECT * FROM classified),
+  age_prefix AS MATERIALIZED (SELECT *,${ageAffix('lower(number_text)',["age:","age ","i am ","i'm ","عمري ","العمر:","العمر "],true)} AS age_body FROM age_normalized),
+  age_suffix AS MATERIALIZED (SELECT *,${ageAffix('age_body',['years old','year old','yrs old','years','year','yrs','y/o','yo','عامًا','عاما','عام','سنة','سنوات','سنه'],false)} AS age_text FROM age_prefix),
+  age_values AS MATERIALIZED (SELECT *,CASE WHEN age_text GLOB '*[0-9]*' AND age_text NOT GLOB '*[^0-9.]*' AND age_text NOT LIKE '%.%.%'
+    AND CAST(age_text AS REAL) BETWEEN 0 AND 120 THEN CAST(age_text AS REAL) END AS age_value FROM age_suffix)`;}
 export interface InsightFilters {type?:string;delivery?:string;entry?:string}
-export const INSIGHT_OPERATORS=new Set(['below','at_most','equal','at_least','above','between','text_equal','contains','answered','missing','non_numeric']);
+export const INSIGHT_OPERATORS=new Set(['below','at_most','equal','at_least','above','between','text_equal','contains','answered','missing','non_numeric','age_at_least']);
 export const INSIGHT_GROUPS=new Set(['matching','non_matching','unknown','all']);
 export const INSIGHT_SORTS=new Set(['newest','oldest','name','answer','number_asc','number_desc']);
 export interface RecordSelection extends InsightFilters {operator:string;group:string;sort:string;value:string;upper:number;after?:string;q:string}
@@ -59,6 +69,7 @@ export async function formInsights(driver:SqlDriver,sess:SessionRef,now:number,q
 
 function criterion(operator:string,value:string,cutoff:number,upper:number):{match:Sql;known:Sql}{
  const answered=sql`answer IS NOT NULL AND answer!=''`,numeric=sql`number_value IS NOT NULL`;
+ if(operator==='age_at_least')return {match:sql`age_value>=${cutoff}`,known:sql`age_value IS NOT NULL`};
  if(operator==='answered')return {match:answered,known:sql`1`};
  if(operator==='missing')return {match:sql`NOT (${answered})`,known:sql`1`};
  if(operator==='non_numeric')return {match:sql`number_value IS NULL AND ${answered}`,known:answered};
@@ -70,7 +81,8 @@ function criterion(operator:string,value:string,cutoff:number,upper:number):{mat
 /** Match/non-match never silently classifies missing or invalid ages. */
 export async function insightRecords(driver:SqlDriver,sess:SessionRef,now:number,question:string,scope:string,cutoff:number,range:DateRange,selection:RecordSelection){
  const c=criterion(selection.operator,selection.value,cutoff,selection.upper),source=insightSource(sess,now,question,scope,range,selection);
- const classified=sql`${source}, cohorts AS (SELECT *,CASE WHEN NOT (${c.known}) THEN 'unknown' WHEN ${c.match} THEN 'matching' ELSE 'non_matching' END AS cohort FROM classified)`;
+ const age=selection.operator==='age_at_least';
+ const classified=sql`${source}${age?ageSource():sql``}, cohorts AS (SELECT *,CASE WHEN NOT (${c.known}) THEN 'unknown' WHEN ${c.match} THEN 'matching' ELSE 'non_matching' END AS cohort FROM ${raw(age?'age_values':'classified')})`;
  const like='%'+selection.q.replace(/[\\%_]/g,'\\$&')+'%',ref=/^SAH-([0-9A-Z]{1,16})$/i.exec(selection.q);
  const search=!selection.q?sql``:ref?sql`AND id LIKE ${ref[1]!.toUpperCase()+'%'}`:sql`AND (guest_name LIKE ${like} ESCAPE '\\' OR id LIKE ${like} ESCAPE '\\')`;
  const orders:Record<string,string>={newest:'created_at DESC,id DESC',oldest:'created_at,id',name:"COALESCE(guest_name,'') COLLATE NOCASE,id",answer:"COALESCE(answer,'') COLLATE NOCASE,id",number_asc:'number_value IS NULL,number_value,id',number_desc:'number_value IS NULL,number_value DESC,id'};
