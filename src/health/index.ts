@@ -1,5 +1,5 @@
-// Unattended health checks (workstream F). The once-a-minute cron (src/index.ts)
-// runs them every 15 minutes, in their own waitUntil so the email sender is not
+// Unattended health checks (workstream F). The 30-minute cron (src/index.ts)
+// runs them every 30 minutes, in their own waitUntil so the email sender is not
 // slowed down, and never while MAINTENANCE is "1" (a controlled recovery).
 //
 // One run:
@@ -51,8 +51,8 @@ const MIN = 60_000;
 const HOUR = 3600_000;
 
 export const HEALTH = {
-  /** The cron runs every minute; the checks run on minutes divisible by this. */
-  everyMinutes: 15,
+  /** The 30-minute cron runs checks when the scheduled time aligns with this interval. */
+  everyMinutes: 30,
   /** A run that has not finished by then is taken over by a later one. */
   leaseMs: 10 * MIN,
   /** At most one alert per problem in this time. */
@@ -159,7 +159,7 @@ interface CheckRow {
   alerted_at: number | null;
 }
 
-/** True on the cron minutes the checks run (every 15 minutes). */
+/** True when the cron scheduled time aligns with the 30-minute health interval. */
 export function isHealthMinute(scheduledTime: number): boolean {
   return Math.floor(scheduledTime / MIN) % HEALTH.everyMinutes === 0;
 }

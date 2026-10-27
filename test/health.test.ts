@@ -337,15 +337,15 @@ describe("health checks", () => {
     const cron = async (t: number, e: typeof env) => {
       logs = [];
       const ctx = createExecutionContext();
-      worker.scheduled(createScheduledController({ scheduledTime: t, cron: "* * * * *" }), e, ctx);
+      worker.scheduled(createScheduledController({ scheduledTime: t, cron: "*/30 * * * *" }), e, ctx);
       await waitOnExecutionContext(ctx);
       return logs.some((l) => l.startsWith('{"evt":"health"'));
     };
-    const quarter = Date.UTC(2026, 9, 1, 18, 15);
-    expect(await cron(quarter, { ...env, MAINTENANCE: "1" })).toBe(false);
+    const halfHour = Date.UTC(2026, 9, 1, 18, 30);
+    expect(await cron(halfHour, { ...env, MAINTENANCE: "1" })).toBe(false);
     expect(await env.DB.prepare("SELECT * FROM health_state").first()).toEqual(before);
-    expect(await cron(quarter + 60_000, env)).toBe(false);
-    expect(await cron(quarter, env)).toBe(true);
+    expect(await cron(halfHour + 60_000, env)).toBe(false);
+    expect(await cron(halfHour, env)).toBe(true);
   });
 
   it("the site owner page: checks, alerts, usage, limits; read-only; site owners only", async () => {

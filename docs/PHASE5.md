@@ -1809,3 +1809,20 @@ shortcut parameters, numbered page/full-group copying, cursor pages, safe CSV,
 unknown groups, 0px overflow and no page errors. A later-page failure fixture
 confirms no partial clipboard write and retry availability. No live guests,
 admission settings or email are changed.
+
+
+### Reduce scheduled D1 work and allow manual sending (27 October 2026)
+
+Production cron now runs at minutes 0 and 30 each hour. Emails > Send now invokes
+the same sender for approved, due rows. It retains provider caps, retry handling,
+atomic claims, owner/admin authorization, CSRF and per-staff rate limits. The
+sender can still be delayed by the D1 daily read cap; manual trigger does not
+bypass it. Queued emails normally wait up to 30 minutes. Health checks also run
+every 30 minutes. Staging config mirrors the cadence if that Worker is recreated.
+
+
+Public caching in response to D1 pressure uses Cloudflare's per-location Cache API
+for `/api/guest/parties` only, keyed by its fixed public URL and capped at 30 seconds.
+It contains aggregate public party cards, never tickets, names, answers, forms or
+staff data. On cache failure the request falls back to the existing 60-second
+isolate cache and D1; party state can therefore be briefly stale.

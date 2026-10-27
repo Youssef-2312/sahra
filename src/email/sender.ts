@@ -1,4 +1,4 @@
-// The outbox sender, run by the once-a-minute cron (src/index.ts `scheduled`).
+// The outbox sender, run by the 30-minute cron (src/index.ts `scheduled`).
 //
 // One run:
 //   1. No provider configured: return without touching the database.
@@ -29,11 +29,11 @@ import { PROVIDER_NAMES, type Provider, type ProviderName, type SendResult } fro
 import { SmtpProvider, type Connect } from "./smtp";
 
 export const EMAIL = {
-  /** Emails per run (a run is once a minute; Workers Free allows 10 ms CPU per invocation). */
+  /** Emails per run (a run is scheduled every 30 minutes; Workers Free allows 10 ms CPU per invocation). */
   batch: 3,
   /** Rolling 24-hour caps, below the providers' own (Gmail about 500 per account, Brevo free 300). */
   dayCap: { gmail: 450, gmail2: 450, gmail3: 450, brevo: 280 } as Record<ProviderName, number>,
-  /** Per-minute caps (each run sends at most `batch`; these bound overlapping runs). */
+  /** Short-window caps (each run sends at most `batch`; these bound overlapping runs). */
   minuteCap: { gmail: 10, gmail2: 10, gmail3: 10, brevo: 10 } as Record<ProviderName, number>,
   /** A claimed row not finished by then is reclaimed by a later run. */
   claimTimeoutMs: 10 * 60_000,

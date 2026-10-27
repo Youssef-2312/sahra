@@ -6,6 +6,8 @@ export interface Env {
   RL_AUTH?: RateLimit;
   RL_SCAN?: RateLimit;
   PUBLIC_ORIGIN: string;
+  /** Enables a 30-second edge cache for the public homepage party list only. */
+  EDGE_CACHE_PUBLIC?: string;
   GOOGLE_CLIENT_ID: string;
   GOOGLE_CLIENT_SECRET?: string;
   /** "1" only on staging: enables src/routes/testing.ts. */

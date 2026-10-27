@@ -147,7 +147,7 @@ design is the next phase.
   released and not on hold), "resend my ticket link" (same answer whether or not
   the email exists), guest list export (CSV built in the browser).
 - **D. Email outbox:** rows are added in the same batch as the change that causes
-  them; a once-a-minute cron sends a few at a time. Provider order: the platform's
+  them; a 30-minute cron sends a few at a time; an owner/admin can also run Send now from Emails. Provider order: the platform's
   own Gmail over SMTP (app password, Cloudflare secret), Brevo as fallback. Daily
   and per-minute caps, retries with backoff, overlapping runs never send one row
   twice. No real email has been sent; it needs the owner's approval of a test send.
@@ -157,7 +157,7 @@ design is the next phase.
   size and SHA-256, alerts on failure, retention policy. Session tables and email
   bodies are excluded. A restore drill loads a backup into fresh local databases
   and proves identical rows and byte-identical screenshots, then replays.
-- **F. Health checks and limits:** every 15 minutes: admissions without a ledger
+- **F. Health checks and limits:** every 30 minutes: admissions without a ledger
   record, change-log entries stuck pending, outbox failures, database size over
   70%, backup older than 26 h, daily write estimate over 50%. Alerts go to every
   site owner by email and to a Discord channel (webhook URL is a Cloudflare secret),

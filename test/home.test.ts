@@ -8,7 +8,7 @@ beforeEach(() => clearPartyListCache());
 
 async function list(h: Awaited<ReturnType<typeof harness>>) {
   const r = await h.req("/api/guest/parties");
-  expect(r.headers.get("cache-control")).toBe("public, max-age=60");
+  expect(r.headers.get("cache-control")).toBe("public, max-age=30");
   return ((await r.json()) as { parties: { id: string; name: string; state: string; from_price: number | null; price_count: number; places_left: number }[] }).parties;
 }
 

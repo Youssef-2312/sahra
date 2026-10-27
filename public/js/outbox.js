@@ -12,7 +12,7 @@
   var dates = {}, loadSeq = 0, loading = false;
   var initialDates = new URLSearchParams(location.search);
   ["date_from","date_to"].forEach(function(k){if(initialDates.has(k))dates[k]=initialDates.get(k);});
-  var tab = null, rows = null, next = null, failed = null, awaiting = null, note = null, busy = false;
+  var tab = null, rows = null, next = null, failed = null, awaiting = null, note = null, busy = false, sending = false;
 
   function pill(status) {
     var cls = status === "sent" ? "yes" : status === "failed" || status === "cancelled" ? "no" : "maybe";
@@ -84,6 +84,11 @@
     list.appendChild(el("ul", { class: "o-list" }, shown.map(rowCard)));
   }
 
+  async function sendNow(button){if(sending)return;sending=true;button.disabled=true;button.textContent=t("o_sending_now");
+    var r=await Sahra.api.post("/api/outbox/send-now",{});sending=false;
+    if(!r.ok){note=["no",S.why(r)];}else{var b=r.body;note=["yes",t("o_send_now_result",{sent:b.sent||0,failed:b.failed||0,retry:b.retry||0,skipped:b.skipped?t("o_send_skip_"+b.skipped):""})];}
+    await count();await load(false);
+  }
   function render(me, app) {
     if (tab === null) { app.appendChild(el("p", { class: "muted", text: t("loading") })); return; }
     if (awaiting && awaiting.n > 0) {
@@ -123,6 +128,7 @@
   var first = true;
   SahraStaff.start({
     page: "outbox", title: "o_title", lede: "o_lede",
+    actions:function(){return el("button",{class:"btn primary",text:t("o_send_now"),attrs:{type:"button",disabled:sending},on:{click:function(e){sendNow(e.currentTarget);}}});},
     render: function (me, app) {
       render(me, app);
       if (!first) return;
