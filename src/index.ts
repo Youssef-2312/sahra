@@ -17,8 +17,8 @@ await warmUp(app, resetRequestCounters);
 
 export default {
   fetch: (req: Request, env: Env, ctx: ExecutionContext) => app.fetch(req, env, ctx),
-  // Once a minute: send a few due outbox emails (src/email/sender.ts). Every 15
-  // minutes, separately: the health checks (src/health/).
+  // Every 30 minutes: send due outbox emails and run health checks. The Emails
+  // page can also trigger the same guarded sender immediately.
   scheduled: (ctrl: ScheduledController, env: Env, ctx: ExecutionContext) => {
     // A controlled recovery is running (scripts/recover.mjs): no database writes.
     if (env.MAINTENANCE === "1") return;

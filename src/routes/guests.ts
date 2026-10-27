@@ -158,6 +158,13 @@ function turnstileAnswer(c: Ctx, r: "failed" | "not_configured" | "unavailable")
 let listCache: { at: number; body: unknown } | null = null;
 const LIST_TTL_MS = 60_000;
 guestRoutes.get("/parties", async (c) => {
+  // Edge cache contains only this public, aggregate party listing. Private ticket,
+  // form submission, staff and outbox responses never use shared cache.
+  const edge = c.env.EDGE_CACHE_PUBLIC === "1" ? caches.default : null;
+  const edgeKey = new Request(new URL("/api/guest/parties", c.env.PUBLIC_ORIGIN));
+  if (edge) {
+    try { const cached=await edge.match(edgeKey); if(cached)return cached; } catch { /* bypass a transient cache failure */ }
+  }
   const now = c.var.deps.now();
   if (!listCache || now - listCache.at >= LIST_TTL_MS || now < listCache.at) {
     const rows = await new GuestDb(c.var.db.driver).listedParties(now);
@@ -175,7 +182,8 @@ guestRoutes.get("/parties", async (c) => {
     }) } };
   }
   const res = json(c, 200, listCache.body);
-  res.headers.set("cache-control", "public, max-age=60");
+  res.headers.set("cache-control", "public, max-age=30");
+  if(edge){try{c.executionCtx.waitUntil(edge.put(edgeKey,res.clone()).catch(()=>undefined));}catch{/* the live response does not depend on cache storage */}}
   return res;
 });
 

@@ -314,3 +314,18 @@ not verification. Strict numeric summaries remain unchanged. People lists are
 numbered across pages; copy-all walks the selected group's cursor pages and does
 not copy partial results on failure. No raw names/answers in URL or browser
 storage, no new endpoint/migration. Suite: 593 tests in 50 files plus TypeScript.
+
+
+### Cron and manual email run (27 October 2026)
+
+Worker triggers use `*/30 * * * *`. Emails has Send now; it runs the regular
+provider with existing owner/admin, CSRF, rate limits, atomic claims and quotas.
+Only already approved, due rows are eligible. Scheduled health checks share the
+30-minute cadence. D1 exhaustion still blocks the sender and requests until quota
+reset; Send now does not bypass D1 limits.
+
+
+The Cloudflare Cache API is enabled only for the public home party listing, with
+a 30-second edge TTL; it contains no ticket or staff data. Cache failures bypass
+the edge cache. Do not extend shared caching to authenticated or guest-specific
+responses without designing their cache keys, invalidation and privacy guarantees.

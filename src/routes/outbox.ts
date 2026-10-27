@@ -1,13 +1,15 @@
 import { parseDateRange } from "../lib/date-range";
 // The party's email outbox (owner or admin; door staff get 403): list, approve
-// rows awaiting approval ("message all guests"), cancel unsent rows. Sending is
-// the cron's job (src/email/sender.ts).
+// rows awaiting approval ("message all guests"), cancel unsent rows, or send approved due rows immediately.
 
 import { Hono } from "hono/tiny";
 import { json, readJson, requireAuth, type AppEnv, type Ctx } from "../context";
 import { OUTBOX_BULK_MAX, OutboxAdmin, type Cursor, type Selection } from "../email/admin";
 import { isBase32, isUuid } from "../lib/crypto";
 import { chargeStaff } from "../limits";
+import { scheduledSend } from "../email/sender";
+import { cfConnect } from "../email/socket";
+import { rateLimited } from "../lib/http";
 
 export const outboxRoutes = new Hono<AppEnv>();
 
@@ -75,4 +77,13 @@ outboxRoutes.post("/:id/approve", requireAuth(["owner", "admin"]), async (c) => 
 outboxRoutes.post("/:id/cancel", requireAuth(["owner", "admin"]), async (c) => {
   const id = c.req.param("id");
   return change(c, "cancel", isOutboxId(id) ? { ids: [id] } : null);
+});
+
+// Manually run the same safe sender as the scheduled trigger. Only rows already
+// approved and due are eligible; provider caps, retries and atomic claims apply.
+outboxRoutes.post("/send-now", requireAuth(["owner", "admin"]), async (c) => {
+  const staffId=c.var.auth.info.staff_id;
+  if(await rateLimited(c.env.RL_AUTH,`outbox-send-now:${staffId}`))return json(c,429,{error:"rate_limited"});
+  const report=await scheduledSend(c.env,c.var.db.driver,{now:()=>c.var.deps.now(),random:Math.random,connect:cfConnect,fetch:c.var.deps.fetch});
+  return json(c,200,{status:"complete",...report});
 });

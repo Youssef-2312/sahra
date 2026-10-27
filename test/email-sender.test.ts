@@ -66,7 +66,7 @@ describe("email sender", () => {
     const spy = vi.spyOn(console, "log").mockImplementation((...a: unknown[]) => { logs.push(String(a[0])); });
     const worker = (await import("../src/index")).default;
     const ctx = createExecutionContext();
-    worker.scheduled(createScheduledController({ scheduledTime: clock.now(), cron: "* * * * *" }), env, ctx);
+    worker.scheduled(createScheduledController({ scheduledTime: clock.now(), cron: "*/30 * * * *" }), env, ctx);
     await waitOnExecutionContext(ctx);
     spy.mockRestore();
     const line = logs.map((l) => { try { return JSON.parse(l); } catch { return null; } }).find((l) => l?.evt === "email_run");

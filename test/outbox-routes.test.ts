@@ -34,6 +34,17 @@ async function add(h: Harness, party: string, n: number, needsApproval: boolean)
 const status = async (id: string) => (await env.DB.prepare("SELECT status FROM outbox WHERE id = ?").bind(id).first("status")) as string;
 
 describe("outbox endpoints", () => {
+  it("allows managers to manually run the sender, but not door staff or signed-out users", async () => {
+    const {h,party,os}=await setup();
+    const r=await h.req("/api/outbox/send-now",api(os,{}));
+    expect(r.status).toBe(200);
+    const result=await r.json() as {status:string;sent:number;claimed:number};
+    expect(result.status).toBe("complete");expect(result.sent).toBe(0);expect(result.claimed).toBe(0);
+    const door=await seedDoor(party,h.clock);
+    expect((await h.req("/api/outbox/send-now",api(door,{}))).status).toBe(403);
+    expect((await h.req("/api/outbox/send-now",{method:"POST",body:"{}",headers:{origin:"https://sahra.test","content-type":"application/json"}})).status).toBe(401);
+  });
+
   it("lists the party's outbox newest first, paged, filtered by status", async () => {
     const { h, party, os } = await setup();
     const other = await seedParty();

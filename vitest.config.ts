@@ -25,6 +25,7 @@ export default defineConfig(async () => {
             TEST_STAGING_LEDGER: stagingLedger,
             TEST_FILES_MIGRATIONS: filesMigrations,
             PUBLIC_ORIGIN: "https://sahra.test",
+            EDGE_CACHE_PUBLIC: "0",
             GOOGLE_CLIENT_ID: "test-client.apps.googleusercontent.com",
             GOOGLE_CLIENT_SECRET: "test-client-secret",
             // Test-only master secrets; real ones are Cloudflare secrets.
