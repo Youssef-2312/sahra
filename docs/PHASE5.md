@@ -1826,3 +1826,37 @@ for `/api/guest/parties` only, keyed by its fixed public URL and capped at 30 se
 It contains aggregate public party cards, never tickets, names, answers, forms or
 staff data. On cache failure the request falls back to the existing 60-second
 isolate cache and D1; party state can therefore be briefly stale.
+
+### D1 read savings after the daily read allowance ran out (27 October 2026)
+
+Measured locally on a party with 574 tickets (rows read per request, D1 meta):
+
+| Request | Before | After |
+|---|---|---|
+| Dashboard / Guests statistics (`/api/party/stats`) | 2,935 | 638 (one read per ticket) |
+| Requests / Guests list page (pending / approved / all) | 2,154 / 2,446 / ~2,500 | ~405 per page (with migration 0031) |
+| Guest search | 2,252 | ~1,180 |
+| Public party page | 551 | 551, then edge-cached for 20 s |
+
+- Statistics: one pass over the party's tickets, counted in the Worker, replaces four
+  SQL scans (one with a type lookup per ticket). Same answer (compared field by field).
+- Background refreshes (`?auto=1`) share one statistics answer per party for 15 s in an
+  isolate. Dashboard and Guests stop refreshing after 15 minutes without a pointer, key,
+  touch or scroll, and refresh at once on the next action. An idle tab left open no
+  longer reads all day (one such tab could read about 4 million rows a day before).
+- Lists and search choose their page first, then compute per-row extras for that page.
+  Booking summaries use two indexed lookups (UNION ALL) instead of an OR that read the
+  whole party; the "all statuses" view no longer has a condition that blocked the index.
+- Migration **0031_ticket_list_indexes.sql** rebuilds tickets_party_status with the list
+  order (party_id, status, created_at, id, people). Same number of indexes, so no extra
+  rows written per ticket (the load-test write figures are unchanged); the code works
+  before and after it is applied.
+- Public party page: Cloudflare edge cache, 20 s (public data only). The sign-up
+  INSERT still checks places live, so a cached count never oversells.
+- The scheduled job (48 runs a day) reads about 800 rows per run, about 1,250 with the
+  daily cleanup: under 60,000 a day.
+
+Writes per guest are unchanged: sign-up 6 + 1 ledger, approve 4 + 1, send QR 7 + 1,
+door scan 2 + 1 (marking the ticket used is the double-use protection). The existing
+write guard pauses non-essential writes at 50,000 estimated rows, keeping the rest for
+sign-ups, approvals and the door. TypeScript and all 596 tests pass.

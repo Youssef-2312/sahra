@@ -74,6 +74,10 @@ export const isPackage = (tt: string) => raw(`(${tt}.min_people > 1 AND ${tt}.mi
 export const ticketTotal = (t: string) => raw(`(COALESCE(${t}.price, 0) * CASE WHEN ${t}.split_group_size IS NOT NULL THEN 1 WHEN EXISTS (SELECT 1 FROM ticket_types pk
   WHERE pk.id = ${t}.type_id AND pk.min_people > 1 AND pk.min_people = pk.max_people) THEN 1 ELSE ${t}.people END)`);
 
+/** ticketTotal for a query that already joins the ticket's type as `ty` (no lookup per ticket). */
+export const ticketTotalJoined = (t: string, ty: string) => raw(`(COALESCE(${t}.price, 0) * CASE WHEN ${t}.split_group_size IS NOT NULL THEN 1
+  WHEN ${ty}.min_people > 1 AND ${ty}.min_people = ${ty}.max_people THEN 1 ELSE ${t}.people END)`);
+
 export const TYPE_FIELDS = [
   "name", "description", "price", "quantity", "sales_opens_at", "sales_closes_at", "entry_from", "staff_only",
   "payment_instructions", "sort", "min_people", "max_people", "individual_tickets", "wave_mode", "wave_after_id", "wave_after_sales",

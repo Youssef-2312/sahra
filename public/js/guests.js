@@ -606,8 +606,8 @@
     app.appendChild(list);app.appendChild(tools);showGuestView();
   }
 
-  async function loadStats() {
-    var r = await Sahra.api.get("/api/party/stats");
+  async function loadStats(auto) {
+    var r = await Sahra.api.get("/api/party/stats" + (auto === true ? "?auto=1" : ""));
     if (!r.ok) return;
     stats = r.body;
     if (tilesNode && tilesNode.parentNode) { var n = tiles(); tilesNode.parentNode.replaceChild(n, tilesNode); tilesNode = n; }
@@ -640,7 +640,8 @@
           if (finder && finder.scrollIntoView) finder.scrollIntoView({ block: "start" });
         }
         if (q0.length < 2) search("");
-        setInterval(function () { if (document.visibilityState === "visible") loadStats(); }, 60000);
+        setInterval(function () { if (document.visibilityState === "visible" && !Sahra.idle()) loadStats(true); }, 60000);
+        Sahra.onWake(function () { if (document.visibilityState === "visible") loadStats(); });
         if (me.staff.role === "owner") loadHolds();
       });
     },

@@ -183,9 +183,20 @@ partyRoutes.post("/announce", requireAuth(["owner", "admin"]), async (c) => {
  * per scanner, requests per hour over 30 days. Reads the party's tickets three
  * times; poll it once a minute at most.
  */
+// Background dashboard refreshes (?auto=1, after the session check) share one answer per
+// party for 15 seconds in this isolate: several open staff tabs then read the party's
+// tickets once, not once each. Opening a page or refreshing after an action reads live.
+const statsCache = new Map<string, { at: number; body: unknown }>();
+const STATS_TTL_MS = 15_000;
+/** Test hook: forget cached statistics. */
+export function clearStatsCache() { statsCache.clear(); }
+
 partyRoutes.get("/stats", requireAuth(["owner", "admin", "door"]), async (c) => {
   const a = c.var.auth;
   const now = c.var.deps.now();
+  const auto = c.req.query("auto") === "1";
+  const hit = auto ? statsCache.get(a.info.party_id) : undefined;
+  if (hit && now - hit.at < STATS_TTL_MS && now >= hit.at) return json(c, 200, hit.body);
   const s = await new GuestDb(c.var.db.driver).stats({ hash: a.hash, partyId: a.info.party_id }, now, ["owner", "admin", "door"]);
   if (s.byType.length === 0) return json(c, 401, { error: "not_signed_in" });
   const capacity = s.byType[0]!.capacity;
@@ -220,7 +231,7 @@ partyRoutes.get("/stats", requireAuth(["owner", "admin", "door"]), async (c) => 
     sc.people += Number(r.people);
     scanners.set(key, sc);
   }
-  return json(c, 200, {
+  const body = {
     at: now,
     capacity,
     held,
@@ -240,7 +251,9 @@ partyRoutes.get("/stats", requireAuth(["owner", "admin", "door"]), async (c) => 
     check_ins_per_15_min: [...slots.values()],
     requests_per_hour: s.hours.map((h) => ({ at: h.hour * 3_600_000, requests: Number(h.requests), people: Number(h.people) })),
     by_scanner: [...scanners.values()].sort((x, y) => y.people - x.people),
-  });
+  };
+  statsCache.set(a.info.party_id, { at: now, body });
+  return json(c, 200, body);
 });
 
 // ------------------------------------------------------------ party pictures

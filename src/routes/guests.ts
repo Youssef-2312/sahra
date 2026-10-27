@@ -267,6 +267,14 @@ export function clearFlyerCache() {
 guestRoutes.get("/parties/:party", async (c) => {
   const partyId = c.req.param("party");
   if (!PARTY_RE.test(partyId)) return json(c, 404, { error: "not_found" });
+  // Edge cache for 20 seconds (public party details, places left, policy versions: no guest
+  // data). Every guest opening the page would otherwise re-count the party's places. A
+  // request is still checked live inside the sign-up INSERT, so a cached count never oversells.
+  const edge = c.env.EDGE_CACHE_PUBLIC === "1" ? caches.default : null;
+  const edgeKey = new Request(new URL(`/api/guest/parties/${partyId}`, c.env.PUBLIC_ORIGIN));
+  if (edge) {
+    try { const cached = await edge.match(edgeKey); if (cached) return cached; } catch { /* bypass a transient cache failure */ }
+  }
   const p = await new GuestDb(c.var.db.driver).signupParty(partyId, "");
   if (!p) return json(c, 404, { error: "not_found" });
   const form = storedForm(p.guest_form);
@@ -277,7 +285,7 @@ guestRoutes.get("/parties/:party", async (c) => {
   // sign-up page needs one request. The place stays hidden unless its mode is public.
   const row = await new PartyDb(c.var.db.driver).get(partyId);
   const flyers = await new FlyerDb(c.var.db.driver).list(partyId);
-  return json(c, 200, {
+  const res = json(c, 200, {
     party: { id: p.id, name: p.name },
     details: row ? visiblePartyDetails(row, { kind: "public" }, now) : null,
     // The party's pictures, in order (the home page card shows the first).
@@ -309,6 +317,9 @@ guestRoutes.get("/parties/:party", async (c) => {
     policy: await currentPolicy(c.env, p.rules, p.cancellation_policy, form.id_photo !== "none"),
     turnstile_site_key: turnstileConfigured(c.env) ? c.env.TURNSTILE_SITE_KEY : null,
   });
+  res.headers.set("cache-control", "public, max-age=20");
+  if (edge) { try { c.executionCtx.waitUntil(edge.put(edgeKey, res.clone()).catch(() => undefined)); } catch { /* the live response does not depend on cache storage */ } }
+  return res;
 });
 
 guestRoutes.post("/parties/:party/signup", async (c) => {

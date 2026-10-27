@@ -80,7 +80,7 @@ ticketRoutes.get("/", requireAuth(MANAGERS), async (c) => {
   const { sess, now } = sessOf(c);
   const rows = await new GuestDb(c.var.db.driver).list(sess, status, m ? { at: Number(m[1]), id: m[2]! } : null, limit, now, payment === "cash", filters);
   const last = rows.at(-1);
-  const summaries = await new BookingDb(c.var.db.driver).summaries(sess, rows.map(r => String(r.id)), now);
+  const summaries = await new BookingDb(c.var.db.driver).summaries(sess, rows as { id: unknown; order_id?: unknown }[], now);
   return json(c, 200, {
     tickets: rows.map((r) => ({ ...r, booking: summaries.get(String(r.order_id || r.id)), answers: r.answers ? JSON.parse(String(r.answers)) : {}, has_screenshot: !!r.has_screenshot, has_id_photo: !!r.has_id_photo })),
     next: rows.length === limit && last ? `${last.created_at}.${last.id}` : null,
@@ -284,7 +284,7 @@ ticketRoutes.get("/search", requireAuth(MANAGERS), async (c) => {
   if (q.length < 2 || q.length > 80) return json(c, 400, { error: "invalid_request", q: "2..80 characters" });
   const { sess, now } = sessOf(c);
   const rows = await new GuestDb(c.var.db.driver).search(sess, q, now);
-  const summaries = await new BookingDb(c.var.db.driver).summaries(sess, rows.map(r => String(r.id)), now);
+  const summaries = await new BookingDb(c.var.db.driver).summaries(sess, rows as { id: unknown; order_id?: unknown }[], now);
   return json(c, 200, { tickets: rows.map(({ link_version: _v, ...r }) => ({ ...r, booking: summaries.get(String(r.order_id || r.id)) })) });
 });
 

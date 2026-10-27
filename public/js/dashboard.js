@@ -188,11 +188,11 @@
     if (typing) { var box = document.getElementById("d-find"); if (box && !box.closest("[hidden]")) { box.focus({ preventScroll: true }); try { box.setSelectionRange(caret, caret); } catch (_) {} } }
   }
 
-  async function load() {
+  async function load(auto) {
     if (refreshing) return;
     refreshing = true; updateSync();
     try {
-      var rs = await Promise.all([Sahra.api.get("/api/party/stats"), Sahra.api.get("/api/admission"), Sahra.api.get("/api/party")]);
+      var rs = await Promise.all([Sahra.api.get("/api/party/stats" + (auto === true ? "?auto=1" : "")), Sahra.api.get("/api/admission"), Sahra.api.get("/api/party")]);
       syncError = rs.some(function (r) { return !r.ok; });
       if (rs[0].ok) { stats = rs[0].body; updatedAt = Number.isFinite(stats.at) ? stats.at : Date.now(); fetchedAt = performance.now(); }
       admissionVerified = rs[1].ok;
@@ -207,7 +207,9 @@
     Sahra.boot({ render: render, me: me });
     if (!me) return;
     await load();
-    setInterval(function () { if (document.visibilityState === "visible") load(); }, REFRESH_MS);
+    // Background refresh while the page is in use; paused when idle, caught up on the next action.
+    setInterval(function () { if (document.visibilityState === "visible" && !Sahra.idle()) load(true); }, REFRESH_MS);
+    Sahra.onWake(function () { if (document.visibilityState === "visible") load(); });
     setInterval(function () { if (document.visibilityState === "visible") updateSync(); }, 10000);
     document.addEventListener("visibilitychange", function () { if (document.visibilityState === "visible") { updateSync(); if (fetchedAt === null || performance.now() - fetchedAt >= REFRESH_MS) load(); } });
     window.addEventListener("popstate", function () { var p = new URLSearchParams(location.search); activeTab = TABS.some(function (x) { return x[0] === p.get("view"); }) ? p.get("view") : "overview"; days = p.get("days") === "7" ? 7 : 14; render(); });

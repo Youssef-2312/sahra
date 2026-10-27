@@ -2,7 +2,7 @@
 // No schema changes. Single-ticket actions retain their existing meaning.
 import { audit, sessionValid, type SessionRef } from "../db";
 import type { SqlDriver } from "../db/driver";
-import { inList, sql } from "../db/sql";
+import { inList, join, sql, type Sql } from "../db/sql";
 
 const MANAGERS = ["owner", "admin"] as const;
 export interface BookingMember {
@@ -44,16 +44,28 @@ export class BookingDb {
   }
 
   // One aggregate for the page, covering all statuses and pages of each booking.
-  async summaries(sess: SessionRef, ids: string[], now: number) {
-    if (!ids.length) return new Map<string, BookingSummary>();
-    const r = await this.driver.all<BookingSummary>(sql`SELECT COALESCE(t.order_id, t.id) AS id,
+  /**
+   * Each listed ticket's booking (its whole order, or itself): looked up by order id and
+   * ticket id through the indexes, so only the bookings' own tickets are read.
+   */
+  async summaries(sess: SessionRef, rows: { id: unknown; order_id?: unknown }[], now: number) {
+    if (!rows.length) return new Map<string, BookingSummary>();
+    const orders = [...new Set(rows.filter((r) => r.order_id).map((r) => String(r.order_id)))];
+    const singles = [...new Set(rows.filter((r) => !r.order_id).map((r) => String(r.id)))];
+    // Two indexed lookups (the orders' tickets by order id, single tickets by id); an OR of
+    // both would make SQLite read every ticket of the party.
+    const ok = sessionValid(sess, MANAGERS, now);
+    const parts: Sql[] = [];
+    if (orders.length) parts.push(sql`SELECT order_id AS k, status, used_at, approved_at, rev, logged_rev FROM tickets
+      WHERE party_id = ${sess.partyId} AND order_id IN (${inList(orders)})`);
+    if (singles.length) parts.push(sql`SELECT id AS k, status, used_at, approved_at, rev, logged_rev FROM tickets
+      WHERE id IN (${inList(singles)}) AND +party_id = ${sess.partyId} AND order_id IS NULL`);
+    const r = await this.driver.all<BookingSummary>(sql`SELECT t.k AS id,
       COUNT(*) AS total, SUM(t.status IN ('pending','approved') AND t.used_at IS NULL) AS active,
       SUM(t.status = 'cancelled' AND t.approved_at IS NOT NULL) AS cancelled,
       SUM(t.status = 'cancelled' AND t.approved_at IS NULL) AS deleted, SUM(t.status = 'rejected') AS rejected,
       SUM(t.used_at IS NOT NULL) AS used, SUM(t.status = 'pending') AS pending, SUM(t.rev > t.logged_rev) AS unconfirmed
-      FROM tickets t WHERE t.party_id = ${sess.partyId} AND COALESCE(t.order_id, t.id) IN
-        (SELECT COALESCE(order_id, id) FROM tickets WHERE party_id = ${sess.partyId} AND id IN (${inList(ids)}))
-        AND ${sessionValid(sess, MANAGERS, now)} GROUP BY COALESCE(t.order_id, t.id)`);
+      FROM (${join(parts, " UNION ALL ")}) t WHERE ${ok} GROUP BY t.k`);
     return new Map(r.results.map(x => [x.id, x]));
   }
 
