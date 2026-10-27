@@ -659,6 +659,19 @@ var Sahra = (function () {
     if (box.select) box.select();
   });
 
+  // Idle pages stop their background refreshes (each one reads the party's tickets from
+  // the database, which has a daily read allowance): after 15 minutes without a pointer,
+  // key, touch or scroll, Sahra.idle() is true; the first action afterwards calls onWake.
+  var IDLE_MS = 15 * 60000, lastActive = Date.now(), wakeFns = [];
+  function markActive() {
+    var wasIdle = Date.now() - lastActive >= IDLE_MS;
+    lastActive = Date.now();
+    if (wasIdle) wakeFns.forEach(function (f) { try { f(); } catch (e) { /* one page's refresh failing does not stop the others */ } });
+  }
+  ["pointerdown", "keydown", "wheel", "touchstart", "scroll"].forEach(function (e) { window.addEventListener(e, markActive, { passive: true, capture: true }); });
+  function idle() { return Date.now() - lastActive >= IDLE_MS; }
+  function onWake(fn) { wakeFns.push(fn); }
+
   function token() {
     var b = new Uint8Array(32);
     crypto.getRandomValues(b);
@@ -673,6 +686,6 @@ var Sahra = (function () {
     return m ? t(m[1] === "under" ? "age_under" : "age_value", {age:m[2]}) : null;
   }
 
-  return { ageRating: ageRating, t: t, el: el, clear: clear, api: api, errorText: errorText, money: money, amount: amount, when: when, date: date, time: time, rel: rel,
+  return { idle: idle, onWake: onWake, ageRating: ageRating, t: t, el: el, clear: clear, api: api, errorText: errorText, money: money, amount: amount, when: when, date: date, time: time, rel: rel,
     lang: lang, boot: boot, reveal: revealSections, store: store, SESSION_KEY: SESSION_KEY, token: token, title: title, problem: problem, signinView: signinView, motionCards: motionCards, appearanceSettings: appearanceSettings, copyButton: copyButton, fold: fold, matches: matches, findBox: findBox, confirm: confirmBox, notify: notify, ask: ask, contactCard: contactCard, ref: function (id) { return id ? "SAH-" + String(id).slice(0, 6) : ""; } };
 })();

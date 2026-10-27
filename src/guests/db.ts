@@ -19,7 +19,7 @@ import { audit, sessionValid, type SessionRef } from "../db/index";
 import { inList, join, sql, type Sql } from "../db/sql";
 import { isBase32 } from "../lib/crypto";
 import { outboxInsert, type OutboxRow } from "../outbox";
-import { hasPublicTypes, onSale, peopleOk, ticketTotal, typeApproved, typeHeld, waveReady } from "./types";
+import { hasPublicTypes, onSale, peopleOk, ticketTotal, ticketTotalJoined, typeApproved, typeHeld, waveReady } from "./types";
 
 const MANAGERS = ["owner", "admin"] as const;
 
@@ -350,14 +350,18 @@ export class GuestDb {
       : filters.booking === "partial" ? sql`AND EXISTS (SELECT 1 FROM tickets b WHERE b.party_id=t.party_id AND COALESCE(b.order_id,b.id)=COALESCE(t.order_id,t.id) AND b.status='cancelled')
         AND EXISTS (SELECT 1 FROM tickets b WHERE b.party_id=t.party_id AND COALESCE(b.order_id,b.id)=COALESCE(t.order_id,t.id) AND b.status IN ('pending','approved') AND b.used_at IS NULL)` : sql``;
     // same_email: the address's other pending/approved tickets (the duplicate warning; index tickets_party_email).
-    const r = await this.driver.all(sql`SELECT t.id, t.status, t.people, t.guest_name, t.guest_email, t.answers,
+    // The page is chosen first (one read per matching ticket), then only its rows get the
+    // per-row extras below; otherwise SQLite computes them for every match before sorting.
+    const r = await this.driver.all(sql`WITH page AS MATERIALIZED (SELECT t.id FROM tickets t WHERE t.party_id = ${sess.partyId} ${status === "all" ? sql`` : sql`AND t.status = ${status}`} ${cash} ${cursor} ${query} ${type} ${entry} ${delivery} ${booking} ${dates}
+        AND ${sessionValid(sess, MANAGERS, now)}
+      ORDER BY t.created_at, t.id LIMIT ${limit})
+      SELECT t.id, t.status, t.people, t.guest_name, t.guest_email, t.answers,
         t.screenshot_key IS NOT NULL AS has_screenshot, t.id_photo_key IS NOT NULL AS has_id_photo, t.instagram, t.order_id, t.created_at, t.approved_at, t.released_at, t.reject_reason, t.hold_at,
         t.used_at, t.qr_version, t.rev, t.type_id, (SELECT name FROM ticket_types WHERE id = t.type_id) AS type_name, t.price, ${ticketTotal("t")} AS total, t.payment,
         CASE WHEN t.guest_email IS NULL THEN 0 ELSE (SELECT COUNT(*) FROM tickets d WHERE d.party_id = t.party_id
           AND d.guest_email = t.guest_email AND d.id != t.id AND d.status IN ('pending', 'approved')) END AS same_email
-      FROM tickets t WHERE t.party_id = ${sess.partyId} AND (${status} = 'all' OR t.status = ${status}) ${cash} ${cursor} ${query} ${type} ${entry} ${delivery} ${booking} ${dates}
-        AND ${sessionValid(sess, MANAGERS, now)}
-      ORDER BY t.created_at, t.id LIMIT ${limit}`);
+      FROM page JOIN tickets t ON t.id = page.id
+      ORDER BY t.created_at, t.id`);
     return r.results;
   }
 
@@ -590,10 +594,12 @@ export class GuestDb {
     const where = ref ? sql`substr(t.id, 1, 6) = ${ref[1]!.toUpperCase()}` : isBase32(q, 16) ? sql`t.id = ${q}`
       : q.includes("@") ? sql`t.guest_email LIKE ${`${like.toLowerCase()}%`} ESCAPE '\\'`
         : sql`t.guest_name LIKE ${`%${like}%`} ESCAPE '\\'`;
-    const r = await this.driver.all(sql`SELECT t.id, t.order_id, t.status, t.people, t.guest_name, t.guest_email, t.created_at, t.approved_at,
+    const r = await this.driver.all(sql`WITH page AS MATERIALIZED (SELECT t.id FROM tickets t
+        WHERE t.party_id = ${sess.partyId} AND ${where} AND ${sessionValid(sess, MANAGERS, now)} ORDER BY t.created_at DESC LIMIT ${limit})
+      SELECT t.id, t.order_id, t.status, t.people, t.guest_name, t.guest_email, t.created_at, t.approved_at,
         t.released_at, t.used_at, t.hold_at, t.link_version, (SELECT name FROM ticket_types WHERE id = t.type_id) AS type_name
-      FROM tickets t WHERE t.party_id = ${sess.partyId} AND ${where} AND ${sessionValid(sess, MANAGERS, now)}
-      ORDER BY t.created_at DESC LIMIT ${limit}`);
+      FROM page JOIN tickets t ON t.id = page.id
+      ORDER BY t.created_at DESC`);
     return r.results;
   }
 
@@ -604,38 +610,72 @@ export class GuestDb {
    */
   async stats(sess: SessionRef, now: number, roles: readonly ("owner" | "admin" | "door")[]) {
     const ok = sessionValid(sess, roles, now);
+    // One pass over the party's tickets (read once each), counted here rather than in
+    // several SQL scans: the dashboard refreshes this, and D1 counts every row a query reads.
     const rs = await this.driver.batch([
-      sql`SELECT p.capacity, t.type_id, ty.name AS type_name, ty.quantity, ty.archived_at, ty.staff_only,
-          COUNT(t.id) AS tickets,
-          COALESCE(SUM(CASE WHEN t.status = 'pending' THEN t.people END), 0) AS pending,
-          COALESCE(SUM(CASE WHEN t.status = 'pending' THEN 1 END), 0) AS pending_tickets,
-          COALESCE(SUM(CASE WHEN t.status = 'approved' THEN t.people END), 0) AS approved,
-          COALESCE(SUM(CASE WHEN t.status = 'approved' AND t.released_at IS NOT NULL THEN t.people END), 0) AS released,
-          COALESCE(SUM(CASE WHEN t.used_at IS NOT NULL THEN t.people END), 0) AS admitted,
-          COALESCE(SUM(CASE WHEN t.used_at IS NOT NULL THEN 1 END), 0) AS admitted_tickets,
-          COALESCE(SUM(CASE WHEN t.status = 'approved' THEN ${ticketTotal("t")} END), 0) AS money_approved,
-          COALESCE(SUM(CASE WHEN t.status = 'pending' THEN ${ticketTotal("t")} END), 0) AS money_pending,
-          COALESCE(SUM(CASE WHEN t.status = 'approved' AND t.payment = 'cash' THEN ${ticketTotal("t")} END), 0) AS money_cash
-        FROM parties p LEFT JOIN tickets t ON t.party_id = p.id LEFT JOIN ticket_types ty ON ty.id = t.type_id
-        WHERE p.id = ${sess.partyId} AND ${ok}
-        GROUP BY t.type_id`,
-      sql`SELECT t.used_at / 900000 AS slot, t.used_by, st.name AS scanner, COUNT(*) AS tickets, SUM(t.people) AS people
-        FROM tickets t LEFT JOIN staff st ON st.id = t.used_by
-        WHERE t.party_id = ${sess.partyId} AND t.used_at IS NOT NULL AND ${ok}
-        GROUP BY slot, t.used_by ORDER BY slot`,
-      sql`SELECT id, name, quantity, archived_at, staff_only FROM ticket_types WHERE party_id = ${sess.partyId} AND ${ok}`,
-      // Requests per hour over the last 30 days (the page groups them into the party's own days).
-      sql`SELECT t.created_at / 3600000 AS hour, COUNT(*) AS requests, SUM(t.people) AS people
-        FROM tickets t WHERE t.party_id = ${sess.partyId} AND t.created_at > ${now - 30 * 86_400_000} AND ${ok}
-        GROUP BY hour ORDER BY hour`,
+      sql`SELECT p.capacity FROM parties p WHERE p.id = ${sess.partyId} AND ${ok}`,
+      sql`SELECT t.type_id, t.status, t.people, t.released_at IS NOT NULL AS released, t.used_at, t.used_by, t.payment, t.price,
+          t.split_group_size, t.created_at FROM tickets t WHERE t.party_id = ${sess.partyId} AND ${ok}`,
+      sql`SELECT id, name, quantity, archived_at, staff_only, min_people, max_people FROM ticket_types WHERE party_id = ${sess.partyId} AND ${ok}`,
+      sql`SELECT id, name FROM staff WHERE party_id = ${sess.partyId} AND ${ok}`,
     ]);
+    type Row = { type_id: string | null; status: string; people: number; released: number; used_at: number | null; used_by: string | null;
+      payment: string | null; price: number | null; split_group_size: number | null; created_at: number };
+    type Type = { id: string; name: string; quantity: number | null; archived_at: number | null; staff_only: number; min_people: number | null; max_people: number | null };
+    type ByType = { capacity: number; type_id: string | null; type_name: string | null; quantity: number | null; archived_at: number | null; staff_only: number | null;
+      tickets: number; pending: number; pending_tickets: number; approved: number; released: number; admitted: number; admitted_tickets: number;
+      money_approved: number; money_pending: number; money_cash: number };
+    const party = rs[0]!.results[0] as { capacity: number } | undefined;
+    const types = rs[2]!.results as Type[];
+    const typeOf = new Map(types.map((t) => [t.id, t]));
+    const staffName = new Map((rs[3]!.results as { id: string; name: string }[]).map((x) => [x.id, x.name]));
+    const byType = new Map<string | null, ByType>();
+    const slots = new Map<string, { slot: number; used_by: string | null; scanner: string | null; tickets: number; people: number }>();
+    const hours = new Map<number, { hour: number; requests: number; people: number }>();
+    if (party) {
+      const since = now - 30 * 86_400_000;
+      for (const t of rs[1]!.results as Row[]) {
+        const ty = t.type_id ? typeOf.get(t.type_id) : undefined;
+        let g = byType.get(t.type_id);
+        if (!g) {
+          g = { capacity: party.capacity, type_id: t.type_id, type_name: ty?.name ?? null, quantity: ty?.quantity ?? null, archived_at: ty?.archived_at ?? null,
+            staff_only: ty?.staff_only ?? null, tickets: 0, pending: 0, pending_tickets: 0, approved: 0, released: 0, admitted: 0, admitted_tickets: 0,
+            money_approved: 0, money_pending: 0, money_cash: 0 };
+          byType.set(t.type_id, g);
+        }
+        const people = Number(t.people);
+        // The ticket's total (as ticketTotal): its price, per ticket for a split or package type, else x people.
+        const pack = t.split_group_size !== null || (!!ty && Number(ty.min_people) > 1 && ty.min_people === ty.max_people);
+        const total = Number(t.price ?? 0) * (pack ? 1 : people);
+        g.tickets++;
+        if (t.status === "pending") { g.pending += people; g.pending_tickets++; g.money_pending += total; }
+        if (t.status === "approved") {
+          g.approved += people; g.money_approved += total;
+          if (t.released) g.released += people;
+          if (t.payment === "cash") g.money_cash += total;
+        }
+        if (t.used_at !== null) {
+          g.admitted += people; g.admitted_tickets++;
+          const slot = Math.floor(Number(t.used_at) / 900000), key = `${slot}|${t.used_by ?? ""}`;
+          const sl = slots.get(key) ?? { slot, used_by: t.used_by, scanner: t.used_by ? staffName.get(t.used_by) ?? null : null, tickets: 0, people: 0 };
+          sl.tickets++; sl.people += people; slots.set(key, sl);
+        }
+        if (Number(t.created_at) > since) {
+          const hour = Math.floor(Number(t.created_at) / 3600000);
+          const h = hours.get(hour) ?? { hour, requests: 0, people: 0 };
+          h.requests++; h.people += people; hours.set(hour, h);
+        }
+      }
+      // A party without tickets still answers one row (its capacity), as the former LEFT JOIN did.
+      if (byType.size === 0) byType.set(null, { capacity: party.capacity, type_id: null, type_name: null, quantity: null, archived_at: null, staff_only: null,
+        tickets: 0, pending: 0, pending_tickets: 0, approved: 0, released: 0, admitted: 0, admitted_tickets: 0, money_approved: 0, money_pending: 0, money_cash: 0 });
+    }
     return {
-      byType: rs[0]!.results as { capacity: number; type_id: string | null; type_name: string | null; quantity: number | null;
-        tickets: number; pending: number; pending_tickets: number; approved: number; released: number; admitted: number; admitted_tickets: number;
-        money_approved: number; money_pending: number; money_cash: number }[],
-      slots: rs[1]!.results as { slot: number; used_by: string | null; scanner: string | null; tickets: number; people: number }[],
-      types: rs[2]!.results as { id: string; name: string; quantity: number | null; archived_at: number | null; staff_only: number }[],
-      hours: rs[3]!.results as { hour: number; requests: number; people: number }[],
+      byType: [...byType.values()],
+      slots: [...slots.values()].sort((a, b) => a.slot - b.slot),
+      types: party ? types.map(({ id, name, quantity, archived_at, staff_only }) => ({ id, name, quantity, archived_at, staff_only })) : [],
+      hours: [...hours.values()].sort((a, b) => a.hour - b.hour),
     };
   }
+
 }
